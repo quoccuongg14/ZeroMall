@@ -105,10 +105,21 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 }) => {
   // 1. Ảnh người dùng & Thông số thể hình (Lưu trữ LocalStorage để đồng bộ xuyên suốt)
   const [userPhoto, setUserPhoto] = useState<string>(() => {
-    return localStorage.getItem('zeromall_tryon_user_photo') || '/models/tryon_master/tran_thanh_base.jpg'
+    const saved = localStorage.getItem('zeromall_tryon_user_photo')
+    // Nếu là ảnh cũ mặc định (Trấn Thành) mà người dùng không tự tải lên, tự động dọn sạch để không tự động thử đồ
+    if (!saved || saved.includes('tran_thanh')) {
+      try {
+        localStorage.removeItem('zeromall_tryon_user_photo')
+        localStorage.removeItem('zeromall_tryon_user_name')
+      } catch (_) {}
+      return ''
+    }
+    return saved
   })
   const [userPhotoName, setUserPhotoName] = useState<string>(() => {
-    return localStorage.getItem('zeromall_tryon_user_name') || 'Trấn Thành (Hồ sơ AI)'
+    const saved = localStorage.getItem('zeromall_tryon_user_name')
+    if (!saved || saved.includes('Trấn Thành')) return ''
+    return saved
   })
   const [height, setHeight] = useState<number>(() => {
     return Number(localStorage.getItem('zeromall_tryon_user_height')) || 175
@@ -341,20 +352,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
-  const lastTriedProductIdRef = useRef<string | null>(null)
 
-  // Nạp ảnh mẫu mặc định nếu người dùng chưa tải ảnh riêng
-  useEffect(() => {
-    if (!userPhoto) {
-      if (gender === 'male') {
-        setUserPhoto('/models/tryon_master/tran_thanh_base.jpg')
-        setUserPhotoName('Trấn Thành (Hồ sơ AI)')
-      } else {
-        setUserPhoto('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80')
-        setUserPhotoName('Ảnh mẫu nữ chuẩn')
-      }
-    }
-  }, [gender])
 
   // Hàm tải và lọc các món thời trang trong giỏ hàng thực tế của người dùng
   const loadCartFashionItems = (): CartFashionItem[] => {
@@ -547,7 +545,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     fetchRealFashion()
   }, [isOpen, product, cart])
 
-  // Xử lý tải ảnh người dùng lên & tự động trích xuất khuôn mặt bằng AI
+  // Xử lý tải ảnh người dùng lên
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -557,35 +555,49 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         if (event.target?.result) {
           const dataUrl = event.target.result as string
           setUserPhoto(dataUrl)
+          setCompositeTryOnImage('') // Xóa kết quả render cũ để hiển thị ảnh gốc của bạn
+          setViewMode('original')
           try {
             localStorage.setItem('zeromall_tryon_user_photo', dataUrl)
             localStorage.setItem('zeromall_tryon_user_name', file.name)
           } catch (eStorage) {
             console.warn('[VirtualTryOnModal] Failed to cache user photo to localStorage:', eStorage)
           }
-          triggerToast('Đã tải ảnh người dùng! Đang tự động ướm đồ lên vóc dáng của bạn...')
-
-          // Kích hoạt chu trình ướm thử lại với ảnh mới ngay lập tức
-          handleRunTryOn(selectedPant || product || undefined, dataUrl)
+          triggerToast('📸 Đã tải ảnh của bạn! Bấm "Ướm Cả Bộ" để AI bắt đầu ướm đồ.')
+          // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
         }
       }
       reader.readAsDataURL(file)
     }
   }
 
-  // Chọn nhanh ảnh người mẫu mẫu có sẵn
+  // Chọn nhanh ảnh người mẫu có sẵn
   const handleSelectPresetModel = (modelUrl: string, modelName: string, modelGender: 'male' | 'female') => {
     setUserPhoto(modelUrl)
     setUserPhotoName(modelName)
     setGender(modelGender)
+    setCompositeTryOnImage('')
+    setViewMode('original')
     try {
       localStorage.setItem('zeromall_tryon_user_photo', modelUrl)
       localStorage.setItem('zeromall_tryon_user_name', modelName)
     } catch (e) {
       console.warn('[VirtualTryOnModal] Failed to cache selected model to localStorage:', e)
     }
-    triggerToast(`Đã chuyển sang [${modelName}]! AI đang ướm thử...`)
-    handleRunTryOn(selectedPant || product || undefined, modelUrl)
+    triggerToast(`Đã chọn [${modelName}]! Bấm "Ướm Cả Bộ" để AI thử đồ.`)
+    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
+  }
+
+  // Xóa ảnh người dùng để trở về trạng thái chưa có ảnh
+  const handleClearUserPhoto = () => {
+    setUserPhoto('')
+    setUserPhotoName('')
+    setCompositeTryOnImage('')
+    try {
+      localStorage.removeItem('zeromall_tryon_user_photo')
+      localStorage.removeItem('zeromall_tryon_user_name')
+    } catch (_) {}
+    triggerToast('Đã xóa ảnh người dùng!')
   }
 
   // Bóc tách trang phục theo yêu cầu (Scanner)
@@ -686,13 +698,22 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
       accessory: Product | null
     }
   ) => {
+    const effectivePhoto = overrideUserPhoto !== undefined ? overrideUserPhoto : userPhoto
+    if (!effectivePhoto || effectivePhoto.trim() === '') {
+      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+      fileInputRef.current?.click()
+      return
+    }
+
     const effectiveOutfit = overrideOutfit || selectedOutfit
     const activeItems = Object.values(effectiveOutfit).filter(Boolean) as Product[]
     const targetPant = pantToTry || selectedPant || (activeItems.length > 0 ? activeItems[0] : null)
-    if (!targetPant && activeItems.length === 0) return
+    if (!targetPant && activeItems.length === 0) {
+      triggerToast('⚠️ Vui lòng chọn ít nhất 1 món đồ để thử!')
+      return
+    }
 
     setIsLoadingAi(true)
-    const effectivePhoto = overrideUserPhoto || userPhoto
     const effectiveH = overrideHeight !== undefined ? overrideHeight : height
     const effectiveW = overrideWeight !== undefined ? overrideWeight : weight
     const effectiveG = overrideGender || gender
@@ -752,7 +773,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     setSelectedOutfit(newOutfit)
     setActiveOutfitSlot(slot)
     setSelectedPant(item)
-    handleRunTryOn(item, undefined, undefined, undefined, undefined, newOutfit)
+    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG GỌI handleRunTryOn ĐỂ TRÁNH LÃNG PHÍ GEM
+    const slotLabel = slot === 'top' ? 'Áo' : slot === 'bottom' ? 'Quần/Váy' : slot === 'shoes' ? 'Giày/Dép' : 'Mũ/Phụ Kiện'
+    triggerToast(`Đã chọn [${item.name.slice(0, 25)}...] vào ô ${slotLabel}. Bấm "Ướm Cả Bộ" để AI thử đồ!`)
   }
 
   const handleRemoveSlot = (slot: 'top' | 'bottom' | 'shoes' | 'accessory', e: React.MouseEvent) => {
@@ -765,11 +788,11 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     const remaining = Object.values(newOutfit).filter(Boolean) as Product[]
     if (remaining.length > 0) {
       setSelectedPant(remaining[0])
-      handleRunTryOn(remaining[0], undefined, undefined, undefined, undefined, newOutfit)
     } else {
       setSelectedPant(null)
       setCompositeTryOnImage('')
     }
+    triggerToast('Đã gỡ món khỏi bộ phối đồ.')
   }
 
   const handleSelectSlot = (slot: 'top' | 'bottom' | 'shoes' | 'accessory') => {
@@ -790,8 +813,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         accessory: hat || null
       }
       setSelectedOutfit(newOutfit)
-      handleRunTryOn(top || bottom || undefined, undefined, undefined, undefined, undefined, newOutfit)
-      triggerToast('🔥 Đã áp dụng Set Streetwear Cực Ngầu!')
+      triggerToast('🔥 Đã áp dụng Set Streetwear! Bấm "Ướm Cả Bộ" để AI thử đồ.')
     } else if (presetName === 'office') {
       const top = availablePants.find(p => (p.name || '').toLowerCase().includes('sơ mi') || (p.name || '').toLowerCase().includes('blazer')) || availablePants.find(p => detectItemSlot(p) === 'top')
       const bottom = availablePants.find(p => (p.name || '').toLowerCase().includes('tây') || (p.name || '').toLowerCase().includes('slimfit')) || availablePants.find(p => detectItemSlot(p) === 'bottom')
@@ -803,8 +825,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         accessory: null
       }
       setSelectedOutfit(newOutfit)
-      handleRunTryOn(top || bottom || undefined, undefined, undefined, undefined, undefined, newOutfit)
-      triggerToast('👔 Đã áp dụng Set Công Sở Lịch Lãm!')
+      triggerToast('👔 Đã áp dụng Set Công Sở! Bấm "Ướm Cả Bộ" để AI thử đồ.')
     } else if (presetName === 'sport') {
       const top = availablePants.find(p => (p.name || '').toLowerCase().includes('thun') || (p.name || '').toLowerCase().includes('cotton')) || availablePants.find(p => detectItemSlot(p) === 'top')
       const bottom = availablePants.find(p => (p.name || '').toLowerCase().includes('jogger')) || availablePants.find(p => detectItemSlot(p) === 'bottom')
@@ -816,8 +837,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         accessory: null
       }
       setSelectedOutfit(newOutfit)
-      handleRunTryOn(top || bottom || undefined, undefined, undefined, undefined, undefined, newOutfit)
-      triggerToast('⚡ Đã áp dụng Set Thể Thao Năng Động!')
+      triggerToast('⚡ Đã áp dụng Set Thể Thao! Bấm "Ướm Cả Bộ" để AI thử đồ.')
     }
   }
 
@@ -870,7 +890,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     }
   }
 
-  // Bấm chọn 1 set trong Top 5 để ướm thử trên ảnh của người dùng (Lazy generation: 0 tốn gem)
+  // Bấm chọn 1 set trong Top 5 để nạp vào bảng phối đồ (0 tốn gem)
   const handleTryOnBundle = (bundle: ScoredOutfitBundle) => {
     setSelectedOutfitBundleId(bundle.id)
     const newOutfit = {
@@ -889,15 +909,14 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
     setSelectedOutfit(newOutfit)
     setActiveTab('photo')
-    setViewMode('tryon')
 
     const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
 
-    handleRunTryOn(primary || undefined, userPhoto, height, weight, gender, newOutfit)
-    triggerToast(`✨ Đang ướm thử ${bundle.title} lên ảnh của bạn...`)
+    triggerToast(`✨ Đã nạp ${bundle.title}! Bấm "Ướm Cả Bộ" để AI ướm thử đồ.`)
+    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
   }
 
   // Bấm Mua cả set (Thêm toàn bộ sản phẩm của combo vào giỏ hàng)
@@ -925,27 +944,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
       fetchTopScoredOutfits(selectedPant || product || undefined)
     }
   }, [isOpen, selectedPant?.id, height, weight, gender])
-
-  // Tự động kích hoạt AI ướm thử đồ ngay lập tức khi mở modal hoặc khi bộ phối đồ thay đổi
-  useEffect(() => {
-    if (isOpen) {
-      const outfitSig = Object.entries(selectedOutfit).map(([k, v]) => `${k}:${v?.id || 'none'}`).join('|')
-      const currentSignature = `${outfitSig}_${userPhoto}`
-      if (lastTriedProductIdRef.current !== currentSignature) {
-        lastTriedProductIdRef.current = currentSignature
-        const activeItems = Object.values(selectedOutfit).filter(Boolean) as Product[]
-        if (activeItems.length > 0) {
-          handleRunTryOn(activeItems[0], undefined, undefined, undefined, undefined, selectedOutfit)
-        }
-      }
-    }
-  }, [isOpen, selectedOutfit, userPhoto])
-
-  useEffect(() => {
-    if (!isOpen) {
-      lastTriedProductIdRef.current = null
-    }
-  }, [isOpen])
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg)
@@ -1147,22 +1145,37 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       {/* Chế độ so sánh Song Song (Side by Side) */}
                       {viewMode === 'sidebyside' ? (
                         <div className="grid grid-cols-2 gap-3 w-full h-full p-3">
-                          <div className="relative h-full rounded-xl overflow-hidden border border-white/10 bg-slate-900 shadow-md">
-                            <img
-                              src={userPhoto}
-                              alt="Original User"
-                              className="w-full h-full object-contain bg-slate-900"
-                            />
+                          <div className="relative h-full rounded-xl overflow-hidden border border-white/10 bg-slate-900 shadow-md flex items-center justify-center">
+                            {userPhoto ? (
+                              <img
+                                src={userPhoto}
+                                alt="Original User"
+                                className="w-full h-full object-contain bg-slate-900"
+                              />
+                            ) : (
+                              <div className="text-center p-3">
+                                <span className="text-2xl block mb-1">👤</span>
+                                <span className="text-[11px] text-slate-400 font-bold">Chưa có ảnh của bạn</span>
+                              </div>
+                            )}
                             <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-300 border border-white/10">
                               👤 Ảnh Gốc Ban Đầu
                             </div>
                           </div>
-                          <div className="relative h-full rounded-xl overflow-hidden border-2 border-indigo-500/80 bg-slate-900 shadow-md">
-                            <img
-                              src={compositeTryOnImage || userPhoto}
-                              alt="AI Try-on Result"
-                              className="w-full h-full object-contain bg-slate-900"
-                            />
+                          <div className="relative h-full rounded-xl overflow-hidden border-2 border-indigo-500/80 bg-slate-900 shadow-md flex items-center justify-center">
+                            {compositeTryOnImage ? (
+                              <img
+                                src={compositeTryOnImage}
+                                alt="AI Try-on Result"
+                                className="w-full h-full object-contain bg-slate-900"
+                              />
+                            ) : (
+                              <div className="text-center p-3">
+                                <span className="text-2xl block mb-1">✨</span>
+                                <span className="text-[11px] text-slate-400 font-bold">Chưa có ảnh ướm thử</span>
+                                <p className="text-[10px] text-slate-500 mt-0.5">Bấm "Ướm Cả Bộ" để AI thử đồ</p>
+                              </div>
+                            )}
                             <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-600 to-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black text-white shadow-md flex items-center gap-1.5">
                               <span>✨</span> ZeroMall AI • Ảnh Ướm Thử
                             </div>
@@ -1171,15 +1184,49 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       ) : (
                         /* Chế độ xem Đơn To Toàn Màn Hình */
                         <div className="relative w-full h-full flex items-center justify-center p-2">
-                          <img
-                            src={viewMode === 'original' ? userPhoto : (compositeTryOnImage || userPhoto)}
-                            alt="Visual Fitting Result"
-                            className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
-                          />
-                          <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-indigo-300 border border-white/15 flex items-center gap-2 shadow-xl">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            {viewMode === 'original' ? 'Ảnh gốc của bạn' : 'Ảnh Thử Đồ AI (HD Studio)'}
-                          </div>
+                          {compositeTryOnImage && viewMode === 'tryon' ? (
+                            <>
+                              <img
+                                src={compositeTryOnImage}
+                                alt="Visual Fitting Result"
+                                className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
+                              />
+                              <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-indigo-300 border border-white/15 flex items-center gap-2 shadow-xl">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                Ảnh Thử Đồ AI (HD Studio)
+                              </div>
+                            </>
+                          ) : userPhoto ? (
+                            <>
+                              <img
+                                src={userPhoto}
+                                alt="Original User"
+                                className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
+                              />
+                              <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-slate-300 border border-white/15 flex items-center gap-2 shadow-xl">
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                {viewMode === 'original' ? 'Ảnh gốc của bạn' : 'Ảnh gốc (Chưa ướm đồ - Bấm "Ướm Cả Bộ")'}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center p-6 max-w-md animate-in fade-in duration-200">
+                              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-indigo-950/80 border border-indigo-500/30 flex items-center justify-center text-3xl shadow-inner">
+                                📸
+                              </div>
+                              <h4 className="text-white font-black text-sm mb-1.5">Chưa có ảnh của bạn</h4>
+                              <p className="text-slate-400 text-xs leading-relaxed mb-4">
+                                Vui lòng tải ảnh của bạn lên để AI ướm thử trang phục chân thực nhất. Hệ thống không tự ý thử đồ khi bạn đang duyệt sản phẩm!
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
+                              >
+                                <span>+</span> Tải Ảnh Của Bạn Lên Ngay
+                              </button>
+                            </div>
+                          )}
+
                           {selectedPant && ((selectedPant.name || '').toLowerCase().includes('quần') || (selectedPant.name || '').toLowerCase().includes('jean') || (selectedPant.name || '').toLowerCase().includes('jogger')) && (
                             <div className="absolute bottom-3 left-3 bg-indigo-950/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-[10px] font-bold text-indigo-200 border border-indigo-500/30 flex items-center gap-1.5 shadow-lg">
                               <span>👖</span> Đang ướm Quần vào đôi chân & vóc dáng toàn thân
@@ -1660,11 +1707,17 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   className="border-2 border-dashed border-emerald-400/80 hover:border-emerald-600 bg-emerald-50/40 hover:bg-emerald-50/80 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition group"
                 >
                   <div className="relative shrink-0">
-                    <img
-                      src={userPhoto || 'https://placehold.co/100x100?text=You'}
-                      alt="Avatar"
-                      className="w-13 h-13 sm:w-14 sm:h-14 object-cover rounded-xl border border-emerald-300 shadow-2xs group-hover:scale-105 transition bg-white"
-                    />
+                    {userPhoto ? (
+                      <img
+                        src={userPhoto}
+                        alt="Avatar"
+                        className="w-13 h-13 sm:w-14 sm:h-14 object-cover rounded-xl border border-emerald-300 shadow-2xs group-hover:scale-105 transition bg-white"
+                      />
+                    ) : (
+                      <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-emerald-400 bg-emerald-100/50 flex items-center justify-center text-xl">
+                        👤
+                      </div>
+                    )}
                     <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shadow">
                       📷
                     </span>
@@ -1673,9 +1726,23 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     <p className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-700 flex items-center gap-1">
                       <span>+</span> Tải Ảnh Của Bạn Lên Đây
                     </p>
-                    <p className="text-[11px] text-slate-600 truncate mt-0.5">
-                      Đang dùng: <span className="font-bold text-slate-800">{userPhotoName}</span>
-                    </p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-[11px] text-slate-600 truncate">
+                        Đang dùng: <span className="font-bold text-slate-800">{userPhoto ? (userPhotoName || 'Ảnh của bạn') : 'Chưa có ảnh'}</span>
+                      </p>
+                      {userPhoto && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleClearUserPhoto()
+                          }}
+                          className="text-[10px] text-rose-500 hover:text-rose-700 font-bold ml-2 underline shrink-0 cursor-pointer"
+                        >
+                          Xóa ảnh
+                        </button>
+                      )}
+                    </div>
                     <span className="text-[10px] text-emerald-600 font-bold block mt-0.5 group-hover:underline">
                       Chọn file ảnh từ thiết bị (JPG, PNG) ➔
                     </span>
@@ -1746,11 +1813,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                           max="220"
                           value={height || ''}
                           onChange={(e) => setHeight(Number(e.target.value))}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
-                            }
-                          }}
                           placeholder="175"
                           className="w-full px-2.5 py-1.5 text-xs font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
                         />
@@ -1771,11 +1833,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                           max="150"
                           value={weight || ''}
                           onChange={(e) => setWeight(Number(e.target.value))}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
-                            }
-                          }}
                           placeholder="50"
                           className="w-full px-2.5 py-1.5 text-xs font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
                         />
@@ -1794,7 +1851,14 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     <button
                       type="button"
                       disabled={isLoadingAi || !selectedPant || !height || !weight}
-                      onClick={() => handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)}
+                      onClick={() => {
+                        if (!userPhoto) {
+                          triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                          fileInputRef.current?.click()
+                          return
+                        }
+                        handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
+                      }}
                       className="text-indigo-600 hover:text-indigo-800 font-black text-[11px] shrink-0 ml-2 hover:underline cursor-pointer disabled:opacity-50"
                     >
                       Áp dụng ➔
@@ -2094,7 +2158,14 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 <button
                   type="button"
                   disabled={isLoadingAi || !selectedPant}
-                  onClick={() => handleRunTryOn()}
+                  onClick={() => {
+                    if (!userPhoto) {
+                      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                      fileInputRef.current?.click()
+                      return
+                    }
+                    handleRunTryOn()
+                  }}
                   className={`w-full py-2.5 px-4 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md ${
                     isLoadingAi
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'

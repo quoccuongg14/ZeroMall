@@ -2054,7 +2054,15 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
 
                 has_outfit = bool(outfit and any(outfit.get(k) for k in ["top", "bottom", "shoes", "accessory"]))
 
-                if has_outfit:
+                if not user_image or not str(user_image).strip():
+                    # Người dùng chưa đưa ảnh vào -> Tuyệt đối không gọi AI sinh ảnh để bảo vệ 100% Gem Mage.space của người dùng
+                    print("[*] full-pipeline: user_image is empty. Skipping AI image generation to preserve user Gems.")
+                    composite_result = ""
+                    primary_item = (
+                        (outfit.get("bottom") or outfit.get("top") or outfit.get("shoes") or outfit.get("accessory") or pant)
+                        if has_outfit else pant
+                    )
+                elif has_outfit:
                     primary_item = outfit.get("bottom") or outfit.get("top") or outfit.get("shoes") or outfit.get("accessory") or pant
                     composite_result = TryOnSynthesizer.composite_outfit_tryon(
                         user_image, outfit, gender=gender, height_cm=h, weight_kg=w

@@ -216,12 +216,34 @@ export const VirtualTryOnPage: React.FC = () => {
     }
   }, [selectedPant?.id, height, weight, gender])
 
-  // Tự động chạy đo vóc dáng lần đầu khi đã có sản phẩm
+  // Tự động đo vóc dáng & tính độ vừa vặn khi đã có sản phẩm (Tính toán cục bộ, 0 tốn gem)
   useEffect(() => {
-    if (selectedPant && !measurements) {
-      handleRunTryOn()
+    const fetchInitialFit = async () => {
+      if (!selectedPant || measurements) return
+      try {
+        const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/fit-garment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            height_cm: height,
+            weight_kg: weight,
+            gender: gender,
+            pant: selectedPant
+          })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success) {
+            setMeasurements(data.measurements)
+            setFitResult(data.fit)
+          }
+        }
+      } catch (e) {
+        console.warn('Initial fit check error:', e)
+      }
     }
-  }, [selectedPant])
+    fetchInitialFit()
+  }, [selectedPant?.id, height, weight, gender])
 
   // Đổi avatar người dùng mẫu
   const handleSelectPresetModel = (presetGender: 'male' | 'female') => {
@@ -721,12 +743,11 @@ export const VirtualTryOnPage: React.FC = () => {
                               const p = outfit.items[0]?.product
                               if (p) {
                                 setSelectedPant(p)
-                                handleRunTryOn()
                               }
                             }}
                             className="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
                           >
-                            <span>✨</span> Ướm Set Này
+                            <span>✨</span> Chọn Set Này
                           </button>
                           <button
                             type="button"
