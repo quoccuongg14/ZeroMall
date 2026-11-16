@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import math
+import random
 import base64
 import hashlib
 import io
@@ -72,7 +73,7 @@ DEFAULT_MAGE_API_KEY = "mage_sk_BQTeU9X17ETFA20h4R8smnqRArg50wh5fr1BW0Pvv54"
 MAGE_API_KEY = (os.environ.get("MAGE_API_KEY") or "").strip() or DEFAULT_MAGE_API_KEY
 
 PORT = int(os.environ.get("TRYON_PORT", 5006))
-KONG_GATEWAY_URL = os.environ.get("KONG_GATEWAY_URL", "http://localhost:8000")
+KONG_GATEWAY_URL = os.environ.get("KONG_GATEWAY_URL", "http://kong:8000" if os.path.exists("/.dockerenv") else "http://localhost:8000")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 STATIC_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "cache")
 os.makedirs(STATIC_CACHE_DIR, exist_ok=True)
@@ -1518,15 +1519,22 @@ class GarmentExtractor:
 
 
 # ---------------------------------------------------------------------------
-# 4. AI Stylist Engine: Phối đồ Mix & Match từ CSDL Sản Phẩm Thực Tế ZeroMall
+# 4. AI Stylist Engine: Phối 100 Set & Chấm Điểm Chọn Top 5 từ CSDL ZeroMall
 # ---------------------------------------------------------------------------
 class AiStylistEngine:
+    EXCLUDED_CATEGORIES = {
+        'Gia Dụng', 'Điện Thoại & Phụ Kiện', 'Máy Tính & Laptop',
+        'Sách & VPP', 'Mẹ & Bé', 'Sức Khỏe', 'Máy Ảnh', 'Nhà Cửa', 'Sắc Đẹp'
+    }
+
     @staticmethod
     def fetch_real_zero_products():
         """Truy vấn CSDL thực tế của ZeroMall qua Kong Gateway hoặc Product Service"""
         urls = [
-            f"{KONG_GATEWAY_URL}/products",
-            "http://localhost:3002/products"
+            f"{KONG_GATEWAY_URL}/products?limit=100",
+            "http://kong:8000/products?limit=100",
+            "http://localhost:8000/products?limit=100",
+            "http://localhost:3002/products?limit=100"
         ]
         for u in urls:
             try:
@@ -1538,123 +1546,302 @@ class AiStylistEngine:
                     data = json.loads(resp.read().decode())
                     if isinstance(data, list) and len(data) > 0:
                         return data
+                    elif isinstance(data, dict):
+                        prods = data.get("products") or data.get("data", {}).get("products") or []
+                        if prods:
+                            return prods
             except Exception:
                 continue
 
         return []
 
     @staticmethod
-    def generate_outfits(pant_product: dict, user_measurements: dict):
+    def classify_item(p: dict) -> str:
+        """Phân loại chính xác vai trò trang phục theo từ khóa và danh mục"""
+        name = (p.get("name", "")).lower()
+        cat = (p.get("category", "")).lower()
+        text = f"{name} {cat}"
+
+        # 1. Giày dép
+        if "giày dép" in cat or any(k in name for k in ["giày", "sneaker", "dép", "sandal", "boots", "boot", "loafer", "giày oxford", "giày lười", "giày tây"]):
+            return "shoes"
+
+        # 2. Phụ kiện, túi, nón, đồng hồ
+        if any(c in cat for c in ["túi", "ví", "phụ kiện", "đồng hồ"]) or any(k in name for k in ["túi", "ví", "balo", "nón", "mũ", "kính", "đồng hồ", "thắt lưng", "dây chuyền"]):
+            return "accessory"
+
+        # 3. Quần / Chân váy
+        if any(k in name for k in ["quần", "jean", "jeans", "jogger", "short", "quần tây", "quần âu", "kaki", "chân váy"]):
+            return "bottom"
+
+        # 4. Áo / Đầm
+        if any(k in name for k in ["áo", "jacket", "bomber", "hoodie", "sơ mi", "thun", "polo", "sweater", "blazer", "cardigan", "đầm", "váy"]):
+            return "top"
+
+        # Fallback theo danh mục
+        if "thời trang" in cat:
+            if any(k in name for k in ["jean", "quần"]):
+                return "bottom"
+            return "top"
+
+        return "other"
+
+    @staticmethod
+    def filter_gender(items: list, gender: str) -> list:
+        res = []
+        for it in items:
+            name = (it.get("name", "") + " " + it.get("category", "")).lower()
+            if gender == "male" and ("nữ" in name and "nam" not in name):
+                continue
+            if gender == "female" and ("nam" in name and "nữ" not in name):
+                continue
+            res.append(it)
+        return res
+
+    @staticmethod
+    def extract_colors(p: dict) -> list:
+        name = (p.get("name", "") + " " + p.get("description", "")).lower()
+        found = []
+        if any(k in name for k in ["đen", "black", "tối"]): found.append("black")
+        if any(k in name for k in ["trắng", "white", "sáng"]): found.append("white")
+        if any(k in name for k in ["xanh", "blue", "denim", "navy"]): found.append("blue")
+        if any(k in name for k in ["xám", "ghi", "gray"]): found.append("gray")
+        if any(k in name for k in ["nâu", "kem", "be", "beige", "brown"]): found.append("earth")
+        if any(k in name for k in ["đỏ", "cam", "hồng"]): found.append("warm")
+        return found or ["neutral"]
+
+    @staticmethod
+    def detect_vibe(p: dict) -> str:
+        name = p.get("name", "").lower()
+        if any(k in name for k in ["bomber", "hoodie", "cargo", "jogger", "sneaker", "unisex", "jean", "rách"]):
+            return "Streetwear Cá Tính"
+        if any(k in name for k in ["sơ mi", "tây", "âu", "blazer", "polo", "oxford", "da", "loafer", "công sở"]):
+            return "Smart Casual Lịch Lãm"
+        if any(k in name for k in ["thể thao", "co giãn", "chạy", "gym", "thoáng khí"]):
+            return "Sporty Năng Động"
+        if any(k in name for k in ["thun", "cotton", "basic", "dép", "kaki", "trơn"]):
+            return "Minimalist Tối Giản"
+        return "Hàn Quốc Trẻ Trung"
+
+    @staticmethod
+    def score_single_outfit(items: list, user_measurements: dict) -> tuple:
         """
-        Sinh 3 bộ phối đồ hoàn chỉnh (Streetwear, Smart Casual, Minimalist)
-        sử dụng 100% sản phẩm thực tế đang bán trên ZeroMall.
+        Chấm điểm thẩm mỹ thời trang theo 4 trọng số:
+        1. Phối màu (Color Harmony): 35 điểm
+        2. Sự ăn khớp phong cách (Style Consistency): 35 điểm
+        3. Tương thích thể hình (Body Fit): 20 điểm
+        4. Tính đầy đủ của bộ phối: 10 điểm
+        """
+        all_colors = []
+        for it in items:
+            all_colors.extend(AiStylistEngine.extract_colors(it))
+        unique_colors = set(all_colors)
+
+        # 1. Điểm màu sắc (Max 35)
+        if "black" in unique_colors and "white" in unique_colors:
+            color_score = 35
+        elif "blue" in unique_colors and ("white" in unique_colors or "black" in unique_colors):
+            color_score = 34
+        elif len(unique_colors) <= 2:
+            color_score = 33
+        elif len(unique_colors) <= 3:
+            color_score = 30
+        else:
+            color_score = 25
+
+        # 2. Ăn khớp phong cách (Max 35)
+        vibes = [AiStylistEngine.detect_vibe(it) for it in items]
+        top_vibe = max(set(vibes), key=vibes.count)
+        match_count = vibes.count(top_vibe)
+        vibe_score = min(35, 20 + match_count * 5)
+
+        # 3. Khớp số đo thể trạng (Max 20)
+        bmi = float(user_measurements.get("bmi", 22.0) or 22.0)
+        body_fit = 18
+        if bmi >= 25 and ("black" in unique_colors or "earth" in unique_colors):
+            body_fit = 20
+        elif bmi < 19 and len(items) >= 4:
+            body_fit = 20
+
+        # 4. Tính đầy đủ (Max 10)
+        completeness = 10 if len(items) >= 3 else 7
+
+        total_score = min(99, max(84, color_score + vibe_score + body_fit + completeness))
+        return total_score, top_vibe
+
+    @staticmethod
+    def generate_top_100_scored_outfits(target_product: dict, user_measurements: dict, gender: str = "male", limit: int = 5):
+        """
+        Mô phỏng 100 bộ phối đồ từ kho hàng thực tế của ZeroMall,
+        chấm điểm tự động và trả về Top 5 bộ điểm cao nhất kèm chiết khấu combo.
+        Tốn 0 đồng chi phí AI sinh ảnh (Lazy generation).
         """
         try:
             all_prods = AiStylistEngine.fetch_real_zero_products()
         except Exception:
             all_prods = []
-        
-        # Lọc danh mục thời trang nghiêm ngặt (Chỉ lấy sản phẩm thời trang/giày dép/phụ kiện thực tế)
-        fashion_prods = [p for p in all_prods if any(k in (p.get("category", "") or "").lower() for k in ["thời trang", "giày", "phụ kiện"])]
+
+        # Lọc kho hàng thời trang thực tế sạch
+        fashion_prods = [
+            p for p in all_prods
+            if p.get("category") not in AiStylistEngine.EXCLUDED_CATEGORIES
+        ]
         if not fashion_prods:
             fashion_prods = all_prods
 
-        tops = [p for p in fashion_prods if any(k in (p.get("name", "") + p.get("category", "")).lower() for k in ["áo", "jacket", "bomber", "hoodie", "sơ mi", "thun"])]
-        shoes = [p for p in fashion_prods if any(k in (p.get("name", "") + p.get("category", "")).lower() for k in ["giày", "sneaker", "dép", "sandal", "boots"])]
-        accessories = [p for p in fashion_prods if any(k in (p.get("name", "") + p.get("category", "")).lower() for k in ["nón", "mũ", "túi", "ví", "balo", "thắt lưng"])]
+        gender_prods = AiStylistEngine.filter_gender(fashion_prods, gender)
+        if not gender_prods:
+            gender_prods = fashion_prods
 
-        default_top = {
-            "id": "ao-so-mi-trang-slimfit-cong-so-01",
-            "name": "Áo Sơ Mi Trắng Nam Dài Tay Oxford Chống Nhăn Cao Cấp",
+        target_role = AiStylistEngine.classify_item(target_product)
+
+        tops = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_product.get("id")]
+        bottoms = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_product.get("id")]
+        shoes = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_product.get("id")]
+        accs = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_product.get("id")]
+
+        # Danh mục fallback an toàn từ kho nếu thiếu
+        fallback_top = {
+            "id": "ao-so-mi-trang-slimfit-01",
+            "name": "Áo Sơ Mi Trắng Oxford Dài Tay Chống Nhăn Cao Cấp",
             "price": 220000,
             "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&q=80"
         }
-        default_shoe = {
-            "id": "50809270-b63e-43ff-93b7-913411c073f8",
-            "name": "Giày Sneaker Nam Nữ Thể Thao Da Mềm Cao Cấp",
+        fallback_bottom = {
+            "id": "quan-jean-denim-regular-fit-01",
+            "name": "Quần Jean Nam Ống Suông Form Regular Tôn Dáng",
+            "price": 350000,
+            "image": "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=80"
+        }
+        fallback_shoe = {
+            "id": "giay-sneaker-trang-da-mem-01",
+            "name": "Giày Sneaker Thể Thao Trắng Da Mềm Đế Độn 4cm",
             "price": 450000,
             "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80"
         }
-        default_acc = {
-            "id": "b1fc3f48-76b8-4492-bf91-af20167e137e",
+        fallback_acc = {
+            "id": "non-kaki-tron-han-quoc-01",
             "name": "Nón Lưỡi Trai Kaki Trơn Phong Cách Hàn Quốc",
-            "price": 75000,
+            "price": 85000,
             "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80"
         }
 
-        # Nếu thiếu thì dùng danh sách an toàn
-        if not tops: tops = [default_top]
-        if not shoes: shoes = [default_shoe]
-        if not accessories: accessories = [default_acc]
+        if not tops: tops = [fallback_top]
+        if not bottoms: bottoms = [fallback_bottom]
+        if not shoes: shoes = [fallback_shoe]
+        if not accs: accs = [fallback_acc]
 
+        # ---------------------------------------------------------------
+        # MÔ PHỎNG 100 SET PHỐI ĐỒ (100 Outfit Combinations)
+        # ---------------------------------------------------------------
+        simulated_pool = []
+        for _ in range(100):
+            if target_role == "top":
+                b = random.choice(bottoms)
+                s = random.choice(shoes)
+                a = random.choice(accs) if random.random() > 0.3 else None
+                outfit_items = [target_product, b, s] + ([a] if a else [])
+            elif target_role == "bottom":
+                t = random.choice(tops)
+                s = random.choice(shoes)
+                a = random.choice(accs) if random.random() > 0.3 else None
+                outfit_items = [target_product, t, s] + ([a] if a else [])
+            elif target_role == "shoes":
+                t = random.choice(tops)
+                b = random.choice(bottoms)
+                a = random.choice(accs) if random.random() > 0.3 else None
+                outfit_items = [target_product, t, b] + ([a] if a else [])
+            else:
+                t = random.choice(tops)
+                b = random.choice(bottoms)
+                s = random.choice(shoes)
+                outfit_items = [target_product, t, b, s]
+
+            score, top_vibe = AiStylistEngine.score_single_outfit(outfit_items, user_measurements)
+            simulated_pool.append({
+                "score": score,
+                "vibe": top_vibe,
+                "items": outfit_items
+            })
+
+        # Sắp xếp 100 set theo điểm thẩm mỹ giảm dần
+        simulated_pool.sort(key=lambda x: x["score"], reverse=True)
+
+        # Lọc ra Top 5 set điểm cao nhất nhưng ĐA DẠNG phong cách (không trùng lặp)
+        top_chosen = []
+        used_signatures = set()
+        for cand in simulated_pool:
+            sig = "-".join(sorted(str(it.get("id", "")) for it in cand["items"]))
+            if sig not in used_signatures:
+                used_signatures.add(sig)
+                top_chosen.append(cand)
+            if len(top_chosen) == limit:
+                break
+
+        # Nếu chưa đủ 5 set thì lấy thêm các set kế tiếp
+        for cand in simulated_pool:
+            if len(top_chosen) >= limit:
+                break
+            if cand not in top_chosen:
+                top_chosen.append(cand)
+
+        # Định dạng kết quả trả về cho Frontend
+        badges = ["🏆 Top 1 Điểm Cao Nhất", "🥈 Top 2 Khuyên Dùng", "🥉 Top 3 Thanh Lịch", "Top 4 Năng Động", "Top 5 Tối Giản"]
+        vibe_advice = {
+            "Streetwear Cá Tính": "Phối hợp hài hòa giữa phom dáng phóng khoáng và điểm nhấn sneaker giúp kéo dài tỷ lệ chân, tôn trọn vóc dáng.",
+            "Smart Casual Lịch Lãm": "Diện mạo chỉn chu, hiện đại phù hợp môi trường công sở hoặc hẹn hò, mang lại vẻ ngoài lịch thiệp và cuốn hút.",
+            "Sporty Năng Động": "Chất liệu co giãn thoáng khí tối đa, giữ phom năng động thoải mái suốt cả ngày vận động.",
+            "Minimalist Tối Giản": "Tối giản màu sắc tinh tế theo xu hướng Minimalist Hàn Quốc, dễ mặc và không bao giờ lỗi mốt.",
+            "Hàn Quốc Trẻ Trung": "Phong cách chuẩn ulzzang Hàn Quốc trẻ trung, tôn làn da và tạo cảm giác tươi mới, thanh thoát."
+        }
+
+        results = []
+        for idx, cand in enumerate(top_chosen):
+            items = cand["items"]
+            total_raw_price = sum(float(it.get("price", 0) or 0) for it in items)
+            # Ưu đãi giảm 8% khi mua trọn bộ cả set
+            combo_discount_percent = 8
+            combo_price = round(total_raw_price * (1 - combo_discount_percent / 100.0))
+            savings = total_raw_price - combo_price
+
+            formatted_items = []
+            for it in items:
+                role_type = AiStylistEngine.classify_item(it)
+                role_label = (
+                    "Món đồ chính (Đang xem)" if it.get("id") == target_product.get("id") else
+                    "Áo phối kèm" if role_type == "top" else
+                    "Quần/Váy phối kèm" if role_type == "bottom" else
+                    "Giày đi kèm" if role_type == "shoes" else "Phụ kiện điểm nhấn"
+                )
+                formatted_items.append({
+                    "role": role_label,
+                    "slot": role_type,
+                    "product": it
+                })
+
+            results.append({
+                "id": f"outfit-bundle-{idx + 1}",
+                "rank": idx + 1,
+                "badge": badges[idx] if idx < len(badges) else f"Top {idx + 1}",
+                "score": cand["score"],
+                "title": f"Look {idx + 1}: {cand['vibe']} (Điểm {cand['score']}/100)",
+                "tag": cand["vibe"],
+                "vibe": f"Phong cách {cand['vibe']} cân đối chuẩn vóc dáng",
+                "stylist_note": vibe_advice.get(cand["vibe"], "Phối hợp màu sắc và kiểu dáng hài hòa tôn dáng cơ thể."),
+                "items": formatted_items,
+                "total_price": total_raw_price,
+                "combo_price": combo_price,
+                "savings": savings,
+                "discount_percent": combo_discount_percent
+            })
+
+        return results
+
+    @staticmethod
+    def generate_outfits(pant_product: dict, user_measurements: dict):
+        """Hàm tương thích ngược với luồng cũ - sinh Top 5 outfits từ 100 simulations"""
         gender = user_measurements.get("gender", "male")
-        def to_num(val):
-            try:
-                return float(val) if val is not None else 0.0
-            except (ValueError, TypeError):
-                return 0.0
-
-        pant_name = pant_product.get("name", "Quần thời trang")
-        pant_id = pant_product.get("id", "")
-        pant_price = to_num(pant_product.get("price", 0))
-
-        # Look 1: Streetwear Năng Động (Áo khoác bomber / Hoodie + Sneaker + Nón)
-        top1 = next((p for p in tops if "bomber" in p.get("name", "").lower() or "khoác" in p.get("name", "").lower()), tops[0])
-        shoe1 = next((p for p in shoes if "sneaker" in p.get("name", "").lower()), shoes[0])
-        acc1 = next((p for p in accessories if "nón" in p.get("name", "").lower() or "mũ" in p.get("name", "").lower()), accessories[0])
-
-        # Look 2: Smart Casual / Công Sở Lịch Lãm (Áo sơ mi dài tay + Giày da/sneaker mềm)
-        top2 = next((p for p in tops if "sơ mi" in p.get("name", "").lower() or "polo" in p.get("name", "").lower()), next((p for p in tops if p.get("id") != top1.get("id")), tops[0]))
-        shoe2 = next((p for p in shoes if "da mềm" in p.get("name", "").lower() or "nam nữ" in p.get("name", "").lower()), shoes[0])
-
-        # Look 3: Minimalist Dạo Phố Thoải Mái (Áo thun cotton thoáng mát + Giày thể thao/dép)
-        top3 = next((p for p in tops if "thun" in p.get("name", "").lower() or "cotton" in p.get("name", "").lower()), next((p for p in tops if p.get("id") not in [top1.get("id"), top2.get("id")]), tops[0]))
-        shoe3 = next((p for p in shoes if "dép" in p.get("name", "").lower() or p.get("id") != shoe1.get("id")), shoes[0])
-
-        outfits = [
-            {
-                "id": "look-streetwear",
-                "title": "Look 1: Streetwear Cá Tính & Năng Động",
-                "tag": "Xu hướng TikTok / Giới trẻ",
-                "vibe": "Cá tính, phóng khoáng, hack chiều cao tôn dáng chân",
-                "stylist_note": f"Chiếc {pant_name} phối cùng áo phom rộng và sneaker tạo hiệu ứng thị giác giúp chân dài hơn, tôn trọn bờ vai cân đối.",
-                "items": [
-                    {"role": "Quần (Đang chọn)", "product": pant_product},
-                    {"role": "Áo phối kèm", "product": top1},
-                    {"role": "Giày thể thao", "product": shoe1},
-                    {"role": "Phụ kiện điểm nhấn", "product": acc1}
-                ],
-                "total_price": pant_price + to_num(top1.get("price", 0)) + to_num(shoe1.get("price", 0)) + to_num(acc1.get("price", 0))
-            },
-            {
-                "id": "look-smart-casual",
-                "title": "Look 2: Smart Casual Thanh Lịch Đi Làm & Hẹn Hò",
-                "tag": "Chuẩn mực & Gọn gàng",
-                "vibe": "Thanh lịch, hiện đại, thích hợp môi trường công sở hoặc gặp gỡ đối tác",
-                "stylist_note": f"Ống quần vừa vặn kết hợp với trang phục trên mang lại diện mạo chỉn chu, tôn số đo vòng eo {user_measurements.get('waist_cm', 75)}cm.",
-                "items": [
-                    {"role": "Quần (Đang chọn)", "product": pant_product},
-                    {"role": "Áo phối kèm", "product": top2},
-                    {"role": "Giày đi kèm", "product": shoe2}
-                ],
-                "total_price": pant_price + to_num(top2.get("price", 0)) + to_num(shoe2.get("price", 0))
-            },
-            {
-                "id": "look-minimalist",
-                "title": "Look 3: Minimalist Dạo Phố Cuối Tuần",
-                "tag": "Thoải mái & Đơn giản",
-                "vibe": "Tối giản nhẹ nhàng, dễ chịu trong mọi hoạt động thường nhật",
-                "stylist_note": "Tối ưu hóa độ thoáng khí và sự linh hoạt, giữ cho vóc dáng luôn tự nhiên nhất.",
-                "items": [
-                    {"role": "Quần (Đang chọn)", "product": pant_product},
-                    {"role": "Áo dạo phố", "product": top3},
-                    {"role": "Giày đi bộ", "product": shoe3}
-                ],
-                "total_price": pant_price + to_num(top3.get("price", 0)) + to_num(shoe3.get("price", 0))
-            }
-        ]
-
-        return outfits
+        return AiStylistEngine.generate_top_100_scored_outfits(pant_product, user_measurements, gender=gender, limit=5)
 
 
 # ---------------------------------------------------------------------------
@@ -1685,6 +1872,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     "/api/tryon/mesh-measure",
                     "/api/tryon/fit-garment",
                     "/api/tryon/stylist-recommend",
+                    "/api/tryon/generate-top-outfits",
                     "/api/tryon/extract-garment",
                     "/api/tryon/extract-face",
                     "/api/tryon/full-pipeline"
@@ -1747,18 +1935,24 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
             res = {"success": True, "measurements": measurements, "fit": fit_result}
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
 
-        elif self.path == "/api/tryon/stylist-recommend":
-            # 3. Tư vấn phối đồ với sản phẩm thật ZeroMall
+        elif self.path in ["/api/tryon/generate-top-outfits", "/api/tryon/stylist-recommend"]:
+            # 3. Phối trộn mô phỏng 100 set, chấm điểm thời trang & chọn lọc Top 5 set điểm cao nhất
             h = float(payload.get("height_cm", 170))
             w = float(payload.get("weight_kg", 65))
             gender = payload.get("gender", "male")
-            pant = payload.get("pant", {})
+            product = payload.get("product") or payload.get("pant") or {}
 
             measurements = Body3DGenerator.calculate_measurements(h, w, gender)
-            outfits = AiStylistEngine.generate_outfits(pant, measurements)
+            measurements["gender"] = gender
+            outfits = AiStylistEngine.generate_top_100_scored_outfits(product, measurements, gender=gender, limit=5)
 
             self._set_cors(200)
-            res = {"success": True, "outfits": outfits}
+            res = {
+                "success": True,
+                "simulated_count": 100,
+                "target_product": product,
+                "outfits": outfits
+            }
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
 
         elif self.path == "/api/tryon/full-pipeline":
@@ -1799,6 +1993,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     )
 
                 measurements = Body3DGenerator.calculate_measurements(h, w, gender)
+                measurements["gender"] = gender
                 mesh_3d = Body3DGenerator.generate_3d_joints_and_mesh(h, w, gender)
                 fit_result = GarmentFitEngine.evaluate_pant_fit(measurements, primary_item)
                 outfits = AiStylistEngine.generate_outfits(primary_item, measurements)

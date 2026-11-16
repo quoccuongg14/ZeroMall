@@ -45,17 +45,24 @@ interface FitResult {
 
 interface OutfitItem {
   role: string
+  slot?: 'top' | 'bottom' | 'shoes' | 'accessory'
   product: Product
 }
 
 interface OutfitLook {
   id: string
+  rank?: number
+  badge?: string
+  score?: number
   title: string
   tag: string
   vibe: string
   stylist_note: string
   items: OutfitItem[]
   total_price: number
+  combo_price?: number
+  savings?: number
+  discount_percent?: number
 }
 
 export const VirtualTryOnPage: React.FC = () => {
@@ -571,54 +578,128 @@ export const VirtualTryOnPage: React.FC = () => {
             </div>
           )}
 
-          {/* Gợi Ý Phối Đồ Hoàn Chỉnh (Outfits) Từ AI Stylist */}
+          {/* Gợi Ý Phối Đồ Hoàn Chỉnh (Top 5 Outfits từ 100 set mô phỏng) */}
           {outfits.length > 0 && (
-            <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 mb-4">
-                <span>🧥</span> Gợi Ý Phối Đồ Chuẩn Phong Cách Cho Món Đồ Này
-              </h3>
+            <div className="bg-white rounded-3xl p-6 shadow-md border border-slate-200/80 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      ⚡ 100 SET SIMULATION
+                    </span>
+                    <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Ưu đãi combo giảm 8%
+                    </span>
+                  </div>
+                  <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                    <span>✨ Top 5 Set Phối Đồ AI Đẹp Nhất</span>
+                    <span className="text-xs font-normal text-slate-500">(Mô phỏng 100 set)</span>
+                  </h3>
+                </div>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {outfits.map((outfit) => (
-                  <div
-                    key={outfit.id}
-                    className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-black text-xs text-slate-900">{outfit.title}</span>
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 font-bold text-[10px]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {outfits.map((outfit) => {
+                  const isTop1 = outfit.rank === 1
+                  const comboPrice = outfit.combo_price || Math.round(outfit.total_price * 0.92)
+                  const savings = outfit.savings || (outfit.total_price - comboPrice)
+
+                  return (
+                    <div
+                      key={outfit.id}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                        isTop1
+                          ? 'border-amber-400/80 bg-amber-50/30 shadow-md ring-1 ring-amber-400/40'
+                          : 'border-slate-200 bg-slate-50/50 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div>
+                        {/* Header badge & score */}
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className={`px-2.5 py-0.5 rounded-full font-black text-xs ${
+                            isTop1 ? 'bg-amber-400 text-slate-950' : 'bg-indigo-100 text-indigo-800'
+                          }`}>
+                            {outfit.badge || `Top ${outfit.rank || 1}`}
+                          </span>
+                          {outfit.score && (
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 font-black text-xs">
+                              {outfit.score}/100 đ
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="font-black text-xs text-slate-900">{outfit.title}</h4>
+                        <span className="text-[10px] font-bold text-indigo-600 block mt-0.5 mb-2">
                           {outfit.tag}
                         </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 italic mb-3">"{outfit.stylist_note}"</p>
 
-                      {/* Items trong outfit */}
-                      <div className="space-y-1.5 mb-3">
-                        {outfit.items.map((it, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-600 line-clamp-1 max-w-[200px]">{it.product.name}</span>
-                            <span className="font-bold text-slate-900 shrink-0">{formatCurrencyVND(it.product.price)}</span>
+                        <p className="text-[11px] text-slate-600 italic mb-3 bg-white p-2 rounded-xl border border-slate-100">
+                          "{outfit.stylist_note}"
+                        </p>
+
+                        {/* Items trong outfit */}
+                        <div className="space-y-1.5 mb-3">
+                          {outfit.items.map((it, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded-xl border border-slate-100">
+                              <img
+                                src={it.product.image || 'https://placehold.co/40x40'}
+                                alt={it.product.name}
+                                className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-100"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[9px] font-bold text-indigo-600 block">{it.role}</span>
+                                <p className="text-[11px] font-semibold text-slate-800 truncate">{it.product.name}</p>
+                              </div>
+                              <span className="font-bold text-slate-900 shrink-0 text-xs">
+                                {formatCurrencyVND(it.product.price)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Pricing & CTA Buttons */}
+                      <div className="pt-3 border-t border-slate-200/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block line-through">
+                              Gốc: {formatCurrencyVND(outfit.total_price)}
+                            </span>
+                            <span className="text-sm font-black text-rose-600">
+                              Combo: {formatCurrencyVND(comboPrice)}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                            Tiết kiệm {formatCurrencyVND(savings)}
+                          </span>
+                        </div>
 
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-200/60">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Tổng set đồ:</span>
-                        <span className="text-xs font-black text-rose-600">{formatCurrencyVND(outfit.total_price)}</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = outfit.items[0]?.product
+                              if (p) {
+                                setSelectedPant(p)
+                                handleRunTryOn()
+                              }
+                            }}
+                            className="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                          >
+                            <span>✨</span> Ướm Set Này
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/checkout`)}
+                            className="py-1.5 px-2 bg-[#ee4d2d] hover:bg-[#d93b1d] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                          >
+                            <span>🛒</span> Mua Cả Set
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/checkout`)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-xs"
-                      >
-                        Mua Cả Set ➔
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

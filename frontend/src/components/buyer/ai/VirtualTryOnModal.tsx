@@ -45,6 +45,28 @@ interface FitResult {
   stylist_fit_advice: string
 }
 
+export interface OutfitItem {
+  role: string
+  slot?: 'top' | 'bottom' | 'shoes' | 'accessory'
+  product: Product
+}
+
+export interface ScoredOutfitBundle {
+  id: string
+  rank: number
+  badge: string
+  score: number
+  title: string
+  tag: string
+  vibe: string
+  stylist_note: string
+  items: OutfitItem[]
+  total_price: number
+  combo_price: number
+  savings: number
+  discount_percent: number
+}
+
 
 interface ExtractedGarment {
   success: boolean
@@ -311,6 +333,11 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   const [activeTab, setActiveTab] = useState<'photo' | 'scanner' | 'heatmap'>('photo')
   const [viewMode, setViewMode] = useState<'tryon' | 'original' | 'sidebyside'>('tryon')
   const [toastMsg, setToastMsg] = useState<string>('')
+
+  // 4. Danh sách Top 5 Set Phối Đồ AI Đẹp Nhất (Mô phỏng 100 set)
+  const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
+  const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
+  const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -696,6 +723,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           if (data.extracted_garment && data.extracted_garment.extracted_garment_url) {
             setExtractedGarment(data.extracted_garment)
           }
+          if (data.outfits && Array.isArray(data.outfits) && data.outfits.length > 0) {
+            setTopScoredOutfits(data.outfits)
+          }
           const activeCount = Object.values(effectiveOutfit).filter(Boolean).length
           if (activeCount > 1) {
             triggerToast(`✨ Đã phối trọn bộ ${activeCount} món lên người mẫu thành công!`)
@@ -807,6 +837,94 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
       }, 350)
     }
   }
+
+  // Truy vấn Top 5 Set phối đồ AI được mô phỏng & chấm điểm từ 100 set
+  const fetchTopScoredOutfits = async (targetProduct?: Product) => {
+    const activeItems = Object.values(selectedOutfit).filter(Boolean) as Product[]
+    const effectiveProd = targetProduct || selectedPant || product || (activeItems.length > 0 ? activeItems[0] : null)
+    if (!effectiveProd) return
+
+    setIsLoadingTopOutfits(true)
+    try {
+      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/generate-top-outfits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product: effectiveProd,
+          height_cm: Number(height),
+          weight_kg: Number(weight),
+          gender: gender
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && Array.isArray(data.outfits)) {
+          setTopScoredOutfits(data.outfits)
+        }
+      }
+    } catch (err) {
+      console.warn('[VirtualTryOnModal] Error fetching top scored outfits:', err)
+    } finally {
+      setIsLoadingTopOutfits(false)
+    }
+  }
+
+  // Bấm chọn 1 set trong Top 5 để ướm thử trên ảnh của người dùng (Lazy generation: 0 tốn gem)
+  const handleTryOnBundle = (bundle: ScoredOutfitBundle) => {
+    setSelectedOutfitBundleId(bundle.id)
+    const newOutfit = {
+      top: null as Product | null,
+      bottom: null as Product | null,
+      shoes: null as Product | null,
+      accessory: null as Product | null
+    }
+
+    bundle.items.forEach((it) => {
+      const slot = it.slot || detectItemSlot(it.product)
+      if (slot && slot in newOutfit) {
+        newOutfit[slot] = it.product
+      }
+    })
+
+    setSelectedOutfit(newOutfit)
+    setActiveTab('photo')
+    setViewMode('tryon')
+
+    const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    if (primary) {
+      setSelectedPant(primary)
+    }
+
+    handleRunTryOn(primary || undefined, userPhoto, height, weight, gender, newOutfit)
+    triggerToast(`✨ Đang ướm thử ${bundle.title} lên ảnh của bạn...`)
+  }
+
+  // Bấm Mua cả set (Thêm toàn bộ sản phẩm của combo vào giỏ hàng)
+  const handleAddScoredOutfitToCart = (bundle: ScoredOutfitBundle) => {
+    if (!onAddToCart) {
+      triggerToast('Chức năng thêm giỏ hàng chưa sẵn sàng!')
+      return
+    }
+    let addedCount = 0
+    bundle.items.forEach((it) => {
+      if (it.product) {
+        onAddToCart(it.product, 1, `Size ${fitResult?.recommended_size || 'L'}`)
+        addedCount++
+      }
+    })
+    triggerToast(`🎉 Đã thêm trọn bộ ${addedCount} món (Tiết kiệm ${formatDisplayPrice(bundle.savings)}) vào giỏ hàng thành công!`)
+    setTimeout(() => {
+      loadCartFashionItems()
+    }, 350)
+  }
+
+  // Tự động tải Top 5 Set phối đồ khi mở modal hoặc khi sản phẩm chính thay đổi
+  useEffect(() => {
+    if (isOpen) {
+      fetchTopScoredOutfits(selectedPant || product || undefined)
+    }
+  }, [isOpen, selectedPant?.id, height, weight, gender])
 
   // Tự động kích hoạt AI ướm thử đồ ngay lập tức khi mở modal hoặc khi bộ phối đồ thay đổi
   useEffect(() => {
@@ -1980,6 +2098,189 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
             </div>
 
+          </div>
+
+          {/* SECTION: AI STYLIST - TOP 5 BỘ PHỐI ĐỒ ĐẸP NHẤT TỪ 100 SET MÔ PHỎNG */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 border border-indigo-500/30 rounded-3xl p-5 sm:p-6 text-white shadow-2xl space-y-5">
+            {/* Header của mục phối đồ 100 set */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider shadow-sm flex items-center gap-1.5">
+                    <span>⚡</span> 100 Set Simulation Engine
+                  </span>
+                  <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                    Chấm Điểm Thẩm Mỹ & Nhân Trắc Học
+                  </span>
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                    Ưu Đãi Combo Giảm 8%
+                  </span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                  <span>✨ Top 5 Set Phối Đồ AI Đẹp Nhất</span>
+                  <span className="text-xs font-normal text-slate-300">(Chọn lọc từ 100 bộ phối thực tế)</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                  Hệ thống AI Stylist tự động quét kho thời trang ZeroMall, tính toán bánh xe màu sắc và tỷ lệ vóc dáng của bạn ({height}cm • {weight}kg), mô phỏng 100 bộ phối khác nhau và chấm điểm để trình diễn Top 5 set ấn tượng nhất.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fetchTopScoredOutfits()}
+                disabled={isLoadingTopOutfits}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+              >
+                <span className={isLoadingTopOutfits ? 'animate-spin' : ''}>↻</span>
+                Làm mới 100 Set
+              </button>
+            </div>
+
+            {/* Content: Loading vs Top 5 Cards */}
+            {isLoadingTopOutfits ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-12 h-12 rounded-full border-4 border-indigo-500/30 border-t-indigo-400 animate-spin"></div>
+                <p className="text-sm font-bold text-slate-200">
+                  AI đang mô phỏng 100 bộ phối đồ và chấm điểm thời trang...
+                </p>
+                <p className="text-xs text-slate-400 max-w-md">
+                  Phân tích độ tương phản màu sắc, phom dáng và sự vừa vặn với chiều cao {height}cm, cân nặng {weight}kg.
+                </p>
+              </div>
+            ) : topScoredOutfits.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 bg-white/5 rounded-2xl border border-dashed border-white/10">
+                Chưa có dữ liệu phối đồ. Vui lòng bấm "Làm mới 100 Set" hoặc chọn sản phẩm khác.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {topScoredOutfits.map((bundle) => {
+                  const isSelectedBundle = selectedOutfitBundleId === bundle.id
+                  const isTop1 = bundle.rank === 1
+                  const isTop2 = bundle.rank === 2
+                  const isTop3 = bundle.rank === 3
+
+                  return (
+                    <div
+                      key={bundle.id}
+                      className={`rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 relative overflow-hidden ${
+                        isSelectedBundle
+                          ? 'bg-indigo-950/90 border-2 border-indigo-400 shadow-xl ring-2 ring-indigo-500/40'
+                          : isTop1
+                          ? 'bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-slate-900 border-2 border-amber-500/60 shadow-lg hover:border-amber-400'
+                          : isTop2
+                          ? 'bg-gradient-to-b from-slate-800/80 to-slate-900/90 border border-slate-400/50 shadow-md hover:border-slate-300'
+                          : isTop3
+                          ? 'bg-gradient-to-b from-amber-900/30 to-slate-900/90 border border-amber-700/50 shadow-md hover:border-amber-600'
+                          : 'bg-slate-900/90 border border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Top Rank Badge */}
+                      <div className="flex items-center justify-between gap-1 mb-2.5">
+                        <span
+                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs ${
+                            isTop1
+                              ? 'bg-amber-400 text-slate-950'
+                              : isTop2
+                              ? 'bg-slate-200 text-slate-900'
+                              : isTop3
+                              ? 'bg-amber-700 text-white'
+                              : 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/30'
+                          }`}
+                        >
+                          {bundle.badge}
+                        </span>
+                        <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                          {bundle.score}/100 đ
+                        </span>
+                      </div>
+
+                      {/* Title & Tag */}
+                      <div className="mb-2">
+                        <h4 className="text-xs font-black text-white line-clamp-1">{bundle.title}</h4>
+                        <span className="text-[10px] font-bold text-indigo-300 block mt-0.5">
+                          {bundle.tag}
+                        </span>
+                      </div>
+
+                      {/* Stylist Note */}
+                      <div className="mb-3 p-2 rounded-xl bg-black/40 border border-white/5 text-[10px] text-slate-300 italic leading-relaxed">
+                        "{bundle.stylist_note}"
+                      </div>
+
+                      {/* Danh sách items trong set */}
+                      <div className="space-y-1.5 mb-3 flex-1">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Trọn bộ gồm {bundle.items.length} món:
+                        </span>
+                        {bundle.items.map((it, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 p-1.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition"
+                          >
+                            <img
+                              src={it.product.image || 'https://placehold.co/50x50'}
+                              alt={it.product.name}
+                              className="w-9 h-9 object-cover rounded-lg bg-white shrink-0 border border-white/10"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[9px] font-bold text-indigo-300 block truncate">
+                                {it.role}
+                              </span>
+                              <p className="text-[10px] font-semibold text-slate-200 truncate">
+                                {it.product.name}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-300 shrink-0">
+                              {formatDisplayPrice(it.product.price)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Giá & Ưu đãi combo */}
+                      <div className="pt-2.5 pb-3 border-t border-white/10 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">Giá gốc cả bộ:</span>
+                          <span className="text-slate-400 line-through">
+                            {formatDisplayPrice(bundle.total_price)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-400">Combo Giảm 8%:</span>
+                          <span className="text-sm font-black text-rose-400">
+                            {formatDisplayPrice(bundle.combo_price)}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-bold text-emerald-400 text-right">
+                          Tiết kiệm {formatDisplayPrice(bundle.savings)}
+                        </div>
+                      </div>
+
+                      {/* 2 Nút Hành Động: Ướm thử set này & Thêm cả set vào giỏ */}
+                      <div className="space-y-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleTryOnBundle(bundle)}
+                          disabled={isLoadingAi}
+                          className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                        >
+                          <span>✨</span>
+                          {isLoadingAi && isSelectedBundle ? 'Đang Ướm...' : 'Ướm Thử Set Này'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAddScoredOutfitToCart(bundle)}
+                          className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-[0.98]"
+                        >
+                          <span>🛒</span>
+                          Thêm Cả Set Vào Giỏ
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
         </div>
