@@ -118,8 +118,7 @@ const ITEM_IMAGE_MAP = [
   {
     pattern: /Quần Short Đùi Nam/i,
     images: [
-      'https://images.unsplash.com/photo-1591195853828-11db59a44f6b',
-      'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a'
+      'https://images.unsplash.com/photo-1591195853828-11db59a44f6b'
     ]
   },
 
@@ -718,8 +717,7 @@ const ITEM_IMAGE_MAP = [
   {
     pattern: /Khuyên Tai Nữ/i,
     images: [
-      'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908',
-      'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f'
+      'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908'
     ]
   },
   {
