@@ -16,7 +16,7 @@ export const QuickServicesBar: React.FC<QuickServicesBarProps> = ({
   const services = [
     {
       id: 'tryon',
-      title: 'Thử Đồ 3D AI',
+      title: 'Thử Đồ AI',
       badge: 'Công nghệ mới',
       badgeColor: 'bg-indigo-600',
       icon: '✨',

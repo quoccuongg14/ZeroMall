@@ -3,7 +3,6 @@ import { API_BASE_URL, TRYON_SERVICE_URL } from '../../../config/api.config'
 import { formatCurrencyVND } from '../../../utils/formatters'
 import type { Product } from '../FlashSale'
 import type { CartItem } from '../../../models/cart.model'
-import { Human3DViewer } from './Human3DViewer'
 
 interface BodyMeasurements {
   bmi: number
@@ -56,13 +55,6 @@ interface ExtractedGarment {
   mask_url: string
   extracted_garment_url: string
   pixels_count: number
-}
-
-interface ExtractedFace {
-  success: boolean
-  face_url: string
-  width: number
-  height: number
 }
 
 interface CartFashionItem {
@@ -315,9 +307,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   const [fitResult, setFitResult] = useState<FitResult | null>(null)
   const [compositeTryOnImage, setCompositeTryOnImage] = useState<string>('')
   const [extractedGarment, setExtractedGarment] = useState<ExtractedGarment | null>(null)
-  const [extractedFace, setExtractedFace] = useState<ExtractedFace | null>(null)
   const [isScanningGarment, setIsScanningGarment] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'photo' | '3d' | 'scanner' | 'heatmap'>('photo')
+  const [activeTab, setActiveTab] = useState<'photo' | 'scanner' | 'heatmap'>('photo')
   const [viewMode, setViewMode] = useState<'tryon' | 'original' | 'sidebyside'>('tryon')
   const [toastMsg, setToastMsg] = useState<string>('')
 
@@ -547,23 +538,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           }
           triggerToast('Đã tải ảnh người dùng! Đang tự động ướm đồ lên vóc dáng của bạn...')
 
-          // Trích xuất khuôn mặt để ốp vào đầu 3D Mannequin
-          try {
-            const faceRes = await fetch(`${TRYON_SERVICE_URL}/api/tryon/extract-face`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ user_image: dataUrl })
-            })
-            if (faceRes.ok) {
-              const faceData = await faceRes.json()
-              if (faceData.success && faceData.face_url) {
-                setExtractedFace(faceData)
-              }
-            }
-          } catch (eFace) {
-            console.warn('Face extract warning:', eFace)
-          }
-
           // Kích hoạt chu trình ướm thử lại với ảnh mới ngay lập tức
           handleRunTryOn(selectedPant || product || undefined, dataUrl)
         }
@@ -671,7 +645,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     reader.readAsDataURL(file)
   }
 
-  // Chạy AI: Dựng 3D + Đo vóc dáng + Ướm thử đồ + Phối đồ đa món
+  // Chạy AI: Đo vóc dáng + Ướm thử đồ qua ảnh + Phối đồ đa món
   const handleRunTryOn = async (
     pantToTry?: Product,
     overrideUserPhoto?: string,
@@ -718,9 +692,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           if (data.preview && data.preview.composite_image) {
             setCompositeTryOnImage(data.preview.composite_image)
             setViewMode('tryon')
-          }
-          if (data.extracted_face && data.extracted_face.face_url) {
-            setExtractedFace(data.extracted_face)
           }
           if (data.extracted_garment && data.extracted_garment.extracted_garment_url) {
             setExtractedGarment(data.extracted_garment)
@@ -898,11 +869,11 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   Phòng Thử Đồ Online AI • Mảng Thời Trang
                 </h2>
                 <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  AI Studio 3D
+                  AI Neural Studio
                 </span>
               </div>
               <p className="text-[11px] text-slate-300">
-                Gửi ảnh của bạn + Nhập chiều cao cân nặng + Chọn món đồ để AI dựng hình 3D và gợi ý option phù hợp
+                Gửi ảnh của bạn + Nhập chiều cao cân nặng + Chọn món đồ để AI ướm thử trang phục chân thực qua ảnh
               </p>
             </div>
           </div>
@@ -936,17 +907,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       }`}
                     >
                       <span>📸</span> Ảnh Mặc Thử AI HD
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('3d')}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                        activeTab === '3d'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
-                      }`}
-                    >
-                      <span>🧍</span> Mô Hình 3D Xoay 360°
                     </button>
                     <button
                       type="button"
@@ -1082,32 +1042,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     </div>
                   )}
 
-                  {/* TAB 2: MÔ HÌNH 3D CON NGƯỜI CHÂN THỰC THREE.JS (Xoay 360 độ) */}
-                  {activeTab === '3d' && (
-                    <Human3DViewer
-                      userFaceUrl={extractedFace?.face_url || userPhoto}
-                      heightCm={Number(height)}
-                      weightKg={Number(weight)}
-                      gender={gender}
-                      waistCm={measurements?.waist_cm}
-                      thighCm={measurements?.thigh_cm}
-                      garmentColor={
-                        extractedGarment?.dominant_colors?.[0] || (
-                          (selectedPant?.name || '').toLowerCase().includes('đỏ') ? '#d53154' :
-                          (selectedPant?.name || '').toLowerCase().includes('jean') ? '#2563eb' :
-                          (selectedPant?.name || '').toLowerCase().includes('jogger') ? '#334155' :
-                          (selectedPant?.name || '').toLowerCase().includes('bomber') || (selectedPant?.name || '').toLowerCase().includes('khoác') ? '#1e293b' : '#3b82f6'
-                        )
-                      }
-                      garmentType={
-                        (selectedPant?.name || '').toLowerCase().includes('váy') || (selectedPant?.name || '').toLowerCase().includes('đầm') ? 'one-pieces' :
-                        (selectedPant?.name || '').toLowerCase().includes('quần') || (selectedPant?.name || '').toLowerCase().includes('jean') || (selectedPant?.name || '').toLowerCase().includes('jogger') ? 'bottoms' : 'tops'
-                      }
-                      garmentName={selectedPant?.name}
-                    />
-                  )}
-
-                  {/* TAB 3: BỘ BÓC TÁCH & QUÉT TRANG PHỤC THÔNG MINH (AI GARMENT SCANNER) */}
+                  {/* TAB 2: BỘ BÓC TÁCH & QUÉT TRANG PHỤC THÔNG MINH (AI GARMENT SCANNER) */}
                   {activeTab === 'scanner' && (
                     <div className="w-full h-full p-4 flex flex-col justify-between overflow-y-auto text-slate-200">
                       <div>
@@ -1229,15 +1164,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setActiveTab('3d')}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
-                            >
-                              <span>🧍</span> Mặc Lên Khung 3D (Xoay 360°)
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => setActiveTab('photo')}
-                              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
                             >
                               <span>✨</span> Xem Ảnh Thử Bằng Neural AI
                             </button>

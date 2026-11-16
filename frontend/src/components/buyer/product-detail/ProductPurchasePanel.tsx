@@ -411,7 +411,7 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
         </button>
       </div>
 
-      {/* 3D Virtual Try-On Banner for Fashion Items - Design Taste Luxury Studio */}
+      {/* Virtual Try-On Banner for Fashion Items */}
       {isFashion && (
         <div
           onClick={() => {
@@ -433,7 +433,7 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
                   Phòng Thử Đồ Online AI
                 </span>
                 <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/40 tracking-wider">
-                  3D & Vóc Dáng
+                  Ướm Thử Qua Ảnh
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5">

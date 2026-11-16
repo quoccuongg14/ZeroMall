@@ -1857,7 +1857,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
 def run_server():
     server_address = ("", PORT)
     httpd = HTTPServer(server_address, TryOnRequestHandler)
-    print(f"[+] ZeroMall 3D Virtual Try-On Server running at http://localhost:{PORT}")
+    print(f"[+] ZeroMall AI Virtual Try-On Server running at http://localhost:{PORT}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

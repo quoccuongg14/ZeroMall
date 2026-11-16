@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { API_BASE_URL, TRYON_SERVICE_URL } from '../../config/api.config'
 import { formatCurrencyVND } from '../../utils/formatters'
@@ -78,17 +78,9 @@ export const VirtualTryOnPage: React.FC = () => {
   // 3. Kết quả AI
   const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false)
   const [measurements, setMeasurements] = useState<BodyMeasurements | null>(null)
-  const [mesh3D, setMesh3D] = useState<any>(null)
   const [fitResult, setFitResult] = useState<FitResult | null>(null)
   const [outfits, setOutfits] = useState<OutfitLook[]>([])
-  const [activeTab, setActiveTab] = useState<'3d' | 'photo' | 'heatmap'>('3d')
-
-  // 4. Quản lý tương tác Canvas 3D
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [rotY, setRotY] = useState<number>(0)
-  const [isDragging, setIsDragging] = useState<boolean>(false)
-  const [dragStartX, setDragStartX] = useState<number>(0)
-  const [isAutoRotate, setIsAutoRotate] = useState<boolean>(true)
+  const [activeTab, setActiveTab] = useState<'photo' | 'heatmap'>('photo')
 
   // Tải danh sách quần áo thời trang thực tế từ ZeroMall
   useEffect(() => {
@@ -163,7 +155,6 @@ export const VirtualTryOnPage: React.FC = () => {
         const data = await res.json()
         if (data.success) {
           setMeasurements(data.measurements)
-          setMesh3D(data.mesh_3d)
           setFitResult(data.fit)
           setOutfits(data.outfits || [])
         }
@@ -184,149 +175,6 @@ export const VirtualTryOnPage: React.FC = () => {
       handleRunTryOn()
     }
   }, [selectedPant])
-
-  // Vẽ 3D Skeleton & Mesh trên Canvas
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    let animationFrameId: number
-
-    const render3D = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      const cx = canvas.width / 2
-      const cy = canvas.height * 0.88
-      const scale = canvas.height * 0.48 // Tỷ lệ chiều cao người trên canvas
-
-      // Tự động xoay
-      let currentRot = rotY
-      if (isAutoRotate && !isDragging) {
-        currentRot = (currentRot + 0.012) % (Math.PI * 2)
-        setRotY(currentRot)
-      }
-
-      // Vẽ nền Grid sàn 3D
-      ctx.strokeStyle = '#e2e8f0'
-      ctx.lineWidth = 1
-      for (let r = 20; r <= 160; r += 35) {
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, r, r * 0.35, 0, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-
-      if (!mesh3D || !mesh3D.joints) {
-        animationFrameId = requestAnimationFrame(render3D)
-        return
-      }
-
-      const joints = mesh3D.joints
-      const cosR = Math.cos(currentRot)
-      const sinR = Math.sin(currentRot)
-
-      // Chiếu 3D -> 2D (Perspective Projection)
-      const project = (coord3d: number[]) => {
-        const [x, y, z] = coord3d
-        // Xoay quanh trục Y
-        const rotX = x * cosR - z * sinR
-        const rotZ = x * sinR + z * cosR
-        const cameraDist = 2.5
-        const pFactor = cameraDist / (cameraDist + rotZ)
-
-        return {
-          px: cx + rotX * scale * pFactor,
-          py: cy - y * scale * pFactor,
-          pz: rotZ,
-          scaleFactor: pFactor
-        }
-      }
-
-      // 1. Vẽ các đoạn thân người 3D (Segments)
-      const segments = [
-        { from: 'pelvis', to: 'waist', color: '#10b981', width: 22 },
-        { from: 'waist', to: 'chest', color: '#38bdf8', width: 26 },
-        { from: 'chest', to: 'neck', color: '#38bdf8', width: 16 },
-        { from: 'neck', to: 'head', color: '#fed7aa', width: 20 },
-        { from: 'shoulder_left', to: 'shoulder_right', color: '#cbd5e1', width: 14 },
-        { from: 'shoulder_left', to: 'elbow_left', color: '#94a3b8', width: 10 },
-        { from: 'elbow_left', to: 'wrist_left', color: '#94a3b8', width: 8 },
-        { from: 'shoulder_right', to: 'elbow_right', color: '#94a3b8', width: 10 },
-        { from: 'elbow_right', to: 'wrist_right', color: '#94a3b8', width: 8 },
-        // Chiếc quần (Được tô màu nổi bật theo chiếc quần đang thử)
-        { from: 'pelvis', to: 'hip_left', color: '#3b82f6', width: 18 },
-        { from: 'pelvis', to: 'hip_right', color: '#3b82f6', width: 18 },
-        { from: 'hip_left', to: 'knee_left', color: '#2563eb', width: 20 },
-        { from: 'hip_right', to: 'knee_right', color: '#2563eb', width: 20 },
-        { from: 'knee_left', to: 'ankle_left', color: '#1d4ed8', width: 16 },
-        { from: 'knee_right', to: 'ankle_right', color: '#1d4ed8', width: 16 }
-      ]
-
-      segments.forEach((seg) => {
-        const j1 = joints[seg.from]
-        const j2 = joints[seg.to]
-        if (!j1 || !j2) return
-
-        const p1 = project(j1)
-        const p2 = project(j2)
-
-        ctx.beginPath()
-        ctx.moveTo(p1.px, p1.py)
-        ctx.lineTo(p2.px, p2.py)
-        ctx.strokeStyle = seg.color
-        ctx.lineWidth = seg.width * ((p1.scaleFactor + p2.scaleFactor) / 2)
-        ctx.lineCap = 'round'
-        ctx.stroke()
-      })
-
-      // 2. Vẽ các khớp xương (Joints)
-      Object.entries(joints).forEach(([name, coord3d]: [string, any]) => {
-        const p = project(coord3d)
-        ctx.beginPath()
-        ctx.arc(p.px, p.py, 5 * p.scaleFactor, 0, Math.PI * 2)
-        ctx.fillStyle = name.includes('hip') || name.includes('knee') || name.includes('ankle') ? '#60a5fa' : '#ffffff'
-        ctx.fill()
-        ctx.lineWidth = 1.5
-        ctx.strokeStyle = '#1e293b'
-        ctx.stroke()
-      })
-
-      // 3. Nhãn số đo 3D
-      if (measurements) {
-        const pWaist = project(joints['waist'] || [0, 1.0, 0])
-        const pThigh = project(joints['knee_left'] || [-0.1, 0.45, 0])
-
-        ctx.font = 'bold 11px sans-serif'
-        ctx.fillStyle = '#0f172a'
-        ctx.fillText(`Eo: ${measurements.waist_cm}cm`, pWaist.px + 20, pWaist.py)
-        ctx.fillText(`Đùi: ${measurements.thigh_cm}cm`, pThigh.px - 65, pThigh.py)
-      }
-
-      animationFrameId = requestAnimationFrame(render3D)
-    }
-
-    render3D()
-
-    return () => {
-      cancelAnimationFrame(animationFrameId)
-    }
-  }, [mesh3D, rotY, isAutoRotate, isDragging, measurements])
-
-  // Xử lý kéo xoay chuột 3D
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true)
-    setIsAutoRotate(false)
-    setDragStartX(e.clientX)
-  }
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return
-    const deltaX = e.clientX - dragStartX
-    setRotY((prev) => prev + deltaX * 0.015)
-    setDragStartX(e.clientX)
-  }
-
-  const handleMouseUp = () => setIsDragging(false)
 
   // Đổi avatar người dùng mẫu
   const handleSelectPresetModel = (presetGender: 'male' | 'female') => {
@@ -369,15 +217,15 @@ export const VirtualTryOnPage: React.FC = () => {
                 AI Thử Đồ Tức Thì
               </span>
               <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-400/20 text-[11px] font-bold px-3 py-1 rounded-full">
-                Công Nghệ 3D Chuẩn Vóc Dáng
+                Ướm Thử Qua Ảnh Chân Thực
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
-              <span>Phòng Thử Đồ Ảo 3D & Bản Sao Số AI</span>
+              <span>Phòng Thử Đồ Ảo AI (Virtual Try-On)</span>
               <span className="text-xl">✨</span>
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-2xl leading-relaxed">
-              Mô phỏng 3D chính xác vóc dáng thực tế của bạn từ ảnh chụp và số đo chiều cao/cân nặng. Thử đồ thời gian thực, đo áp lực độ vừa vặn và nhận tư vấn phối đồ từ Stylist AI.
+              Ướm thử trang phục trực tiếp lên ảnh chân dung của bạn kết hợp phân tích số đo chiều cao/cân nặng. Đo áp lực độ vừa vặn và nhận tư vấn phối đồ từ Stylist AI.
             </p>
           </div>
 
@@ -398,92 +246,92 @@ export const VirtualTryOnPage: React.FC = () => {
           {/* Card 1: Thông số thể hình */}
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 mb-4">
-              <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-black">1</span>
-              Thông Số Thể Hình & Ảnh Bạn
+              <span>📐</span> Thông Số Vóc Dáng Của Bạn
             </h3>
 
-            {/* Presets Nhanh */}
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              <button
-                type="button"
-                onClick={() => handleSelectPresetModel('male')}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-2 ${
-                  gender === 'male' && !isCustomPhoto
-                    ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>👨</span> Mẫu Nam (1m75)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectPresetModel('female')}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-2 ${
-                  gender === 'female' && !isCustomPhoto
-                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <span>👩</span> Mẫu Nữ (1m63)
-              </button>
+            {/* Giới tính */}
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Giới tính</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetModel('male')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    gender === 'male'
+                      ? 'border-indigo-600 bg-indigo-50/60 text-indigo-700'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <span>👨</span> Nam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPresetModel('female')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    gender === 'female'
+                      ? 'border-pink-500 bg-pink-50/60 text-pink-700'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                  }`}
+                >
+                  <span>👩</span> Nữ
+                </button>
+              </div>
             </div>
 
-            {/* Slider Chiều Cao */}
-            <div className="space-y-1.5 mb-4">
-              <div className="flex justify-between items-center text-xs font-semibold">
-                <span className="text-slate-600">Chiều cao:</span>
-                <span className="text-indigo-600 font-black text-sm">{height} cm</span>
+            {/* Slider Chiều cao */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="font-semibold text-slate-500">Chiều cao</span>
+                <span className="font-black text-slate-800">{height} cm</span>
               </div>
               <input
                 type="range"
-                min="145"
-                max="195"
+                min="140"
+                max="205"
                 value={height}
                 onChange={(e) => setHeight(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                className="w-full accent-indigo-600 cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                <span>145cm</span>
-                <span>170cm</span>
-                <span>195cm</span>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>140 cm</span>
+                <span>205 cm</span>
               </div>
             </div>
 
-            {/* Slider Cân Nặng */}
-            <div className="space-y-1.5 mb-5">
-              <div className="flex justify-between items-center text-xs font-semibold">
-                <span className="text-slate-600">Cân nặng:</span>
-                <span className="text-indigo-600 font-black text-sm">{weight} kg</span>
+            {/* Slider Cân nặng */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="font-semibold text-slate-500">Cân nặng</span>
+                <span className="font-black text-slate-800">{weight} kg</span>
               </div>
               <input
                 type="range"
                 min="40"
-                max="115"
+                max="125"
                 value={weight}
                 onChange={(e) => setWeight(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                className="w-full accent-indigo-600 cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                <span>40kg</span>
-                <span>65kg</span>
-                <span>115kg</span>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>40 kg</span>
+                <span>125 kg</span>
               </div>
             </div>
 
-            {/* Tải ảnh người dùng */}
-            <div className="border-t border-slate-100 pt-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Ảnh Toàn Thân Của Bạn (Tùy chọn):
+            {/* Upload ảnh người thật */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="text-xs font-semibold text-slate-500 mb-1.5 block">
+                Ảnh Toàn Thân / Chân Dung Của Bạn
               </label>
               <div className="flex items-center gap-3">
                 <img
                   src={userPhoto}
-                  alt="User photo"
-                  className="w-12 h-16 object-cover rounded-lg border border-slate-200 shadow-2xs shrink-0"
+                  alt="User avatar"
+                  className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
                 />
                 <div className="flex-1">
-                  <label className="inline-block bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 transition cursor-pointer">
-                    📁 Chọn ảnh từ máy
+                  <label className="inline-block bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-1.5 px-3 rounded-lg cursor-pointer transition">
+                    Tải Ảnh Của Bạn
                     <input
                       type="file"
                       accept="image/*"
@@ -491,53 +339,58 @@ export const VirtualTryOnPage: React.FC = () => {
                       className="hidden"
                     />
                   </label>
-                  <p className="text-[10px] text-slate-400 mt-1">Định dạng JPG, PNG toàn thân đứng thẳng</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {isCustomPhoto ? 'Đang dùng ảnh tải lên của bạn' : 'Đang dùng ảnh người mẫu chuẩn'}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Chọn Chiếc Quần Trên Sàn ZeroMall */}
+          {/* Card 2: Chọn Món Đồ Cần Thử Trên ZeroMall */}
           <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
-            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 mb-4">
-              <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-black">2</span>
-              Chọn Chiếc Quần Cần Thử
+            <h3 className="font-bold text-slate-900 text-sm flex items-center justify-between mb-4">
+              <span className="flex items-center gap-2">
+                <span>👖</span> Món Đồ Đang Ướm Thử
+              </span>
+              <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                {availablePants.length} sản phẩm
+              </span>
             </h3>
 
             {isLoadingPants ? (
-              <div className="text-center py-6 text-xs text-slate-400">Đang tải sản phẩm từ CSDL...</div>
+              <div className="py-8 text-center text-xs text-slate-400">Đang tải danh mục quần áo ZeroMall...</div>
             ) : (
-              <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                 {availablePants.map((pant) => {
                   const isSelected = selectedPant?.id === pant.id
                   return (
                     <div
                       key={pant.id}
                       onClick={() => setSelectedPant(pant)}
-                      className={`p-3 rounded-xl border transition cursor-pointer flex items-center gap-3 ${
+                      className={`p-2.5 rounded-xl border flex items-center gap-3 cursor-pointer transition ${
                         isSelected
-                          ? 'border-indigo-600 bg-indigo-50/60 shadow-xs ring-1 ring-indigo-500'
-                          : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+                          ? 'border-indigo-600 bg-indigo-50/50 shadow-2xs'
+                          : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
                       }`}
                     >
                       <img
-                        src={pant.image || 'https://placehold.co/100x100?text=Pant'}
+                        src={pant.image}
                         alt={pant.name}
-                        className="w-14 h-16 object-cover rounded-lg border border-slate-200 shrink-0"
+                        className="w-12 h-12 rounded-lg object-cover bg-slate-100 shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-800 line-clamp-1">{pant.name}</p>
-                        <p className="text-[11px] font-black text-rose-600 mt-0.5">
+                        <p className={`text-xs font-bold line-clamp-1 ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                          {pant.name}
+                        </p>
+                        <p className="text-xs font-black text-rose-600 mt-0.5">
                           {formatCurrencyVND(pant.price)}
                         </p>
-                        <span className="inline-block mt-1 bg-white border border-slate-200 text-slate-500 text-[9px] font-semibold px-1.5 py-0.5 rounded">
-                          {pant.category}
-                        </span>
                       </div>
                       {isSelected && (
-                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black shrink-0">
+                        <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] shrink-0 font-bold">
                           ✓
-                        </span>
+                        </div>
                       )}
                     </div>
                   )
@@ -545,7 +398,7 @@ export const VirtualTryOnPage: React.FC = () => {
               </div>
             )}
 
-            {/* Nút Kích Hoạt Thử Đồ */}
+            {/* Nút hành động AI Re-calculate */}
             <button
               type="button"
               disabled={isLoadingAi || !selectedPant}
@@ -559,19 +412,19 @@ export const VirtualTryOnPage: React.FC = () => {
               {isLoadingAi ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                  AI Đang Dựng Hình 3D & Thử Đồ...
+                  AI Đang Ướm Thử Đồ Qua Ảnh...
                 </>
               ) : (
                 <>
                   <span>✨</span>
-                  Khởi Tạo Bản Sao 3D & Mặc Thử Ngay
+                  Ướm Thử Qua Ảnh Ngay
                 </>
               )}
             </button>
           </div>
         </div>
 
-        {/* Cột 2 & 3: Khu Vực Hiển Thị 3D & Kết Quả Thử Đồ (8 cols) */}
+        {/* Cột 2 & 3: Khu Vực Hiển Thị Thử Đồ & Kết Quả (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
           
           {/* Main Visualizer Stage */}
@@ -579,17 +432,6 @@ export const VirtualTryOnPage: React.FC = () => {
             {/* Visualizer Mode Tabs */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-4">
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('3d')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === '3d'
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span>🧍</span> Bản Sao 3D Tương Tác
-                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('photo')}
@@ -613,43 +455,12 @@ export const VirtualTryOnPage: React.FC = () => {
                   <span>🔥</span> Bản Đồ Áp Lực Vừa Vặn
                 </button>
               </div>
-
-              {activeTab === '3d' && (
-                <div className="flex items-center gap-2 text-xs">
-                  <button
-                    onClick={() => setIsAutoRotate(!isAutoRotate)}
-                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
-                      isAutoRotate ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {isAutoRotate ? '⏸ Dừng xoay' : '▶ Tự xoay 360°'}
-                  </button>
-                </div>
-              )}
             </div>
 
-            {/* Visualizer Canvas / Render Output */}
+            {/* Visualizer Render Output */}
             <div className="relative w-full h-[450px] bg-gradient-to-b from-slate-50 to-slate-100/70 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-200/50">
               
-              {/* Chế độ 1: 3D Interactive Canvas */}
-              {activeTab === '3d' && (
-                <div className="relative w-full h-full cursor-grab active:cursor-grabbing">
-                  <canvas
-                    ref={canvasRef}
-                    width={600}
-                    height={450}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    className="w-full h-full object-contain"
-                  />
-                  <div className="absolute bottom-3 left-4 bg-white/90 backdrop-blur-xs border border-slate-200/80 px-3 py-1.5 rounded-xl text-[10px] text-slate-500 font-semibold shadow-2xs">
-                    💡 Nhấp & kéo chuột trái để xoay 360 độ góc nhìn cơ thể
-                  </div>
-                </div>
-              )}
-
-              {/* Chế độ 2: Ảnh Mặc Thử Chân Thực (Virtual Try-On Render) */}
+              {/* Chế độ 1: Ảnh Mặc Thử Chân Thực (Virtual Try-On Render) */}
               {activeTab === 'photo' && (
                 <div className="relative w-full h-full flex items-center justify-center p-4">
                   <div className="relative max-h-full aspect-3/4 rounded-xl overflow-hidden shadow-md border border-slate-200">
@@ -673,153 +484,137 @@ export const VirtualTryOnPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Chế độ 3: Bản Đồ Áp Lực Vừa Vặn (Pressure Tension Heatmap) */}
+              {/* Chế độ 2: Heatmap Áp Lực Vừa Vặn */}
               {activeTab === 'heatmap' && fitResult && (
-                <div className="w-full h-full p-6 flex flex-col justify-center max-w-lg mx-auto">
-                  <h4 className="text-center font-bold text-slate-800 text-sm mb-4">
-                    Bản Đồ Độ Căng & Áp Lực Từng Vị Trí Vải
+                <div className="w-full max-w-md p-6 bg-white/95 backdrop-blur-xs rounded-2xl shadow-md border border-slate-200/80 space-y-4">
+                  <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <span>🔥</span> Phân Bổ Áp Lực Co Giãn Vải Theo Vóc Dáng
                   </h4>
-                  <div className="space-y-4">
-                    {Object.entries(fitResult.zones).map(([key, zone]) => (
-                      <div key={key} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-700">{zone.label}</span>
-                          <span
-                            className="font-black px-2 py-0.5 rounded text-[10px]"
-                            style={{ backgroundColor: `${zone.color}20`, color: zone.color }}
-                          >
-                            {zone.status}
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: `${Math.min(100, Math.max(30, 85 - Math.abs(zone.diff_percent || zone.diff_cm || 0) * 3))}%`,
-                              backgroundColor: zone.color
-                            }}
-                          ></div>
-                        </div>
+                  {Object.entries(fitResult.zones).map(([key, zone]) => (
+                    <div key={key} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-semibold text-slate-600">{zone.label}</span>
+                        <span
+                          className="font-bold px-2 py-0.5 rounded text-[10px]"
+                          style={{ backgroundColor: `${zone.color}20`, color: zone.color }}
+                        >
+                          {zone.status}
+                        </span>
                       </div>
-                    ))}
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(100, Math.max(15, (zone.diff_percent || 0) + 50))}%`,
+                            backgroundColor: zone.color
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="pt-2 text-[11px] text-slate-500 border-t border-slate-100 flex items-center justify-between">
+                    <span>🔴 Rất chật / Căng</span>
+                    <span>🟢 Rất vừa vặn</span>
+                    <span>🟡 Rộng rãi / Thoải mái</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Bảng Chỉ Số Nhân Trắc Học & Đánh Giá Size */}
-            {measurements && fitResult && (
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Thể Trạng</p>
-                    <p className="text-xs font-black text-slate-800 mt-1">{measurements.body_type.split('(')[0]}</p>
-                    <span className="text-[10px] text-indigo-600 font-bold">BMI: {measurements.bmi}</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Vòng Eo (Cạp)</p>
-                    <p className="text-sm font-black text-slate-800 mt-1">{measurements.waist_cm} cm</p>
-                    <span className="text-[10px] text-emerald-600 font-bold">Vừa vặn</span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Vòng Đùi</p>
-                    <p className="text-sm font-black text-slate-800 mt-1">{measurements.thigh_cm} cm</p>
-                    <span className="text-[10px] text-emerald-600 font-bold">Ống suông đẹp</span>
-                  </div>
-                  <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-xl text-center shadow-2xs">
-                    <p className="text-[10px] text-indigo-700 font-bold uppercase">Size Đề Xuất</p>
-                    <p className="text-base font-black text-indigo-800 mt-0.5">Size {fitResult.recommended_size}</p>
-                    <span className="text-[10px] text-indigo-600 font-bold">Độ hợp {fitResult.fit_score}%</span>
-                  </div>
+            {/* Bảng Chỉ Số Nhân Trắc Học Thực Tế Từ AI */}
+            {measurements && (
+              <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-slate-500 block font-medium">Vòng Eo (Waist)</span>
+                  <span className="font-black text-slate-800 text-base">{measurements.waist_cm} cm</span>
                 </div>
-
-                {/* Lời khuyên Stylist */}
-                <div className="bg-emerald-50/80 border border-emerald-200/80 p-4 rounded-2xl flex items-start gap-3">
-                  <span className="text-xl">💡</span>
-                  <div className="text-xs leading-relaxed text-emerald-900">
-                    <p className="font-bold mb-0.5">Đánh giá vừa vặn từ AI Stylist:</p>
-                    <p>{fitResult.stylist_fit_advice}</p>
-                  </div>
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-slate-500 block font-medium">Vòng Mông (Hip)</span>
+                  <span className="font-black text-slate-800 text-base">{measurements.hip_cm} cm</span>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-slate-500 block font-medium">Vòng Đùi (Thigh)</span>
+                  <span className="font-black text-slate-800 text-base">{measurements.thigh_cm} cm</span>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center">
+                  <span className="text-[11px] text-indigo-700 block font-bold">Size Quần Khuyên Dùng</span>
+                  <span className="font-black text-indigo-700 text-base">{measurements.recommended_pant_size}</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* 3. Phối Đồ Mix & Match với Sản Phẩm Thực Tế ZeroMall */}
-          {outfits.length > 0 && (
-            <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80">
-              <div className="flex justify-between items-center mb-5">
+          {/* AI Fit Verdict & Stylist Advice */}
+          {fitResult && (
+            <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4 mb-4">
                 <div>
-                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                    <span>👗 Stylist AI: 3 Cách Phối Chuẩn Đẹp Với Chiếc Quần Này</span>
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <span>✨</span> Đánh Giá Độ Vừa Vặn Của AI Cho "{selectedPant?.name}"
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Các sản phẩm gợi ý đều được lấy 100% từ kho hàng thực tế của các Shop trên sàn ZeroMall.
-                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">{fitResult.verdict}</p>
+                </div>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                  <span className="text-xs text-emerald-700 font-bold">Điểm vừa vặn:</span>
+                  <span className="text-sm font-black text-emerald-800">{fitResult.fit_score}/100</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {outfits.map((look) => (
+              {/* Lời khuyên Stylist */}
+              <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-xs text-slate-700 leading-relaxed flex items-start gap-3">
+                <span className="text-xl shrink-0">💡</span>
+                <div>
+                  <p className="font-bold text-slate-900 mb-0.5">Lời khuyên từ AI Stylist:</p>
+                  <p>{fitResult.stylist_fit_advice}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Gợi Ý Phối Đồ Hoàn Chỉnh (Outfits) Từ AI Stylist */}
+          {outfits.length > 0 && (
+            <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200/80">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 mb-4">
+                <span>🧥</span> Gợi Ý Phối Đồ Chuẩn Phong Cách Cho Món Đồ Này
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {outfits.map((outfit) => (
                   <div
-                    key={look.id}
-                    className="border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:border-indigo-300 transition-all bg-slate-50/40"
+                    key={outfit.id}
+                    className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between"
                   >
                     <div>
-                      {/* Tag */}
-                      <span className="inline-block bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full mb-2">
-                        {look.tag}
-                      </span>
-                      <h4 className="font-bold text-slate-800 text-xs mb-1.5">{look.title}</h4>
-                      <p className="text-[11px] text-slate-500 mb-3 line-clamp-2 leading-relaxed">
-                        {look.stylist_note}
-                      </p>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="font-black text-xs text-slate-900">{outfit.title}</span>
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 font-bold text-[10px]">
+                          {outfit.tag}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 italic mb-3">"{outfit.stylist_note}"</p>
 
-                      {/* Items List */}
-                      <div className="space-y-2 mb-4">
-                        {look.items.map((item, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (item.product?.id) {
-                                navigate(`/product/${item.product.id}`)
-                              }
-                            }}
-                            className="bg-white p-2 rounded-xl border border-slate-100 flex items-center gap-2.5 cursor-pointer hover:border-slate-300 transition"
-                          >
-                            <img
-                              src={item.product?.image || 'https://placehold.co/80x80?text=Item'}
-                              alt={item.product?.name}
-                              className="w-10 h-10 object-cover rounded-lg border border-slate-100 shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[9px] font-bold text-indigo-600 block">{item.role}</span>
-                              <p className="text-[11px] font-semibold text-slate-800 truncate">{item.product?.name}</p>
-                              <span className="text-[10px] font-black text-rose-600">
-                                {formatCurrencyVND(item.product?.price)}
-                              </span>
-                            </div>
+                      {/* Items trong outfit */}
+                      <div className="space-y-1.5 mb-3">
+                        {outfit.items.map((it, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-600 line-clamp-1 max-w-[200px]">{it.product.name}</span>
+                            <span className="font-bold text-slate-900 shrink-0">{formatCurrencyVND(it.product.price)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Total & Action */}
-                    <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between">
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-200/60">
                       <div>
-                        <span className="text-[10px] text-slate-400 block font-medium">Trọn bộ outfit</span>
-                        <span className="text-xs font-black text-slate-900">
-                          {formatCurrencyVND(look.total_price)}
-                        </span>
+                        <span className="text-[10px] text-slate-400 block">Tổng set đồ:</span>
+                        <span className="text-xs font-black text-rose-600">{formatCurrencyVND(outfit.total_price)}</span>
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          alert(`Đã thêm trọn bộ [${look.title}] vào giỏ hàng ZeroMall của bạn!`)
-                        }}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition cursor-pointer shadow-xs"
+                        onClick={() => navigate(`/checkout`)}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-xs"
                       >
-                        + Mua Cả Set
+                        Mua Cả Set ➔
                       </button>
                     </div>
                   </div>
@@ -827,7 +622,6 @@ export const VirtualTryOnPage: React.FC = () => {
               </div>
             </div>
           )}
-
         </div>
       </div>
     </div>
