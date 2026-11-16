@@ -163,20 +163,60 @@ export const VirtualTryOnPage: React.FC = () => {
         if (data.success) {
           setMeasurements(data.measurements)
           setFitResult(data.fit)
-          setOutfits(data.outfits || [])
+          if (data.outfits && Array.isArray(data.outfits) && data.outfits.length > 0) {
+            setOutfits(data.outfits)
+          }
         }
       } else {
-        alert('Không thể kết nối đến AI Try-On Service. Vui lòng đảm bảo server cổng 5006 đang chạy.')
+        console.warn('Không thể kết nối đến AI Try-On Service (5006).')
       }
     } catch (e: any) {
-      console.error('Try-on API error:', e)
-      alert('Lỗi kết nối Local AI Service (Port 5006): ' + e.message)
+      console.warn('Try-on API error:', e)
     } finally {
       setIsLoadingAi(false)
     }
   }
 
-  // Tự động chạy lần đầu khi đã có sản phẩm
+  // Tải ngay Top 5 Set Phối Đồ AI từ 100 mô phỏng (< 30ms, 0 tốn gem)
+  const fetchTopOutfits = async (productToUse?: Product) => {
+    const target = productToUse || selectedPant
+    if (!target) return
+    try {
+      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/generate-top-outfits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product: {
+            id: target.id,
+            name: target.name,
+            price: target.price || target.flashPrice,
+            category: target.category,
+            image: target.image
+          },
+          height_cm: height,
+          weight_kg: weight,
+          gender: gender
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && Array.isArray(data.outfits)) {
+          setOutfits(data.outfits)
+        }
+      }
+    } catch (e) {
+      console.warn('[VirtualTryOnPage] Failed to fetch top outfits:', e)
+    }
+  }
+
+  // Tự động tải 100 set phối đồ ngay khi chọn sản phẩm
+  useEffect(() => {
+    if (selectedPant) {
+      fetchTopOutfits(selectedPant)
+    }
+  }, [selectedPant?.id, height, weight, gender])
+
+  // Tự động chạy đo vóc dáng lần đầu khi đã có sản phẩm
   useEffect(() => {
     if (selectedPant && !measurements) {
       handleRunTryOn()

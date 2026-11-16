@@ -1004,6 +1004,26 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           </button>
         </div>
 
+        {/* Banner Khám Phá Top 5 Set Phối Đồ AI (100 Set Simulation) */}
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-inner shrink-0">
+          <div className="flex items-center gap-2 text-slate-950">
+            <span className="text-base shrink-0">⚡</span>
+            <p className="text-xs font-black">
+              AI Stylist đã mô phỏng 100 bộ phối đồ & chọn lọc Top 5 Set điểm cao nhất cho bạn (Giảm 8% Combo)!
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById('top-5-scored-outfits-section')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
+            className="px-3 py-1 rounded-xl bg-slate-950 text-amber-300 hover:text-white font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+          >
+            <span>✨</span> Xem 5 Set Phối Đồ Ngay ➔
+          </button>
+        </div>
+
         {/* Modal Body: 2 Columns - Ưu tiên hiển thị Ảnh Thử Đồ làm trung tâm */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1050,6 +1070,16 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       }`}
                     >
                       <span>🔥</span> Áp Lực Vừa Vặn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('top-5-scored-outfits-section')
+                        el?.scrollIntoView({ behavior: 'smooth' })
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 shadow-xs flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <span>✨</span> Top 5 Set Phối Đồ 🔥
                     </button>
                   </div>
 
@@ -2101,7 +2131,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           </div>
 
           {/* SECTION: AI STYLIST - TOP 5 BỘ PHỐI ĐỒ ĐẸP NHẤT TỪ 100 SET MÔ PHỎNG */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 border border-indigo-500/30 rounded-3xl p-5 sm:p-6 text-white shadow-2xl space-y-5">
+          <div id="top-5-scored-outfits-section" className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 border border-indigo-500/30 rounded-3xl p-5 sm:p-6 text-white shadow-2xl space-y-5">
             {/* Header của mục phối đồ 100 set */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
               <div>

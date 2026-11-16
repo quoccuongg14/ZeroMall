@@ -291,6 +291,10 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
             element={<VirtualTryOnPage />}
           />
           <Route
+            path="/try-on"
+            element={<VirtualTryOnPage />}
+          />
+          <Route
             path="/daily-discover"
             element={<DailyDiscoverPage />}
           />

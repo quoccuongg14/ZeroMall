@@ -54,7 +54,11 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
   const navigate = useNavigate()
   const isFashion = Boolean(
     (product.category || '').toLowerCase().includes('thời trang') ||
-    ['áo', 'quần', 'váy', 'đầm', 'jean', 'jogger', 'bomber', 'jacket', 'sơ mi', 'thun', 'hoodie', 'blazer', 'polo', 'yếm', 'short'].some((k) =>
+    (product.category || '').toLowerCase().includes('giày dép') ||
+    (product.category || '').toLowerCase().includes('túi ví') ||
+    (product.category || '').toLowerCase().includes('phụ kiện') ||
+    (product.category || '').toLowerCase().includes('đồng hồ') ||
+    ['áo', 'quần', 'váy', 'đầm', 'jean', 'jogger', 'bomber', 'jacket', 'sơ mi', 'thun', 'hoodie', 'blazer', 'polo', 'yếm', 'short', 'giày', 'sneaker', 'dép', 'sandal', 'boot', 'túi', 'ví', 'nón', 'mũ', 'đồng hồ'].some((k) =>
       (product.name || '').toLowerCase().includes(k)
     )
   )
@@ -411,7 +415,7 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
         </button>
       </div>
 
-      {/* Virtual Try-On Banner for Fashion Items */}
+      {/* Virtual Try-On & Mix-Match 100 Outfits Banner for Fashion Items */}
       {isFashion && (
         <div
           onClick={() => {
@@ -421,28 +425,31 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
               navigate(`/virtual-tryon?productId=${product.id}`)
             }
           }}
-          className="mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700/80 text-white cursor-pointer hover:border-emerald-500/60 hover:shadow-xl transition-all duration-200 group active:scale-[0.99] flex items-center justify-between shadow-md"
+          className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 border-2 border-indigo-500/50 hover:border-amber-400 text-white cursor-pointer hover:shadow-2xl transition-all duration-200 group active:scale-[0.99] flex items-center justify-between shadow-lg"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-xl shrink-0 group-hover:scale-105 transition-transform duration-200">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform duration-200 shadow-md text-slate-950 font-black">
               ✨
             </div>
             <div className="text-left">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xs sm:text-sm text-white group-hover:text-emerald-400 transition-colors">
-                  Phòng Thử Đồ Online AI
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-xs sm:text-sm text-white group-hover:text-amber-300 transition-colors">
+                  AI Phối Đồ 100 Set & Ướm Thử Online
                 </span>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/40 tracking-wider">
-                  Ướm Thử Qua Ảnh
+                <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs tracking-wider uppercase">
+                  Mô Phỏng 100 Set
+                </span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border border-emerald-500/30">
+                  Combo -8%
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Nhập chiều cao & cân nặng để AI ướm thử trang phục chuẩn form người bạn
+              <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+                Tự động phối 100 bộ thời trang quanh món này • Xem Top 5 set điểm cao nhất & ướm thử qua ảnh
               </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-emerald-400 group-hover:translate-x-1 transition-transform duration-200 shrink-0 pl-3">
-            <span>Thử ngay</span>
+          <div className="flex items-center gap-1.5 text-xs font-black text-amber-300 group-hover:translate-x-1 transition-transform duration-200 shrink-0 pl-3">
+            <span>Khám phá ngay</span>
             <span>➔</span>
           </div>
         </div>

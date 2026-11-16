@@ -16,11 +16,11 @@ export const QuickServicesBar: React.FC<QuickServicesBarProps> = ({
   const services = [
     {
       id: 'tryon',
-      title: 'Thử Đồ AI',
-      badge: 'Công nghệ mới',
-      badgeColor: 'bg-indigo-600',
+      title: 'Phối Đồ AI',
+      badge: '100 Set Phối',
+      badgeColor: 'bg-amber-600',
       icon: '✨',
-      bgColor: 'bg-indigo-50 text-indigo-600 border-indigo-200 ring-1 ring-indigo-300',
+      bgColor: 'bg-amber-50 text-amber-700 border-amber-200 ring-1 ring-amber-300',
       action: () => navigate('/virtual-tryon'),
     },
     {

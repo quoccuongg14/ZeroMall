@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import type { Product, VariationGroup, VariationRow } from '../../components/buyer/FlashSale'
 import { ProductGallery } from '../../components/buyer/product-detail/ProductGallery'
 import { ProductPurchasePanel } from '../../components/buyer/product-detail/ProductPurchasePanel'
+import { ProductOutfitRecommendations } from '../../components/buyer/product-detail/ProductOutfitRecommendations'
 import { VirtualTryOnModal } from '../../components/buyer/ai/VirtualTryOnModal'
 import { ShopInfoCard } from '../../components/buyer/product-detail/ShopInfoCard'
 import { ProductDescriptionSection } from '../../components/buyer/product-detail/ProductDescriptionSection'
@@ -772,6 +773,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         formatCount={formatCount}
         formatJoinDuration={formatJoinDuration}
       />
+
+      {/* 3.5 AI Stylist: Top 5 Outfits Recommendation Block */}
+      {product && (
+        <ProductOutfitRecommendations
+          product={product}
+          onAddToCart={onAddToCart}
+          onOpenTryOnModal={() => setIsTryOnModalOpen(true)}
+        />
+      )}
 
       {/* 4. Product Details & Description Section */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 mt-5">

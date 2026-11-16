@@ -1599,6 +1599,22 @@ class AiStylistEngine:
         return res
 
     @staticmethod
+    def parse_numeric_price(val) -> float:
+        if val is None:
+            return 0.0
+        if isinstance(val, (int, float)):
+            return float(val)
+        val_str = str(val).strip()
+        import re
+        digits = re.sub(r"[^\d]", "", val_str)
+        if digits:
+            try:
+                return float(digits)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    @staticmethod
     def extract_colors(p: dict) -> list:
         name = (p.get("name", "") + " " + p.get("description", "")).lower()
         found = []
@@ -1798,7 +1814,7 @@ class AiStylistEngine:
         results = []
         for idx, cand in enumerate(top_chosen):
             items = cand["items"]
-            total_raw_price = sum(float(it.get("price", 0) or 0) for it in items)
+            total_raw_price = sum(AiStylistEngine.parse_numeric_price(it.get("price")) for it in items)
             # Ưu đãi giảm 8% khi mua trọn bộ cả set
             combo_discount_percent = 8
             combo_price = round(total_raw_price * (1 - combo_discount_percent / 100.0))
