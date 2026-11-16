@@ -498,9 +498,11 @@ class TryOnSynthesizer:
             garment_name = (garment_info or {}).get("name", "")
             g_combined = ((garment_name or "") + " " + (garment_info or {}).get("category", "")).lower()
 
-            is_bottom = (category == "bottoms") or any(k in g_combined for k in ["quần", "pant", "jean", "jogger", "trouser", "short", "kaki", "chân váy", "skirt"])
-            is_one_piece = (category == "one-pieces") or (any(k in g_combined for k in ["váy", "đầm", "dress", "jumpsuit", "yếm"]) and not is_bottom)
-            is_top = not is_bottom and not is_one_piece
+            is_shoes = (category == "shoes") or any(k in g_combined for k in ["giày", "giay", "dép", "dep", "sneaker", "sandal", "guốc", "cao gót", "búp bê", "loafer", "boots", "bốt", "slip-on", "slip on", "footwear", "shoes", "sục"])
+            is_accessory = (category == "accessory") or any(k in g_combined for k in ["mũ", "nón", "cap", "beanie", "snapback", "bucket", "beret", "kính", "túi", "ví", "balo", "khăn", "dây chuyền"])
+            is_bottom = (category == "bottoms") or (any(k in g_combined for k in ["quần", "pant", "jean", "jogger", "trouser", "short", "kaki", "chân váy", "skirt"]) and not is_shoes)
+            is_one_piece = (category == "one-pieces") or (any(k in g_combined for k in ["váy", "đầm", "dress", "jumpsuit", "yếm"]) and not is_bottom and not is_shoes)
+            is_top = not is_bottom and not is_one_piece and not is_shoes and not is_accessory
 
             is_male = gender.lower() == "male"
             gender_label = "Asian man" if is_male else "Asian woman"
@@ -547,7 +549,31 @@ class TryOnSynthesizer:
             )
 
             # Xây dựng prompt có định hướng danh mục chặt chẽ & Tùy biến vóc dáng gầy/mập theo Chiều cao, Cân nặng
-            if is_bottom:
+            if is_shoes:
+                # TRƯỜNG HỢP GIÀY DÉP (FOOTWEAR): MẶC VÀO ĐÔI CHÂN, TUYỆT ĐỐI KHÔNG BIẾN THÀNH ÁO
+                prompt = (
+                    f"A photorealistic full-length fashion studio photo of the {gender_label} in the primary reference image wearing the footwear/shoes/sneakers ({garment_name}). "
+                    f"{body_instruction}"
+                    f"The reference garment is strictly FOOTWEAR / SHOES / SNEAKERS worn on {gender_pronoun} FEET. "
+                    f"Seamlessly put these exact shoes on {gender_pronoun} feet, matching the design, colorway, and soles from the reference item. "
+                    f"DO NOT wear these shoes on the upper body! DO NOT turn this shoe into a jacket, shirt, or top! "
+                    f"Keep {gender_pronoun} original upper-body clothing (shirt/jacket) and pants completely unchanged. "
+                    f"Strictly preserve {gender_pronoun} exact face, facial features, skin tone, hairstyle, body pose, and {identity_term} from the primary reference photo. "
+                    f"Full-body composition showing head to feet, photorealistic 8k, sharp shoe details, studio lighting."
+                )
+            elif is_accessory:
+                # TRƯỜNG HỢP PHỤ KIỆN / MŨ NÓN (ACCESSORIES & HEADWEAR)
+                is_headwear = any(k in g_combined for k in ["mũ", "nón", "cap", "beanie", "snapback", "beret", "kẹp tóc"])
+                loc_desc = f"on {gender_pronoun} head as stylish headwear" if is_headwear else "as a stylish accessory"
+                prompt = (
+                    f"A photorealistic fashion studio portrait photo of the {gender_label} in the primary reference image wearing the accessory ({garment_name}). "
+                    f"{body_instruction}"
+                    f"The reference item is an ACCESSORY / HEADWEAR worn {loc_desc}. "
+                    f"DO NOT wear this item as a shirt, jacket, or clothing on the torso! "
+                    f"Strictly preserve {gender_pronoun} exact face, facial features, skin tone, hairstyle, and {identity_term} from the primary reference photo. "
+                    f"Photorealistic 8k, ultra-detailed textures, studio lighting."
+                )
+            elif is_bottom:
                 # TRƯỜNG HỢP QUẦN (BOTTOMS): TUYỆT ĐỐI CHỈ MẶC VÀO PHẦN THÂN DƯỚI / ĐÔI CHÂN
                 if is_portrait:
                     prompt = (
@@ -570,7 +596,16 @@ class TryOnSynthesizer:
                         f"Strictly preserve {gender_pronoun} exact face, expression, hair, and {identity_term} from the reference photo. "
                         f"Photorealistic 8k, sharp fabric folds, studio lighting."
                     )
-            elif is_top:
+            elif is_one_piece:
+                # TRƯỜNG HỢP VÁY / ĐẦM TOÀN THÂN (ONE-PIECES)
+                prompt = (
+                    f"A photorealistic full-length fashion studio photo of the {gender_label} in the primary reference image wearing the full-body outfit/dress ({garment_name}). "
+                    f"{body_instruction}"
+                    f"The garment is worn from shoulders down to the legs fitting {gender_pronoun} {physique_label} body frame. "
+                    f"Strictly preserve {gender_pronoun} exact face, facial features, skin tone, hairstyle, and {identity_term} from the reference photo. "
+                    f"Photorealistic 8k, ultra-detailed fabric drape, cinematic lighting."
+                )
+            else:
                 # TRƯỜNG HỢP ÁO (TOPS): MẶC VÀO PHẦN THÂN TRÊN
                 prompt = (
                     f"A photorealistic fashion studio photo of the {gender_label} in the primary reference image wearing the top/shirt/jacket ({garment_name}). "
@@ -579,15 +614,6 @@ class TryOnSynthesizer:
                     f"Seamlessly replace {gender_pronoun} upper-body clothing with this exact garment from the reference image fitting {gender_pronoun} {physique_label} torso. "
                     f"Strictly preserve {gender_pronoun} exact face, facial features, skin tone, hairstyle, body pose, and {identity_term} from the primary reference photo. "
                     f"Photorealistic 8k, ultra-detailed fabric texture, natural clothing folds, studio lighting."
-                )
-            else:
-                # TRƯỜNG HỢP VÁY / ĐẦM TOÀN THÂN (ONE-PIECES)
-                prompt = (
-                    f"A photorealistic full-length fashion studio photo of the {gender_label} in the primary reference image wearing the full-body outfit/dress ({garment_name}). "
-                    f"{body_instruction}"
-                    f"The garment is worn from shoulders down to the legs fitting {gender_pronoun} {physique_label} body frame. "
-                    f"Strictly preserve {gender_pronoun} exact face, facial features, skin tone, hairstyle, and {identity_term} from the reference photo. "
-                    f"Photorealistic 8k, ultra-detailed fabric drape, cinematic lighting."
                 )
 
             # Nạp và chuẩn hóa ảnh trang phục gửi Mage (Dùng Base64 để cloud luôn nhận được dù URL nội bộ hay ngoài)
@@ -656,8 +682,14 @@ class TryOnSynthesizer:
         if any(k in garment_name for k in ["váy", "đầm", "dress", "jumpsuit", "yếm", "dạ hội", "xòe"]) and not any(k in garment_name for k in ["chân váy"]):
             category = "one-pieces"
             photo_type = "model"
-        elif any(k in garment_name for k in ["quần", "jogger", "jean", "trousers", "pant", "short", "kaki", "chân váy"]):
+        elif any(k in garment_name for k in ["quần", "jogger", "jean", "trousers", "pant", "short", "kaki", "chân váy", "boxer", "culottes"]):
             category = "bottoms"
+            photo_type = "flat-lay"
+        elif any(k in garment_name for k in ["giày", "giay", "dép", "dep", "sneaker", "sandal", "cao gót", "búp bê", "loafer", "derby", "boots", "bốt", "slip-on", "slip on", "footwear", "shoes", "guốc", "sục"]):
+            category = "shoes"
+            photo_type = "flat-lay"
+        elif any(k in garment_name for k in ["mũ", "nón", "cap", "beanie", "snapback", "bucket", "beret", "kẹp tóc", "kính", "kinh", "khăn", "dây chuyền", "vòng cổ", "túi", "ví", "balo", "accessory"]):
+            category = "accessory"
             photo_type = "flat-lay"
         else:
             category = "tops"
@@ -693,13 +725,14 @@ class TryOnSynthesizer:
         if mage_res:
             return mage_res
 
-        # 4. Kích hoạt SOTA Cloud Diffusion VTON (Miễn phí 100% qua OOTDiffusion / IDM-VTON)
-        sota_diff = cls.run_sota_diffusion(user_image_data, garment_url, category, garment_id)
-        if sota_diff:
-            return sota_diff
+        # 4. Kích hoạt SOTA Cloud Diffusion VTON (Chỉ áp dụng cho trang phục quần áo)
+        if category in ["tops", "bottoms", "one-pieces"]:
+            sota_diff = cls.run_sota_diffusion(user_image_data, garment_url, category, garment_id)
+            if sota_diff:
+                return sota_diff
 
         # 5. Sinh trực tiếp on-demand qua FASHN VTON Pipeline nếu chưa có cache
-        if fashn_pipeline is not None and user_image_data and garment_url and VTONEngine is not None:
+        if fashn_pipeline is not None and user_image_data and garment_url and VTONEngine is not None and category in ["tops", "bottoms", "one-pieces"]:
             try:
                 user_img = VTONEngine.load_image_from_source(user_image_data).convert("RGB")
                 garment_img = VTONEngine.load_image_from_source(garment_url).convert("RGB")
@@ -768,6 +801,29 @@ class TryOnSynthesizer:
                         ph = min(int(target_h * 0.68), int(pw * ratio))
                         px = int((target_w - pw) / 2)
                         py = int(target_h * 0.26)
+                    elif category == "shoes":
+                        # Giày dép: đặt chính xác tại bàn chân (y ~ 80% - 93%)
+                        pw = int(target_w * 0.42)
+                        ph = min(int(target_h * 0.16), int(pw * ratio))
+                        px = int((target_w - pw) / 2)
+                        py = int(target_h * 0.81)
+                    elif category == "accessory":
+                        # Mũ / Nón / Phụ kiện: đặt ở đầu hoặc cổ
+                        if any(k in garment_name for k in ["mũ", "nón", "cap", "beanie", "snapback"]):
+                            pw = int(target_w * 0.25)
+                            ph = min(int(target_h * 0.14), int(pw * ratio))
+                            px = int((target_w - pw) / 2)
+                            py = int(target_h * 0.07)
+                        elif any(k in garment_name for k in ["kính", "kinh"]):
+                            pw = int(target_w * 0.22)
+                            ph = min(int(target_h * 0.08), int(pw * ratio))
+                            px = int((target_w - pw) / 2)
+                            py = int(target_h * 0.14)
+                        else:
+                            pw = int(target_w * 0.25)
+                            ph = min(int(target_h * 0.15), int(pw * ratio))
+                            px = int((target_w - pw) / 2)
+                            py = int(target_h * 0.20)
                     else:
                         # tops (áo khoác, sơ mi, áo thun, bomber)
                         pw = int(target_w * 0.62)
@@ -906,6 +962,7 @@ class TryOnSynthesizer:
                 prompt = (
                     f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, coordinating a complete stylish outfit: "
                     f"{', '.join(outfit_prompts)}. "
+                    f"Placement rules: Top garment strictly on the upper torso, bottom trousers strictly on the legs and lower body, and footwear/shoes strictly on the feet (never swap shoes with shirts or wear shoes on the upper body). "
                     f"Seamlessly dress {gender_pronoun} in this complete coordinated outfit matching the reference garments. "
                     f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image. "
                     f"Body proportions: {height_cm:.0f}cm, {weight_kg:.0f}kg. "
