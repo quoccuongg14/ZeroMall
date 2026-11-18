@@ -106,8 +106,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   // 1. Ảnh người dùng & Thông số thể hình (Lưu trữ LocalStorage để đồng bộ xuyên suốt)
   const [userPhoto, setUserPhoto] = useState<string>(() => {
     const saved = localStorage.getItem('zeromall_tryon_user_photo')
+    const savedName = localStorage.getItem('zeromall_tryon_user_name')
     // Nếu là ảnh cũ mặc định (Trấn Thành) mà người dùng không tự tải lên, tự động dọn sạch để không tự động thử đồ
-    if (!saved || saved.includes('tran_thanh')) {
+    if (!saved || saved.includes('tran_thanh') || (savedName && savedName.includes('Trấn Thành'))) {
       try {
         localStorage.removeItem('zeromall_tryon_user_photo')
         localStorage.removeItem('zeromall_tryon_user_name')
@@ -118,7 +119,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   })
   const [userPhotoName, setUserPhotoName] = useState<string>(() => {
     const saved = localStorage.getItem('zeromall_tryon_user_name')
-    if (!saved || saved.includes('Trấn Thành')) return ''
+    if (!saved || saved.includes('Trấn Thành') || saved.includes('tran_thanh')) return ''
     return saved
   })
   const [height, setHeight] = useState<number>(() => {
@@ -130,6 +131,37 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   const [gender, setGender] = useState<'male' | 'female'>(() => {
     return (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
   })
+
+  // Quản lý số dư Gem & Chế độ tiết kiệm Gem (Gem Shield Mode)
+  const [gemBalance, setGemBalance] = useState<number | null>(7060)
+  const [tryonEngineMode, setTryonEngineMode] = useState<'free' | 'mage'>('free')
+  const [showMageConfirmModal, setShowMageConfirmModal] = useState<boolean>(false)
+
+  // Đồng bộ dọn sạch ảnh Trấn Thành cũ và nạp số dư Gem thực tế từ Backend
+  useEffect(() => {
+    if (isOpen) {
+      const saved = localStorage.getItem('zeromall_tryon_user_photo')
+      const savedName = localStorage.getItem('zeromall_tryon_user_name')
+      if (!saved || saved.includes('tran_thanh') || (savedName && savedName.includes('Trấn Thành'))) {
+        try {
+          localStorage.removeItem('zeromall_tryon_user_photo')
+          localStorage.removeItem('zeromall_tryon_user_name')
+        } catch (_) {}
+        setUserPhoto('')
+        setUserPhotoName('')
+        setCompositeTryOnImage('')
+      }
+
+      fetch(`${TRYON_SERVICE_URL}/api/tryon/gem-status`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data.balance === 'number') {
+            setGemBalance(data.balance)
+          }
+        })
+        .catch(err => console.warn('[VirtualTryOnModal] gem-status fetch error:', err))
+    }
+  }, [isOpen])
 
   // Lưu thông số thể hình vào LocalStorage
   useEffect(() => {
@@ -728,7 +760,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           gender: effectiveG,
           pant: targetPant || {},
           outfit: effectiveOutfit,
-          user_image: effectivePhoto
+          user_image: effectivePhoto,
+          use_mage: tryonEngineMode === 'mage'
         })
       })
 
@@ -752,6 +785,14 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
             triggerToast(`✨ Đã phối trọn bộ ${activeCount} món lên người mẫu thành công!`)
           } else {
             triggerToast(`Đã ướm thử theo khung người ${effectiveH}cm • ${effectiveW}kg thành công!`)
+          }
+
+          // Cập nhật lại số dư Gem thực tế từ backend
+          if (tryonEngineMode === 'mage') {
+            fetch(`${TRYON_SERVICE_URL}/api/tryon/gem-status`)
+              .then(r => r.json())
+              .then(d => { if (d && typeof d.balance === 'number') setGemBalance(d.balance) })
+              .catch(() => {})
           }
         }
       }
@@ -968,6 +1009,51 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         </div>
       )}
 
+      {/* Modal xác nhận kích hoạt Mage Ultra HD */}
+      {showMageConfirmModal && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl text-white space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl mx-auto">
+              ⚠️
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-black text-amber-400">
+                Xác Nhận Kích Hoạt Mage Ultra HD
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Chế độ này sẽ gọi trực tiếp mô hình AI của Mage.space và tiêu hao khoảng <strong className="text-amber-300 font-bold">~350 Gem</strong> cho mỗi lần bạn bấm &quot;Ướm Cả Bộ&quot;.
+              </p>
+            </div>
+            <div className="bg-slate-950 p-3 rounded-xl border border-white/10 text-center">
+              <span className="text-[11px] text-slate-400 block mb-0.5">Số dư Gem hiện tại của bạn:</span>
+              <span className="text-lg font-black text-amber-400">
+                {gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gems
+              </span>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowMageConfirmModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer"
+              >
+                Hủy (Dùng 0 Gem)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTryonEngineMode('mage')
+                  setShowMageConfirmModal(false)
+                  triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Cả Bộ"!')
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs shadow-lg transition cursor-pointer"
+              >
+                Tôi Hiểu, Bật Mage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Dialog */}
       <div 
         className="bg-white w-full max-w-6xl max-h-[94vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100"
@@ -1023,7 +1109,70 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         </div>
 
         {/* Modal Body: 2 Columns - Ưu tiên hiển thị Ảnh Thử Đồ làm trung tâm */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          {/* THANH BẢO VỆ GEM VÀ CHỌN CHẾ ĐỘ THỬ ĐỒ (GEM SHIELD) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-3.5 flex flex-wrap items-center justify-between gap-3 text-white shadow-md shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-lg shrink-0">
+                🛡️
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black tracking-wide text-white">CHẾ ĐỘ THỬ ĐỒ:</span>
+                  <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                    tryonEngineMode === 'free'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                  }`}>
+                    {tryonEngineMode === 'free' ? '✨ MIỄN PHÍ (0 Gem • Bảo vệ tài khoản)' : '💎 MAGE ULTRA HD (~350 Gem/lần)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {tryonEngineMode === 'free'
+                    ? 'AI Local đa tầng bóc tách vải & ướm đồ siêu tốc. 0 Gem, không tiêu tốn tài khoản Mage.space của bạn.'
+                    : 'Mô hình Mage Mango 3 Turbo Studio AI. Tiêu hao ~350 Gem mỗi khi bấm Ướm Cả Bộ.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-white/10 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTryonEngineMode('free')
+                    triggerToast('Đã chuyển sang chế độ Local AI (0 Gem - Miễn phí).')
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    tryonEngineMode === 'free'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>⚡</span> Local AI (0 Gem)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tryonEngineMode === 'free') {
+                      setShowMageConfirmModal(true)
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    tryonEngineMode === 'mage'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>💎</span> Mage Ultra HD
+                </button>
+              </div>
+
+              <div className="px-3 py-1.5 bg-slate-800/90 border border-white/10 rounded-xl text-xs flex items-center gap-1.5 font-bold text-slate-300">
+                <span className="text-amber-400">💎</span> Số dư: <span className="font-black text-white">{gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gem</span>
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* CỘT 1: HERO FITTING MIRROR - Ảnh Thử Đồ To Rõ, Nổi Bật (7 cols) */}
@@ -1192,8 +1341,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                                 className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
                               />
                               <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-indigo-300 border border-white/15 flex items-center gap-2 shadow-xl">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                Ảnh Thử Đồ AI (HD Studio)
+                                <span className={`w-2.5 h-2.5 rounded-full ${tryonEngineMode === 'free' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`}></span>
+                                {tryonEngineMode === 'free' ? 'Ảnh Thử Đồ Local AI (0 Gem)' : 'Ảnh Thử Đồ Mage Ultra HD (~350 Gem)'}
                               </div>
                             </>
                           ) : userPhoto ? (
@@ -1665,11 +1814,22 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleRunTryOn(undefined, undefined, undefined, undefined, undefined, selectedOutfit)}
+                        onClick={() => {
+                          if (!userPhoto) {
+                            triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                            fileInputRef.current?.click()
+                            return
+                          }
+                          handleRunTryOn(undefined, undefined, undefined, undefined, undefined, selectedOutfit)
+                        }}
                         disabled={isLoadingAi}
-                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md ${
+                          tryonEngineMode === 'free'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950'
+                        }`}
                       >
-                        <span>✨</span> {isLoadingAi ? 'Đang Ướm...' : 'Ướm Cả Bộ'}
+                        <span>✨</span> {isLoadingAi ? 'Đang Ướm...' : (tryonEngineMode === 'free' ? 'Ướm Cả Bộ (0 Gem)' : 'Ướm Cả Bộ (~350 Gem)')}
                       </button>
                       <button
                         type="button"
@@ -1760,41 +1920,30 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 {/* Quick Model Selector Pills */}
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                    Hoặc chọn nhanh ảnh mẫu có sẵn:
+                    Hoặc chọn nhanh ảnh mẫu thử có sẵn:
                   </span>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => handleSelectPresetModel('/models/tryon_master/tran_thanh_base.jpg', 'Trấn Thành (Hồ sơ AI)', 'male')}
-                      className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
-                        userPhoto.includes('tran_thanh')
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      <span>👨</span> Trấn Thành
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80', 'Mẫu Nam Chuẩn', 'male')}
-                      className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
+                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80', 'Người Mẫu Nam', 'male')}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
                         userPhoto.includes('photo-1506794778202')
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                           : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                     >
-                      <span>👨</span> Mẫu Nam
+                      <span>👨</span> Người Mẫu Nam
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80', 'Mẫu Nữ Chuẩn', 'female')}
-                      className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
+                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80', 'Người Mẫu Nữ', 'female')}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
                         userPhoto.includes('photo-1534528741775')
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                           : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                     >
-                      <span>👩</span> Mẫu Nữ
+                      <span>👩</span> Người Mẫu Nữ
                     </button>
                   </div>
                 </div>
@@ -2169,18 +2318,20 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   className={`w-full py-2.5 px-4 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md ${
                     isLoadingAi
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white'
+                      : tryonEngineMode === 'free'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black'
                   }`}
                 >
                   {isLoadingAi ? (
                     <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
                       AI Đang Xử Lý Mặc Đồ...
                     </>
                   ) : (
                     <>
                       <span>✨</span>
-                      LÀM MỚI & ƯỚM LẠI MÓN NÀY
+                      {tryonEngineMode === 'free' ? 'LÀM MỚI & ƯỚM LẠI MÓN NÀY (0 Gem)' : 'LÀM MỚI & ƯỚM LẠI MÓN NÀY (~350 Gem)'}
                     </>
                   )}
                 </button>

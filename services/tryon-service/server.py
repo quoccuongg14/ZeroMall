@@ -671,7 +671,7 @@ class TryOnSynthesizer:
         return None
 
     @classmethod
-    def composite_tryon(cls, user_image_data: str, garment_url: str, garment_info: dict = None, gender: str = "male", height_cm: float = 175, weight_kg: float = 68):
+    def composite_tryon(cls, user_image_data: str, garment_url: str, garment_info: dict = None, gender: str = "male", height_cm: float = 175, weight_kg: float = 68, use_mage: bool = False):
         if not user_image_data:
             return ""
 
@@ -695,7 +695,7 @@ class TryOnSynthesizer:
             category = "tops"
             photo_type = "model" if "model" in garment_url else "flat-lay"
 
-        print(f"[*] composite_tryon requested: id='{garment_id}', name='{(garment_info or {}).get('name')}', category='{category}', height={height_cm}cm, weight={weight_kg}kg")
+        print(f"[*] composite_tryon requested: id='{garment_id}', name='{(garment_info or {}).get('name')}', category='{category}', use_mage={use_mage}, height={height_cm}cm, weight={weight_kg}kg")
 
         # 2. Kiểm tra cache ảnh riêng cho từng mã sản phẩm (chỉ áp dụng cho người mẫu mặc định với vóc dáng chuẩn)
         is_default = (
@@ -720,10 +720,13 @@ class TryOnSynthesizer:
                     except Exception as e_f:
                         print(f"[!] Read cache error: {e_f}")
 
-        # 3. Thử gọi Live Mage.space Outfit Swap (Ưu tiên số 1 vì tài khoản đã kích hoạt 10.000 Gems!)
-        mage_res = cls.run_mage_outfit_swap(user_image_data, garment_url, garment_id, gender, garment_info, category=category, height_cm=height_cm, weight_kg=weight_kg)
-        if mage_res:
-            return mage_res
+        # 3. Thử gọi Live Mage.space Outfit Swap (Chỉ khi người dùng chủ động bật use_mage=True)
+        if use_mage:
+            mage_res = cls.run_mage_outfit_swap(user_image_data, garment_url, garment_id, gender, garment_info, category=category, height_cm=height_cm, weight_kg=weight_kg)
+            if mage_res:
+                return mage_res
+        else:
+            print(f"[*] composite_tryon: use_mage is False. Running 0-Gem High-Speed Local Composite for {garment_id}!")
 
         # 4. Kích hoạt SOTA Cloud Diffusion VTON (Chỉ áp dụng cho trang phục quần áo)
         if category in ["tops", "bottoms", "one-pieces"]:
@@ -861,7 +864,7 @@ class TryOnSynthesizer:
         return garment_url
 
     @classmethod
-    def composite_outfit_tryon(cls, user_image_data: str, outfit: dict, gender: str = "male", height_cm: float = 175, weight_kg: float = 68):
+    def composite_outfit_tryon(cls, user_image_data: str, outfit: dict, gender: str = "male", height_cm: float = 175, weight_kg: float = 68, use_mage: bool = False):
         """
         Phối đồ đa món hoàn chỉnh (Full Outfit Mix & Match):
         outfit = {
@@ -887,7 +890,7 @@ class TryOnSynthesizer:
         # Nếu chỉ có duy nhất 1 món, sử dụng luồng composite_tryon đơn lẻ
         if len(active_items) == 1:
             single = active_items[0]
-            return cls.composite_tryon(user_image_data, single.get("image", ""), single, gender, height_cm, weight_kg)
+            return cls.composite_tryon(user_image_data, single.get("image", ""), single, gender, height_cm, weight_kg, use_mage=use_mage)
 
         # 1. Tạo Outfit Signature phục vụ Caching (kết hợp cả khuôn mặt người dùng + kích thước cơ thể)
         user_key = hashlib.md5(user_image_data[:5000].encode()).hexdigest()[:8] if user_image_data else "default"
@@ -908,8 +911,8 @@ class TryOnSynthesizer:
                 except Exception:
                     pass
 
-        # 2. Thử gọi Live Mage Mango 3 Turbo Outfit Swap cho cả bộ phối đồ
-        if MAGE_API_KEY:
+        # 2. Thử gọi Live Mage Mango 3 Turbo Outfit Swap cho cả bộ phối đồ (Chỉ khi người dùng chủ động bật use_mage=True)
+        if use_mage and MAGE_API_KEY:
             try:
                 from mage_space import Mage
                 mage_client = Mage(api_key=MAGE_API_KEY)
@@ -1942,6 +1945,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                 "apple_silicon_optimized": DEVICE == "mps",
                 "endpoints": [
                     "/health",
+                    "/api/tryon/gem-status",
                     "/api/tryon/mesh-measure",
                     "/api/tryon/fit-garment",
                     "/api/tryon/stylist-recommend",
@@ -1950,6 +1954,23 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     "/api/tryon/extract-face",
                     "/api/tryon/full-pipeline"
                 ]
+            }
+            self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
+        elif self.path == "/api/tryon/gem-status":
+            self._set_cors(200)
+            balance = 7060
+            try:
+                from mage_space import Mage
+                mage_client = Mage(api_key=MAGE_API_KEY)
+                acc = mage_client.account.get()
+                balance = acc.get("gems", {}).get("balance", 7060)
+            except Exception as e_gem:
+                print(f"[!] Warning fetching live Mage balance: {e_gem}")
+            resp = {
+                "success": True,
+                "balance": balance,
+                "default_mode": "free",
+                "mage_configured": bool(MAGE_API_KEY)
             }
             self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
         else:
@@ -2051,6 +2072,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                 pant = payload.get("pant", {})
                 outfit = payload.get("outfit", {})
                 user_image = payload.get("user_image", "")
+                use_mage = bool(payload.get("use_mage", False))
 
                 has_outfit = bool(outfit and any(outfit.get(k) for k in ["top", "bottom", "shoes", "accessory"]))
 
@@ -2065,12 +2087,12 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                 elif has_outfit:
                     primary_item = outfit.get("bottom") or outfit.get("top") or outfit.get("shoes") or outfit.get("accessory") or pant
                     composite_result = TryOnSynthesizer.composite_outfit_tryon(
-                        user_image, outfit, gender=gender, height_cm=h, weight_kg=w
+                        user_image, outfit, gender=gender, height_cm=h, weight_kg=w, use_mage=use_mage
                     )
                 else:
                     primary_item = pant
                     composite_result = TryOnSynthesizer.composite_tryon(
-                        user_image, pant.get("image", ""), pant, gender, height_cm=h, weight_kg=w
+                        user_image, pant.get("image", ""), pant, gender, height_cm=h, weight_kg=w, use_mage=use_mage
                     )
 
                 measurements = Body3DGenerator.calculate_measurements(h, w, gender)
