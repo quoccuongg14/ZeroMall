@@ -377,10 +377,14 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   const [viewMode, setViewMode] = useState<'tryon' | 'original' | 'sidebyside'>('tryon')
   const [toastMsg, setToastMsg] = useState<string>('')
 
-  // 4. Danh sách Top 5 Set Phối Đồ AI Đẹp Nhất (Mô phỏng 100 set)
+  // 4. Danh sách 100 Set Phối Đồ AI Đẹp Nhất (Mô phỏng từ kho ZeroMall)
   const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
   const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
   const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(null)
+  const [currentSetPage, setCurrentSetPage] = useState<number>(0)
+  const [selectedOutfitVibe, setSelectedOutfitVibe] = useState<string>('all')
+  const [rightColTab, setRightColTab] = useState<'outfits100' | 'wardrobe' | 'scanner'>('outfits100')
+  const SETS_PER_PAGE = 5
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -899,7 +903,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     }
   }
 
-  // Truy vấn Top 5 Set phối đồ AI được mô phỏng & chấm điểm từ 100 set
+  // Truy vấn 100 Set phối đồ AI được mô phỏng & chấm điểm từ kho ZeroMall
   const fetchTopScoredOutfits = async (targetProduct?: Product) => {
     const activeItems = Object.values(selectedOutfit).filter(Boolean) as Product[]
     const effectiveProd = targetProduct || selectedPant || product || (activeItems.length > 0 ? activeItems[0] : null)
@@ -914,7 +918,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           product: effectiveProd,
           height_cm: Number(height),
           weight_kg: Number(weight),
-          gender: gender
+          gender: gender,
+          limit: 100
         })
       })
 
@@ -922,6 +927,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
         const data = await res.json()
         if (data.success && Array.isArray(data.outfits)) {
           setTopScoredOutfits(data.outfits)
+          setCurrentSetPage(0)
         }
       }
     } catch (err) {
@@ -931,8 +937,20 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     }
   }
 
-  // Bấm chọn 1 set trong Top 5 để nạp vào bảng phối đồ (0 tốn gem)
-  const handleTryOnBundle = (bundle: ScoredOutfitBundle) => {
+  // Khi chọn một slot hoặc bấm vào món đồ bất kỳ, tự động cập nhật món chính để phối 100 set
+  const handleAnchorItemTo100Sets = (item: Product) => {
+    setSelectedPant(item)
+    const slot = detectItemSlot(item) || 'top'
+    setSelectedOutfit(prev => ({ ...prev, [slot]: item }))
+    setActiveOutfitSlot(slot)
+    setCurrentSetPage(0)
+    setRightColTab('outfits100')
+    fetchTopScoredOutfits(item)
+    triggerToast(`🎯 AI đang mô phỏng 100 set phối đồ xoay quanh [${item.name.slice(0, 25)}...]!`)
+  }
+
+  // Bấm chọn 1 set trong danh sách để xem trước (Nạp vào 4 slot, ĐÃ CHỌN, KHÔNG tự động chạy AI thử đồ)
+  const handleSelectBundlePreview = (bundle: ScoredOutfitBundle) => {
     setSelectedOutfitBundleId(bundle.id)
     const newOutfit = {
       top: null as Product | null,
@@ -949,15 +967,39 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     })
 
     setSelectedOutfit(newOutfit)
-    setActiveTab('photo')
-
     const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
 
-    triggerToast(`✨ Đã nạp ${bundle.title}! Bấm "Ướm Cả Bộ" để AI ướm thử đồ.`)
-    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
+    triggerToast(`✓ Đã chọn Set [${bundle.title}]. Hãy bấm "✨ THỬ SET NÀY" để xem lên người bạn!`)
+  }
+
+  // Bấm nút thử đồ sau khi người dùng đã chọn set ưng ý
+  const handleExecuteTryOnBundle = (bundle: ScoredOutfitBundle) => {
+    if (!userPhoto) {
+      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+      fileInputRef.current?.click()
+      return
+    }
+
+    const newOutfit = {
+      top: null as Product | null,
+      bottom: null as Product | null,
+      shoes: null as Product | null,
+      accessory: null as Product | null
+    }
+
+    bundle.items.forEach((it) => {
+      const slot = it.slot || detectItemSlot(it.product)
+      if (slot && slot in newOutfit) {
+        newOutfit[slot] = it.product
+      }
+    })
+
+    setSelectedOutfit(newOutfit)
+    setActiveTab('photo')
+    handleRunTryOn(undefined, undefined, undefined, undefined, undefined, newOutfit)
   }
 
   // Bấm Mua cả set (Thêm toàn bộ sản phẩm của combo vào giỏ hàng)
@@ -997,6 +1039,17 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     const num = typeof raw === 'number' ? raw : (parseFloat(String(raw).replace(/[^0-9]/g, '')) || 0)
     return sum + num
   }, 0)
+
+  // Danh sách 100 set lọc theo Vibe và phân trang 5 set / lần
+  const filteredScoredOutfits = selectedOutfitVibe === 'all'
+    ? topScoredOutfits
+    : topScoredOutfits.filter(o => (o.tag || '').toLowerCase().includes(selectedOutfitVibe.toLowerCase()))
+
+  const totalOutfitPages = Math.max(1, Math.ceil(filteredScoredOutfits.length / SETS_PER_PAGE))
+  const current5Sets = filteredScoredOutfits.slice(
+    currentSetPage * SETS_PER_PAGE,
+    (currentSetPage + 1) * SETS_PER_PAGE
+  )
 
   if (!isOpen) return null
 
@@ -1056,11 +1109,11 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
       {/* Modal Dialog */}
       <div 
-        className="bg-white w-full max-w-6xl max-h-[94vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100"
+        className="bg-slate-900 w-[99vw] max-w-[1680px] h-[97vh] max-h-[97vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-800 text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="bg-slate-900 border-b border-slate-800 text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-slate-900 border-b border-slate-800 text-white px-6 py-3.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-xl shrink-0">
               ✨
@@ -1088,28 +1141,25 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           </button>
         </div>
 
-        {/* Banner Khám Phá Top 5 Set Phối Đồ AI (100 Set Simulation) */}
+        {/* Banner Khám Phá 100 Set Phối Đồ AI (100 Set Simulation) */}
         <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-inner shrink-0">
           <div className="flex items-center gap-2 text-slate-950">
             <span className="text-base shrink-0">⚡</span>
             <p className="text-xs font-black">
-              AI Stylist đã mô phỏng 100 bộ phối đồ & chọn lọc Top 5 Set điểm cao nhất cho bạn (Giảm 8% Combo)!
+              AI Stylist đã mô phỏng 100 bộ phối đồ đẹp nhất cho bạn (Hiển thị 5 Set/lần • Giảm 8% Combo Cả Set)!
             </p>
           </div>
           <button
             type="button"
-            onClick={() => {
-              const el = document.getElementById('top-5-scored-outfits-section')
-              el?.scrollIntoView({ behavior: 'smooth' })
-            }}
-            className="px-3 py-1 rounded-xl bg-slate-950 text-amber-300 hover:text-white font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+            onClick={() => setRightColTab('outfits100')}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-950 text-amber-300 hover:text-white font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
           >
-            <span>✨</span> Xem 5 Set Phối Đồ Ngay ➔
+            <span>✨</span> Khám Phá 100 Set Phối Đồ Ngay ➔
           </button>
         </div>
 
         {/* Modal Body: 2 Columns - Ưu tiên hiển thị Ảnh Thử Đồ làm trung tâm */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-slate-950/40">
           {/* THANH BẢO VỆ GEM VÀ CHỌN CHẾ ĐỘ THỬ ĐỒ (GEM SHIELD) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-3.5 flex flex-wrap items-center justify-between gap-3 text-white shadow-md shrink-0">
             <div className="flex items-center gap-3">
@@ -1173,10 +1223,10 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
             
-            {/* CỘT 1: HERO FITTING MIRROR - Ảnh Thử Đồ To Rõ, Nổi Bật (7 cols) */}
-            <div className="lg:col-span-7 space-y-3">
+            {/* CỘT 1: HERO FITTING MIRROR & HỒ SƠ THỂ HÌNH (5 cols) */}
+            <div className="xl:col-span-5 space-y-4">
               <div className="bg-slate-900 rounded-3xl p-4 text-white shadow-xl border border-slate-800 flex flex-col justify-between">
                 
                 {/* Header thanh công cụ của Gương Thử Đồ */}
@@ -1220,13 +1270,10 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        const el = document.getElementById('top-5-scored-outfits-section')
-                        el?.scrollIntoView({ behavior: 'smooth' })
-                      }}
+                      onClick={() => setRightColTab('outfits100')}
                       className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 shadow-xs flex items-center gap-1 transition cursor-pointer"
                     >
-                      <span>✨</span> Top 5 Set Phối Đồ 🔥
+                      <span>✨</span> 100 Set Phối Đồ AI 🔥
                     </button>
                   </div>
 
@@ -1604,10 +1651,194 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* KHỐI 2: THÊM ẢNH NGƯỜI DÙNG ĐỂ THỬ ĐỒ (PROFILE & SỐ ĐO) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3.5 shadow-xl text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                      <span>📸</span> Thêm Ảnh Người Dùng
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {((selectedPant?.name || '').toLowerCase().includes('quần') || (selectedPant?.name || '').toLowerCase().includes('jean') || (selectedPant?.name || '').toLowerCase().includes('jogger'))
+                        ? 'AI nhận diện vóc dáng và ghép quần vào đôi chân (chân dung hoặc toàn thân)'
+                        : 'Tải ảnh của bạn để AI tự động ướm đồ lên người bạn'}
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    {height}cm • {weight}kg
+                  </span>
+                </div>
+
+                {/* Hero CTA Box: Bấm để chọn ảnh từ máy tính / điện thoại */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-emerald-400/60 hover:border-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition group"
+                >
+                  <div className="relative shrink-0">
+                    {userPhoto ? (
+                      <img
+                        src={userPhoto}
+                        alt="Avatar"
+                        className="w-13 h-13 sm:w-14 sm:h-14 object-cover rounded-xl border border-emerald-400/50 shadow-sm group-hover:scale-105 transition bg-slate-900"
+                      />
+                    ) : (
+                      <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-emerald-400/50 bg-emerald-900/30 flex items-center justify-center text-xl">
+                        👤
+                      </div>
+                    )}
+                    <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shadow">
+                      📷
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-black text-white group-hover:text-emerald-300 flex items-center gap-1">
+                      <span>+</span> Tải Ảnh Của Bạn Lên Đây
+                    </p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-[11px] text-slate-400 truncate">
+                        Đang dùng: <span className="font-bold text-slate-200">{userPhoto ? (userPhotoName || 'Ảnh của bạn') : 'Chưa có ảnh'}</span>
+                      </p>
+                      {userPhoto && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleClearUserPhoto()
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 font-bold ml-2 underline shrink-0 cursor-pointer"
+                        >
+                          Xóa ảnh
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-emerald-400 font-bold block mt-0.5 group-hover:underline">
+                      Chọn file ảnh từ thiết bị (JPG, PNG) ➔
+                    </span>
+                  </div>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+
+                {/* Quick Model Selector Pills */}
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Hoặc chọn nhanh ảnh mẫu thử có sẵn:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80', 'Người Mẫu Nam', 'male')}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+                        userPhoto.includes('photo-1506794778202')
+                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <span>👨</span> Người Mẫu Nam
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80', 'Người Mẫu Nữ', 'female')}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
+                        userPhoto.includes('photo-1534528741775')
+                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <span>👩</span> Người Mẫu Nữ
+                    </button>
+                  </div>
+                </div>
+
+                {/* Nhập Chiều cao & Cân nặng để AI tự động tính vóc dáng */}
+                <div className="pt-2.5 border-t border-slate-800 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                        Chiều cao (cm)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="120"
+                          max="220"
+                          value={height || ''}
+                          onChange={(e) => setHeight(Number(e.target.value))}
+                          placeholder="175"
+                          className="w-full px-2.5 py-1.5 text-xs font-black text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          cm
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                        Cân nặng (kg)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="30"
+                          max="150"
+                          value={weight || ''}
+                          onChange={(e) => setWeight(Number(e.target.value))}
+                          placeholder="50"
+                          className="w-full px-2.5 py-1.5 text-xs font-black text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          kg
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Thông tin vóc dáng AI tự tính & Nút cập nhật số đo */}
+                  <div className="flex items-center justify-between text-[11px] bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700">
+                    <span className="text-slate-300 truncate">
+                      Vóc dáng: <strong className="text-indigo-300">{physiqueInfo.badge}</strong> (BMI {currentBmi})
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isLoadingAi || !selectedPant || !height || !weight}
+                      onClick={() => {
+                        if (!userPhoto) {
+                          triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                          fileInputRef.current?.click()
+                          return
+                        }
+                        handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
+                      }}
+                      className="text-emerald-400 hover:text-emerald-300 font-black text-[11px] shrink-0 ml-2 hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      Áp dụng ➔
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* KHỐI 3: LỜI KHUYÊN TỪ AI STYLIST */}
+              {fitResult && (
+                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-3xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-200 leading-relaxed shadow-md">
+                  <span className="text-base shrink-0">💡</span>
+                  <div>
+                    <p className="font-black text-emerald-300 text-xs mb-0.5">Phân Tích AI Stylist:</p>
+                    <p className="text-[11px] text-emerald-200/90">{fitResult.stylist_fit_advice}</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* CỘT 2: BẢNG ĐIỀU KHIỂN & TỦ ĐỒ CHỌN MÓN (5 cols) */}
-            <div className="lg:col-span-5 space-y-4">
+            {/* CỘT 2: TRUNG TÂM PHỐI ĐỒ & 100 SET PHỐI AI (7 cols) */}
+            <div className="xl:col-span-7 space-y-4 flex flex-col">
               
               {/* KHỐI 1: BẢNG PHỐI ĐỒ ĐA NĂNG AI (OUTFIT MIX & MATCH BUILDER) */}
               <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-3.5 text-white shadow-xl space-y-3">
@@ -1843,348 +2074,424 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 )}
               </div>
 
-              {/* KHỐI 2: THÊM ẢNH NGƯỜI DÙNG ĐỂ THỬ ĐỒ (CTA NỔI BẬT NHẤT) */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-black text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
-                      <span>📸</span> Thêm Ảnh Người Dùng
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      {((selectedPant?.name || '').toLowerCase().includes('quần') || (selectedPant?.name || '').toLowerCase().includes('jean') || (selectedPant?.name || '').toLowerCase().includes('jogger'))
-                        ? 'AI nhận diện vóc dáng và ghép quần vào đôi chân (chân dung hoặc toàn thân)'
-                        : 'Tải ảnh của bạn để AI tự động ướm đồ lên người bạn'}
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {height}cm • {weight}kg
-                  </span>
-                </div>
-
-                {/* Hero CTA Box: Bấm để chọn ảnh từ máy tính / điện thoại */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-emerald-400/80 hover:border-emerald-600 bg-emerald-50/40 hover:bg-emerald-50/80 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition group"
+              {/* BỘ CHUYỂN TAB CỘT 2: 100 Set Phối Đồ AI vs Tủ Đồ / Giỏ Hàng vs Scanner */}
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setRightColTab('outfits100')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                    rightColTab === 'outfits100'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md ring-1 ring-amber-400/50'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
                 >
-                  <div className="relative shrink-0">
-                    {userPhoto ? (
-                      <img
-                        src={userPhoto}
-                        alt="Avatar"
-                        className="w-13 h-13 sm:w-14 sm:h-14 object-cover rounded-xl border border-emerald-300 shadow-2xs group-hover:scale-105 transition bg-white"
-                      />
-                    ) : (
-                      <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-emerald-400 bg-emerald-100/50 flex items-center justify-center text-xl">
-                        👤
-                      </div>
-                    )}
-                    <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shadow">
-                      📷
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-700 flex items-center gap-1">
-                      <span>+</span> Tải Ảnh Của Bạn Lên Đây
-                    </p>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-[11px] text-slate-600 truncate">
-                        Đang dùng: <span className="font-bold text-slate-800">{userPhoto ? (userPhotoName || 'Ảnh của bạn') : 'Chưa có ảnh'}</span>
-                      </p>
-                      {userPhoto && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleClearUserPhoto()
-                          }}
-                          className="text-[10px] text-rose-500 hover:text-rose-700 font-bold ml-2 underline shrink-0 cursor-pointer"
-                        >
-                          Xóa ảnh
-                        </button>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-emerald-600 font-bold block mt-0.5 group-hover:underline">
-                      Chọn file ảnh từ thiết bị (JPG, PNG) ➔
-                    </span>
-                  </div>
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-
-                {/* Quick Model Selector Pills */}
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                    Hoặc chọn nhanh ảnh mẫu thử có sẵn:
+                  <span>✨</span> 100 Set Phối Đồ AI
+                  <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                    rightColTab === 'outfits100' ? 'bg-slate-950 text-amber-400' : 'bg-slate-700 text-slate-300'
+                  }`}>
+                    5 Set / Lần
                   </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80', 'Người Mẫu Nam', 'male')}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                        userPhoto.includes('photo-1506794778202')
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      <span>👨</span> Người Mẫu Nam
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80', 'Người Mẫu Nữ', 'female')}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                        userPhoto.includes('photo-1534528741775')
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      <span>👩</span> Người Mẫu Nữ
-                    </button>
-                  </div>
-                </div>
+                </button>
 
-                {/* Nhập Chiều cao & Cân nặng để AI tự động tính vóc dáng */}
-                <div className="pt-2.5 border-t border-slate-100 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                        Chiều cao (cm)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="120"
-                          max="220"
-                          value={height || ''}
-                          onChange={(e) => setHeight(Number(e.target.value))}
-                          placeholder="175"
-                          className="w-full px-2.5 py-1.5 text-xs font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                        />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                          cm
-                        </span>
-                      </div>
-                    </div>
+                <button
+                  type="button"
+                  onClick={() => setRightColTab('wardrobe')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                    rightColTab === 'wardrobe'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <span>🛍️</span> Chọn Món Trong Kho / Giỏ
+                </button>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                        Cân nặng (kg)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="30"
-                          max="150"
-                          value={weight || ''}
-                          onChange={(e) => setWeight(Number(e.target.value))}
-                          placeholder="50"
-                          className="w-full px-2.5 py-1.5 text-xs font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                        />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                          kg
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Thông tin vóc dáng AI tự tính & Nút cập nhật số đo */}
-                  <div className="flex items-center justify-between text-[11px] bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200/70">
-                    <span className="text-slate-600 truncate">
-                      AI tự tính vóc dáng: <strong className="text-indigo-700">{physiqueInfo.badge}</strong> (BMI {currentBmi})
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isLoadingAi || !selectedPant || !height || !weight}
-                      onClick={() => {
-                        if (!userPhoto) {
-                          triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-                          fileInputRef.current?.click()
-                          return
-                        }
-                        handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
-                      }}
-                      className="text-indigo-600 hover:text-indigo-800 font-black text-[11px] shrink-0 ml-2 hover:underline cursor-pointer disabled:opacity-50"
-                    >
-                      Áp dụng ➔
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setRightColTab('scanner')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                    rightColTab === 'scanner'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <span>🔬</span> Quét & Bóc Tách (AI Scanner)
+                </button>
               </div>
 
-              {/* KHỐI 3: GỢI Ý TRANG PHỤC & TÌM KIẾM ĐỒ TRONG CSDL */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
-                    <span>💡</span> Gợi Ý Ướm Thử
-                  </h3>
-                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                    {sourceTab === 'cart'
-                      ? `${cartFashionItems.length} món trong giỏ`
-                      : searchQuery.trim()
-                      ? `${searchResults.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} kết quả`
-                      : `${availablePants.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} mẫu`}
-                  </span>
-                </div>
+              {/* TAB 1: DANH SÁCH 100 SET PHỐI ĐỒ AI (HIỂN THỊ 5 SET / LẦN & XEM THÊM) */}
+              {rightColTab === 'outfits100' && (
+                <div className="bg-slate-900 border border-indigo-500/30 rounded-3xl p-4 sm:p-5 text-white shadow-2xl space-y-4">
+                  {/* Header của mục phối đồ 100 set */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/10 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                          ⚡ 100 Set Simulation Engine
+                        </span>
+                        <span className="text-xs font-bold text-slate-300">
+                          🎯 Phối xoay quanh: <strong className="text-amber-300">{(selectedPant || product || outfitItems[0])?.name || 'Món đồ đã chọn'}</strong>
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed">
+                        AI mô phỏng 100 bộ phối từ kho ZeroMall, chấm điểm độ hợp dáng ({height}cm • {weight}kg). Hiển thị 5 set/lần, chọn set ưng ý rồi mới bấm thử đồ (Giảm 8% Combo Cả Set)!
+                      </p>
+                    </div>
 
-                {/* BỘ CHUYỂN NGUỒN: TRONG GIỎ HÀNG vs GỢI Ý */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/70">
-                  <button
-                    type="button"
-                    onClick={() => setSourceTab('cart')}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                      sourceTab === 'cart'
-                        ? 'bg-white text-indigo-700 shadow-xs border border-indigo-100'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <span>🛒</span> Trong Giỏ Hàng
-                    {cartFashionItems.length > 0 && (
-                      <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-                        sourceTab === 'cart' ? 'bg-indigo-600 text-white' : 'bg-slate-300 text-slate-700'
-                      }`}>
-                        {cartFashionItems.length}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSourceTab('catalog')}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                      sourceTab === 'catalog'
-                        ? 'bg-white text-indigo-700 shadow-xs border border-indigo-100'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    <span>💡</span> Gợi Ý
-                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                      sourceTab === 'catalog' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {searchQuery.trim()
-                        ? searchResults.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length
-                        : availablePants.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length}
+                    <button
+                      type="button"
+                      onClick={() => fetchTopScoredOutfits()}
+                      disabled={isLoadingTopOutfits}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                    >
+                      <span className={isLoadingTopOutfits ? 'animate-spin' : ''}>↻</span>
+                      Làm mới 100 Set
+                    </button>
+                  </div>
+
+                  {/* Vibe Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                    {[
+                      { key: 'all', label: 'Tất cả (100)' },
+                      { key: 'streetwear', label: '🔥 Streetwear' },
+                      { key: 'smart casual', label: '👔 Smart Casual' },
+                      { key: 'sporty', label: '⚡ Sporty' },
+                      { key: 'minimalist', label: '🌿 Minimalist' },
+                      { key: 'hàn quốc', label: '✨ Hàn Quốc' },
+                    ].map((v) => (
+                      <button
+                        key={v.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedOutfitVibe(v.key)
+                          setCurrentSetPage(0)
+                        }}
+                        className={`px-3 py-1 rounded-xl font-bold whitespace-nowrap transition cursor-pointer ${
+                          selectedOutfitVibe === v.key
+                            ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                            : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                        }`}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Top Pagination Navigation Bar */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/10">
+                    <span className="text-slate-400 font-bold text-[11px]">
+                      Hiển thị Set #{filteredScoredOutfits.length > 0 ? currentSetPage * SETS_PER_PAGE + 1 : 0} - #{Math.min((currentSetPage + 1) * SETS_PER_PAGE, filteredScoredOutfits.length)} / {filteredScoredOutfits.length} set (Trang {currentSetPage + 1}/{totalOutfitPages})
                     </span>
-                  </button>
-                </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={currentSetPage === 0}
+                        onClick={() => setCurrentSetPage(p => Math.max(0, p - 1))}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        ◀ 5 Set Trước
+                      </button>
+                      <button
+                        type="button"
+                        disabled={currentSetPage >= totalOutfitPages - 1}
+                        onClick={() => setCurrentSetPage(p => Math.min(totalOutfitPages - 1, p + 1))}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed shadow-xs"
+                      >
+                        Xem Thêm 5 Set ▶
+                      </button>
+                    </div>
+                  </div>
 
-                {/* Nút Tải Ảnh Món Đồ Bất Kỳ Của Bạn */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => customGarmentInputRef.current?.click()}
-                    disabled={isScanningGarment}
-                    className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 text-white rounded-xl text-xs font-bold shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-[0.99]"
-                  >
-                    <span>📸</span> {isScanningGarment ? 'AI Đang Quét & Bóc Tách...' : 'Tải Ảnh Đồ Bất Kỳ Để AI Quét & Thử'}
-                  </button>
-                  <input
-                    ref={customGarmentInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCustomGarmentUpload}
-                    className="hidden"
-                  />
-                </div>
+                  {/* Danh sách 5 Set Cards */}
+                  {isLoadingTopOutfits ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                      <div className="w-10 h-10 rounded-full border-4 border-amber-400/30 border-t-amber-400 animate-spin"></div>
+                      <p className="text-xs font-bold text-slate-200">AI đang mô phỏng 100 bộ phối và chọn lọc 5 set đẹp nhất...</p>
+                      <p className="text-[11px] text-slate-400 max-w-sm">Phân tích phối màu, phom dáng và sự vừa vặn với vóc dáng {height}cm • {weight}kg</p>
+                    </div>
+                  ) : filteredScoredOutfits.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 bg-white/5 rounded-2xl border border-dashed border-white/10">
+                      Không tìm thấy bộ phối phù hợp với phong cách đã chọn. Vui lòng bấm &quot;Tất cả (100)&quot;.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {current5Sets.map((bundle) => {
+                        const isSelectedBundle = selectedOutfitBundleId === bundle.id
+                        return (
+                          <div
+                            key={bundle.id}
+                            className={`rounded-2xl p-4 transition-all duration-200 border ${
+                              isSelectedBundle
+                                ? 'bg-indigo-950/80 border-emerald-400 ring-2 ring-emerald-400/40 shadow-xl'
+                                : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 shadow-md'
+                            }`}
+                          >
+                            {/* Card Header: Rank, Score, Title, Tag */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs ${
+                                  bundle.rank === 1
+                                    ? 'bg-amber-400 text-slate-950'
+                                    : bundle.rank === 2
+                                    ? 'bg-slate-200 text-slate-900'
+                                    : bundle.rank === 3
+                                    ? 'bg-amber-700 text-white'
+                                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/30'
+                                }`}>
+                                  {bundle.badge || `#${bundle.rank}`}
+                                </span>
+                                <h4 className="text-xs sm:text-sm font-black text-white">{bundle.title}</h4>
+                                <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                                  {bundle.tag}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-emerald-400 bg-emerald-950/70 px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
+                                  ⚡ {bundle.score}/100 đ
+                                </span>
+                                {isSelectedBundle && (
+                                  <span className="text-[10px] font-black text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-400/40 flex items-center gap-1 animate-pulse">
+                                    <span>✓</span> ĐÃ CHỌN SET NÀY
+                                  </span>
+                                )}
+                              </div>
+                            </div>
 
-                {/* TAB 1: HIỂN THỊ CÁC MÓN TRONG GIỎ HÀNG */}
-                {sourceTab === 'cart' && (
-                  <div>
-                    {cartFashionItems.length === 0 ? (
-                      <div className="text-center py-6 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex flex-col items-center gap-2">
-                        <span className="text-2xl">🛒</span>
-                        <p className="text-xs font-bold text-slate-700">Chưa có đồ thời trang trong giỏ hàng</p>
-                        <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                          Các sản phẩm áo, quần, váy bạn thêm vào giỏ hàng sẽ hiển thị tại đây để bạn ướm thử trước khi thanh toán.
-                        </p>
+                            {/* Stylist Note */}
+                            <p className="text-[11px] text-slate-300 italic mb-2.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/5">
+                              &quot;{bundle.stylist_note}&quot;
+                            </p>
+
+                            {/* 4 Items in Set */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2.5">
+                              {bundle.items.map((it, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-400/30 transition group relative"
+                                >
+                                  <img
+                                    src={it.product.image || 'https://placehold.co/60x60'}
+                                    alt={it.product.name}
+                                    className="w-11 h-11 object-cover rounded-lg bg-white shrink-0 border border-white/10"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-[9px] font-black text-indigo-300 uppercase block truncate">
+                                      {it.role}
+                                    </span>
+                                    <p className="text-[10px] font-bold text-slate-200 truncate group-hover:text-indigo-200">
+                                      {it.product.name}
+                                    </p>
+                                    <span className="text-[10px] font-black text-rose-400 block mt-0.5">
+                                      {formatDisplayPrice(it.product.price)}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleAnchorItemTo100Sets(it.product)
+                                    }}
+                                    title="Phối 100 set xoay quanh món này"
+                                    className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 w-5 h-5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-[9px] shadow transition cursor-pointer"
+                                  >
+                                    🎯
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Footer Card: Price + Action Buttons */}
+                            <div className="pt-2.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <span className="text-[9px] text-slate-400 block">Giá gốc:</span>
+                                  <span className="text-xs text-slate-400 line-through">
+                                    {formatDisplayPrice(bundle.total_price)}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-[9px] font-bold text-amber-400 block">Combo -8%:</span>
+                                  <span className="text-xs sm:text-sm font-black text-rose-400">
+                                    {formatDisplayPrice(bundle.combo_price)}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg">
+                                  Tiết kiệm {formatDisplayPrice(bundle.savings)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {/* BƯỚC 1: XEM TRƯỚC vs BƯỚC 2: THỬ ĐỒ */}
+                                {isSelectedBundle ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExecuteTryOnBundle(bundle)}
+                                    disabled={isLoadingAi}
+                                    className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 transition flex items-center gap-1.5 shadow-lg cursor-pointer ring-2 ring-emerald-400/80 animate-pulse active:scale-95 disabled:opacity-50"
+                                  >
+                                    <span>✨</span> {isLoadingAi ? 'Đang Mặc Đồ...' : '2. BẤM VÀO ĐÂY ĐỂ THỬ ĐỒ (0 GEM)'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSelectBundlePreview(bundle)}
+                                    className="px-3.5 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95"
+                                  >
+                                    <span>👁️</span> 1. Chọn Set Này (Xem Trước)
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddScoredOutfitToCart(bundle)}
+                                  className="px-3.5 py-2 rounded-xl text-xs font-black bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95"
+                                >
+                                  <span>🛒</span> Mua Cả Set
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+
+                      {/* Nút Xem Thêm 5 Set Tiếp Theo ở chân danh sách */}
+                      {currentSetPage < totalOutfitPages - 1 && (
                         <button
                           type="button"
-                          onClick={() => setSourceTab('catalog')}
-                          className="mt-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1"
+                          onClick={() => setCurrentSetPage(p => p + 1)}
+                          className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99]"
                         >
-                          <span>🛍️</span> Thử mẫu trên sàn ZeroMall ➔
+                          <span>⚡</span> Xem Thêm 5 Set Tiếp Theo (Còn {filteredScoredOutfits.length - (currentSetPage + 1) * SETS_PER_PAGE} set nữa) ➔
                         </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                        {cartFashionItems.map((item) => {
-                          const isEquipped = Object.values(selectedOutfit).some(it => it?.id === item.product.id)
-                          const equippedSlot = Object.entries(selectedOutfit).find(([_, it]) => it?.id === item.product.id)?.[0]
-                          const slotLabel = equippedSlot === 'top' ? '👔 Áo' : equippedSlot === 'bottom' ? '👖 Quần' : equippedSlot === 'shoes' ? '👟 Giày' : equippedSlot === 'accessory' ? '🧢 Phụ Kiện' : ''
-                          return (
-                            <div
-                              key={item.product.id + (item.variant || '')}
-                              onClick={() => handleEquipItem(item.product)}
-                              className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center gap-3 ${
-                                isEquipped
-                                  ? 'border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/30 shadow-xs'
-                                  : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
-                              }`}
-                            >
-                              <img
-                                src={item.product.image || 'https://placehold.co/80x100?text=Item'}
-                                alt={item.product.name}
-                                className="w-12 h-14 object-cover rounded-xl border border-slate-200 shrink-0 shadow-2xs"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-bold truncate ${isEquipped ? 'text-indigo-950 font-black' : 'text-slate-800'}`}>
-                                  {item.product.name}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs font-black text-rose-600">
-                                    {formatDisplayPrice(item.product.price || item.product.flashPrice)}
-                                  </span>
-                                  {item.variant && (
-                                    <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded font-medium truncate max-w-[90px]">
-                                      {item.variant}
-                                    </span>
-                                  )}
-                                  {isEquipped ? (
-                                    <span className="text-[9px] font-black text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded-md">
-                                      Đang phối {slotLabel}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded-md">
-                                      {getSlotBadgeText(item.product)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              {isEquipped ? (
-                                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
-                                  ✓
-                                </span>
-                              ) : (
-                                <span className="text-[11px] font-bold text-slate-400 group-hover:text-indigo-600">
-                                  + Phối ➔
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
 
-                {/* TAB 2: HIỂN THỊ CÁC MÓN GỢI Ý & TÌM KIẾM TỪ CSDL ZEROMALL */}
-                {sourceTab === 'catalog' && (
-                  <div className="space-y-2.5">
-                    {/* Ô Tìm Kiếm Món Đồ Thời Trang Trong Toàn Bộ Database */}
+                      {/* Quick Jump Page Numbers */}
+                      <div className="flex items-center justify-center gap-1 pt-1 overflow-x-auto">
+                        {Array.from({ length: totalOutfitPages }).map((_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setCurrentSetPage(idx)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer ${
+                              currentSetPage === idx
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                : 'bg-white/10 text-slate-400 hover:text-white hover:bg-white/20'
+                            }`}
+                          >
+                            {idx + 1}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: CHỌN MÓN ĐỂ PHỐI (KHO & GIỎ HÀNG) */}
+              {rightColTab === 'wardrobe' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 text-white shadow-xl space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                        <span>🛍️</span> Chọn Món Để Phối Vào Bảng Đồ
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Chọn món để gắn vào ô hoặc bấm <strong>🎯 Phối 100 set</strong> để AI tạo bộ phối đẹp xoay quanh món đó
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                      {sourceTab === 'cart'
+                        ? `${cartFashionItems.length} món trong giỏ`
+                        : searchQuery.trim()
+                        ? `${searchResults.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} kết quả`
+                        : `${availablePants.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} mẫu`}
+                    </span>
+                  </div>
+
+                  {/* BỘ CHUYỂN NGUỒN: TRONG GIỎ HÀNG vs GỢI Ý CSDL */}
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-800/80 rounded-xl border border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setSourceTab('cart')}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        sourceTab === 'cart'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>🛒</span> Trong Giỏ Hàng
+                      {cartFashionItems.length > 0 && (
+                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-indigo-900 text-white">
+                          {cartFashionItems.length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSourceTab('catalog')}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        sourceTab === 'catalog'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>💡</span> Kho Hàng ZeroMall
+                    </button>
+                  </div>
+
+                  {/* Nút Tải Ảnh Món Đồ Bất Kỳ Của Bạn */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => customGarmentInputRef.current?.click()}
+                      disabled={isScanningGarment}
+                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>📸</span> {isScanningGarment ? 'AI Đang Quét...' : 'Tải Ảnh Đồ Của Bạn Để Thử & Phối 100 Set'}
+                    </button>
+                    <input
+                      ref={customGarmentInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCustomGarmentUpload}
+                      className="hidden"
+                    />
+                  </div>
+
+                  {/* Danh mục lọc */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
+                    {[
+                      { key: 'all', label: 'Tất cả' },
+                      { key: 'top', label: '👔 Áo (Tops)' },
+                      { key: 'bottom', label: '👖 Quần & Váy' },
+                      { key: 'shoes', label: '👟 Giày & Dép' },
+                      { key: 'accessory', label: '🧢 Phụ kiện' }
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setCategoryFilter(tab.key as any)}
+                        className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition cursor-pointer text-xs ${
+                          categoryFilter === tab.key
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Ô Tìm Kiếm (khi ở Catalog) */}
+                  {sourceTab === 'catalog' && (
                     <div className="relative">
                       <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => handleSearchDatabase(e.target.value)}
-                        placeholder="🔍 Tìm đồ khác trong kho (áo, quần, đầm, blazer...)"
-                        className="w-full pl-8 pr-8 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition shadow-2xs"
+                        placeholder="🔍 Tìm bất kỳ món nào (áo, sơ mi, jean, sneaker...)"
+                        className="w-full pl-8 pr-8 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 transition shadow-2xs"
                       />
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
-                        🔍
-                      </span>
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
                       {searchQuery && (
                         <button
                           type="button"
@@ -2192,351 +2499,206 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                             setSearchQuery('')
                             setSearchResults([])
                           }}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold w-5 h-5 flex items-center justify-center cursor-pointer"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold w-5 h-5 flex items-center justify-center cursor-pointer"
                         >
                           ✕
                         </button>
                       )}
                     </div>
+                  )}
 
-                    {/* Tabs phân loại danh mục */}
-                    <div className="flex gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
-                      {[
-                        { key: 'all', label: 'Tất cả' },
-                        { key: 'top', label: '👔 Áo (Tops)' },
-                        { key: 'bottom', label: '👖 Quần & Váy' },
-                        { key: 'shoes', label: '👟 Giày & Dép' },
-                        { key: 'accessory', label: '🧢 Mũ & Phụ kiện' }
-                      ].map((tab) => (
-                        <button
-                          key={tab.key}
-                          onClick={() => setCategoryFilter(tab.key as any)}
-                          className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition cursor-pointer text-xs ${
-                            categoryFilter === tab.key
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
+                  {/* Danh sách items */}
+                  {isSearchingDb ? (
+                    <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
+                      <span className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
+                      Đang tìm kiếm đồ thời trang trong database ZeroMall...
+                    </div>
+                  ) : isLoadingPants ? (
+                    <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
+                      <span className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
+                      Đang nạp gợi ý từ CSDL ZeroMall...
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                      {(sourceTab === 'cart' ? cartFashionItems.map(c => c.product) : (searchQuery.trim() ? searchResults : availablePants))
+                        .filter((p) => {
+                          const slot = detectItemSlot(p)
+                          if (!slot) return false
+                          if (categoryFilter === 'all') return true
+                          return slot === categoryFilter
+                        })
+                        .map((item) => {
+                          const isEquipped = Object.values(selectedOutfit).some(it => it?.id === item.id)
+                          return (
+                            <div
+                              key={item.id}
+                              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-3 ${
+                                isEquipped
+                                  ? 'border-indigo-500 bg-indigo-950/60 ring-1 ring-indigo-500/40'
+                                  : 'border-slate-800 hover:border-slate-700 bg-slate-950/60'
+                              }`}
+                            >
+                              <img
+                                src={item.image || 'https://placehold.co/80x100?text=Item'}
+                                alt={item.name}
+                                className="w-12 h-14 object-cover rounded-xl border border-white/10 shrink-0 bg-white"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-bold truncate ${isEquipped ? 'text-indigo-200' : 'text-slate-200'}`}>
+                                  {item.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-xs font-black text-rose-400">
+                                    {formatDisplayPrice(item.price || item.flashPrice)}
+                                  </span>
+                                  <span className="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
+                                    {getSlotBadgeText(item)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAnchorItemTo100Sets(item)}
+                                  className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                                  title="Phối 100 set đẹp xoay quanh món này"
+                                >
+                                  <span>🎯</span> Phối 100 Set
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEquipItem(item)}
+                                  className={`px-2 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    isEquipped
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                                  }`}
+                                >
+                                  {isEquipped ? '✓ Đang Phối' : '+ Phối'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+
+                      {searchQuery.trim() && searchResults.length === 0 && (
+                        <div className="text-center py-6 px-3 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 text-slate-400 text-xs">
+                          Không tìm thấy món đồ thời trang nào khớp với &quot;{searchQuery}&quot; trong kho.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: BỘ QUÉT BÓC TÁCH TRANG PHỤC (AI SCANNER) */}
+              {rightColTab === 'scanner' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 text-white shadow-xl space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                    <div>
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <span>🔬</span> Bộ Bóc Tách Trang Phục Từng Lớp (FashnHumanParser AI)
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Bóc tách vải, khử nền sạch 100%, tạo Alpha Matte & trích xuất bảng màu
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleScanGarment()}
+                      disabled={isScanningGarment}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
+                    >
+                      <span>⚡</span> {isScanningGarment ? 'Đang Quét...' : 'Quét Lại Món Này'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 self-start">
+                        1. Ảnh Gốc Món Đồ
+                      </span>
+                      <div className="w-full h-44 rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center border border-white/5">
+                        <img
+                          src={selectedPant?.image || ''}
+                          alt="Garment Original"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1.5 text-center truncate max-w-full">
+                        {selectedPant?.name}
+                      </span>
                     </div>
 
-                    {/* Danh sách trang phục thực tế (Gợi ý hoặc Kết quả tìm kiếm CSDL) */}
-                    {isSearchingDb ? (
-                      <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
-                        <span className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
-                        Đang tìm kiếm đồ thời trang trong database ZeroMall...
-                      </div>
-                    ) : isLoadingPants ? (
-                      <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
-                        <span className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
-                        Đang nạp gợi ý từ CSDL ZeroMall...
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                        {(searchQuery.trim() ? searchResults : availablePants)
-                          .filter((p) => {
-                            const slot = detectItemSlot(p)
-                            if (!slot) return false
-                            if (categoryFilter === 'all') return true
-                            return slot === categoryFilter
-                          })
-                          .map((pant) => {
-                            const isEquipped = Object.values(selectedOutfit).some(it => it?.id === pant.id)
-                            const equippedSlot = Object.entries(selectedOutfit).find(([_, it]) => it?.id === pant.id)?.[0]
-                            const slotLabel = equippedSlot === 'top' ? '👔 Áo' : equippedSlot === 'bottom' ? '👖 Quần' : equippedSlot === 'shoes' ? '👟 Giày' : equippedSlot === 'accessory' ? '🧢 Phụ Kiện' : ''
-                            return (
-                              <div
-                                key={pant.id}
-                                onClick={() => handleEquipItem(pant)}
-                                className={`p-2.5 rounded-2xl border transition-all cursor-pointer flex items-center gap-3 ${
-                                  isEquipped
-                                    ? 'border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/30 shadow-xs'
-                                    : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
-                                }`}
-                              >
-                                <img
-                                  src={pant.image || 'https://placehold.co/80x100?text=Item'}
-                                  alt={pant.name}
-                                  className="w-12 h-14 object-cover rounded-xl border border-slate-200 shrink-0 shadow-2xs"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-xs font-bold truncate ${isEquipped ? 'text-indigo-950 font-black' : 'text-slate-800'}`}>
-                                    {pant.name}
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs font-black text-rose-600">
-                                      {formatDisplayPrice(pant.price || pant.flashPrice)}
-                                    </span>
-                                    {isEquipped ? (
-                                      <span className="text-[9px] font-black text-indigo-700 bg-indigo-100 px-1.5 py-0.2 rounded-md">
-                                        Đang phối {slotLabel}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded-md">
-                                        {getSlotBadgeText(pant)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {isEquipped ? (
-                                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] font-bold text-slate-400 group-hover:text-indigo-600">
-                                    + Phối ➔
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          })}
-
-                        {searchQuery.trim() && searchResults.length === 0 && (
-                          <div className="text-center py-6 px-3 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs">
-                            Không tìm thấy món đồ thời trang nào khớp với "{searchQuery}" trong kho.
+                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
+                        <span>🎭</span> 2. Mặt Nạ Phân Đoạn AI
+                      </span>
+                      <div className="w-full h-44 rounded-lg overflow-hidden bg-black flex items-center justify-center border border-white/5 relative">
+                        {extractedGarment?.mask_url ? (
+                          <img
+                            src={extractedGarment.mask_url}
+                            alt="AI Garment Mask"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <div className="text-center p-4">
+                            <span className="text-xs text-slate-400">Mặt nạ nhị phân 0/1</span>
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                )}
+                      <span className="text-[10px] text-slate-400 mt-1.5">
+                        Nhãn: {extractedGarment?.detected_category?.toUpperCase() || 'TRANG PHỤC'}
+                      </span>
+                    </div>
 
-                {/* Nút bấm Thử lại / Dựng lại */}
-                <button
-                  type="button"
-                  disabled={isLoadingAi || !selectedPant}
-                  onClick={() => {
-                    if (!userPhoto) {
-                      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-                      fileInputRef.current?.click()
-                      return
-                    }
-                    handleRunTryOn()
-                  }}
-                  className={`w-full py-2.5 px-4 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md ${
-                    isLoadingAi
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : tryonEngineMode === 'free'
-                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black'
-                  }`}
-                >
-                  {isLoadingAi ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                      AI Đang Xử Lý Mặc Đồ...
-                    </>
-                  ) : (
-                    <>
-                      <span>✨</span>
-                      {tryonEngineMode === 'free' ? 'LÀM MỚI & ƯỚM LẠI MÓN NÀY (0 Gem)' : 'LÀM MỚI & ƯỚM LẠI MÓN NÀY (~350 Gem)'}
-                    </>
+                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
+                        <span>✨</span> 3. Đồ Bóc Tách Sạch Nền
+                      </span>
+                      <div 
+                        className="w-full h-44 rounded-lg overflow-hidden flex items-center justify-center border border-white/5 relative"
+                        style={{
+                          backgroundImage: `linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)`,
+                          backgroundSize: '16px 16px',
+                          backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px'
+                        }}
+                      >
+                        {extractedGarment?.extracted_garment_url ? (
+                          <img
+                            src={extractedGarment.extracted_garment_url}
+                            alt="Isolated Garment"
+                            className="max-h-full max-w-full object-contain drop-shadow-2xl"
+                          />
+                        ) : (
+                          <img
+                            src={selectedPant?.image || ''}
+                            alt="Isolated Garment"
+                            className="max-h-full max-w-full object-contain opacity-70"
+                          />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1.5">Alpha PNG 100%</span>
+                    </div>
+                  </div>
+
+                  {selectedPant && (
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleAnchorItemTo100Sets(selectedPant)}
+                        className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 transition flex items-center gap-1.5 shadow-md cursor-pointer"
+                      >
+                        <span>🎯</span> Phối 100 Set Với Món Vừa Quét ➔
+                      </button>
+                    </div>
                   )}
-                </button>
-              </div>
-
-              {/* KHỐI 3: LỜI KHUYÊN TỪ AI STYLIST */}
-              {fitResult && (
-                <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-emerald-950 leading-relaxed shadow-2xs">
-                  <span className="text-base shrink-0">💡</span>
-                  <div>
-                    <p className="font-black text-emerald-900 text-xs mb-0.5">Phân Tích AI Stylist:</p>
-                    <p className="text-[11px] text-emerald-800">{fitResult.stylist_fit_advice}</p>
-                  </div>
                 </div>
               )}
 
             </div>
-
           </div>
-
-          {/* SECTION: AI STYLIST - TOP 5 BỘ PHỐI ĐỒ ĐẸP NHẤT TỪ 100 SET MÔ PHỎNG */}
-          <div id="top-5-scored-outfits-section" className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 border border-indigo-500/30 rounded-3xl p-5 sm:p-6 text-white shadow-2xl space-y-5">
-            {/* Header của mục phối đồ 100 set */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider shadow-sm flex items-center gap-1.5">
-                    <span>⚡</span> 100 Set Simulation Engine
-                  </span>
-                  <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    Chấm Điểm Thẩm Mỹ & Nhân Trắc Học
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                    Ưu Đãi Combo Giảm 8%
-                  </span>
-                </div>
-                <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                  <span>✨ Top 5 Set Phối Đồ AI Đẹp Nhất</span>
-                  <span className="text-xs font-normal text-slate-300">(Chọn lọc từ 100 bộ phối thực tế)</span>
-                </h3>
-                <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                  Hệ thống AI Stylist tự động quét kho thời trang ZeroMall, tính toán bánh xe màu sắc và tỷ lệ vóc dáng của bạn ({height}cm • {weight}kg), mô phỏng 100 bộ phối khác nhau và chấm điểm để trình diễn Top 5 set ấn tượng nhất.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => fetchTopScoredOutfits()}
-                disabled={isLoadingTopOutfits}
-                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
-              >
-                <span className={isLoadingTopOutfits ? 'animate-spin' : ''}>↻</span>
-                Làm mới 100 Set
-              </button>
-            </div>
-
-            {/* Content: Loading vs Top 5 Cards */}
-            {isLoadingTopOutfits ? (
-              <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
-                <div className="w-12 h-12 rounded-full border-4 border-indigo-500/30 border-t-indigo-400 animate-spin"></div>
-                <p className="text-sm font-bold text-slate-200">
-                  AI đang mô phỏng 100 bộ phối đồ và chấm điểm thời trang...
-                </p>
-                <p className="text-xs text-slate-400 max-w-md">
-                  Phân tích độ tương phản màu sắc, phom dáng và sự vừa vặn với chiều cao {height}cm, cân nặng {weight}kg.
-                </p>
-              </div>
-            ) : topScoredOutfits.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                Chưa có dữ liệu phối đồ. Vui lòng bấm "Làm mới 100 Set" hoặc chọn sản phẩm khác.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {topScoredOutfits.map((bundle) => {
-                  const isSelectedBundle = selectedOutfitBundleId === bundle.id
-                  const isTop1 = bundle.rank === 1
-                  const isTop2 = bundle.rank === 2
-                  const isTop3 = bundle.rank === 3
-
-                  return (
-                    <div
-                      key={bundle.id}
-                      className={`rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 relative overflow-hidden ${
-                        isSelectedBundle
-                          ? 'bg-indigo-950/90 border-2 border-indigo-400 shadow-xl ring-2 ring-indigo-500/40'
-                          : isTop1
-                          ? 'bg-gradient-to-b from-amber-950/40 via-slate-900/90 to-slate-900 border-2 border-amber-500/60 shadow-lg hover:border-amber-400'
-                          : isTop2
-                          ? 'bg-gradient-to-b from-slate-800/80 to-slate-900/90 border border-slate-400/50 shadow-md hover:border-slate-300'
-                          : isTop3
-                          ? 'bg-gradient-to-b from-amber-900/30 to-slate-900/90 border border-amber-700/50 shadow-md hover:border-amber-600'
-                          : 'bg-slate-900/90 border border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      {/* Top Rank Badge */}
-                      <div className="flex items-center justify-between gap-1 mb-2.5">
-                        <span
-                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs ${
-                            isTop1
-                              ? 'bg-amber-400 text-slate-950'
-                              : isTop2
-                              ? 'bg-slate-200 text-slate-900'
-                              : isTop3
-                              ? 'bg-amber-700 text-white'
-                              : 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/30'
-                          }`}
-                        >
-                          {bundle.badge}
-                        </span>
-                        <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-500/30">
-                          {bundle.score}/100 đ
-                        </span>
-                      </div>
-
-                      {/* Title & Tag */}
-                      <div className="mb-2">
-                        <h4 className="text-xs font-black text-white line-clamp-1">{bundle.title}</h4>
-                        <span className="text-[10px] font-bold text-indigo-300 block mt-0.5">
-                          {bundle.tag}
-                        </span>
-                      </div>
-
-                      {/* Stylist Note */}
-                      <div className="mb-3 p-2 rounded-xl bg-black/40 border border-white/5 text-[10px] text-slate-300 italic leading-relaxed">
-                        "{bundle.stylist_note}"
-                      </div>
-
-                      {/* Danh sách items trong set */}
-                      <div className="space-y-1.5 mb-3 flex-1">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                          Trọn bộ gồm {bundle.items.length} món:
-                        </span>
-                        {bundle.items.map((it, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 p-1.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition"
-                          >
-                            <img
-                              src={it.product.image || 'https://placehold.co/50x50'}
-                              alt={it.product.name}
-                              className="w-9 h-9 object-cover rounded-lg bg-white shrink-0 border border-white/10"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[9px] font-bold text-indigo-300 block truncate">
-                                {it.role}
-                              </span>
-                              <p className="text-[10px] font-semibold text-slate-200 truncate">
-                                {it.product.name}
-                              </p>
-                            </div>
-                            <span className="text-[10px] font-bold text-slate-300 shrink-0">
-                              {formatDisplayPrice(it.product.price)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Giá & Ưu đãi combo */}
-                      <div className="pt-2.5 pb-3 border-t border-white/10 space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-slate-400">Giá gốc cả bộ:</span>
-                          <span className="text-slate-400 line-through">
-                            {formatDisplayPrice(bundle.total_price)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-amber-400">Combo Giảm 8%:</span>
-                          <span className="text-sm font-black text-rose-400">
-                            {formatDisplayPrice(bundle.combo_price)}
-                          </span>
-                        </div>
-                        <div className="text-[10px] font-bold text-emerald-400 text-right">
-                          Tiết kiệm {formatDisplayPrice(bundle.savings)}
-                        </div>
-                      </div>
-
-                      {/* 2 Nút Hành Động: Ướm thử set này & Thêm cả set vào giỏ */}
-                      <div className="space-y-1.5 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleTryOnBundle(bundle)}
-                          disabled={isLoadingAi}
-                          className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50 active:scale-[0.98]"
-                        >
-                          <span>✨</span>
-                          {isLoadingAi && isSelectedBundle ? 'Đang Ướm...' : 'Ướm Thử Set Này'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAddScoredOutfitToCart(bundle)}
-                          className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-[0.98]"
-                        >
-                          <span>🛒</span>
-                          Thêm Cả Set Vào Giỏ
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
         </div>
-
       </div>
     </div>
   )

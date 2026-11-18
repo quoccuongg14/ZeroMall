@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import math
+import time
 import random
 import base64
 import hashlib
@@ -1587,33 +1588,45 @@ class AiStylistEngine:
         'Sách & VPP', 'Mẹ & Bé', 'Sức Khỏe', 'Máy Ảnh', 'Nhà Cửa', 'Sắc Đẹp'
     }
 
-    @staticmethod
-    def fetch_real_zero_products():
-        """Truy vấn CSDL thực tế của ZeroMall qua Kong Gateway hoặc Product Service"""
-        urls = [
-            f"{KONG_GATEWAY_URL}/products?limit=100",
-            "http://kong:8000/products?limit=100",
-            "http://localhost:8000/products?limit=100",
-            "http://localhost:3002/products?limit=100"
+    _CACHED_FASHION_PRODUCTS = []
+    _LAST_CACHE_TIME = 0
+
+    @classmethod
+    def fetch_real_zero_products(cls):
+        """Truy vấn CSDL thực tế thời trang của ZeroMall qua Kong Gateway hoặc Product Service"""
+        now = time.time()
+        if cls._CACHED_FASHION_PRODUCTS and (now - cls._LAST_CACHE_TIME < 300):
+            return cls._CACHED_FASHION_PRODUCTS
+
+        base_urls = [
+            KONG_GATEWAY_URL,
+            "http://kong:8000",
+            "http://localhost:8000",
+            "http://localhost:3002"
         ]
-        for u in urls:
+        categories = ["thoi-trang-nam", "thoi-trang-nu", "giay-dep-nam", "giay-dep-nu", "phu-kien-nu", "tui-vi-nu"]
+
+        for b_url in base_urls:
+            combined = []
             try:
-                req = urllib.request.Request(
-                    u,
-                    headers={"User-Agent": BROWSER_UA}
-                )
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    data = json.loads(resp.read().decode())
-                    if isinstance(data, list) and len(data) > 0:
-                        return data
-                    elif isinstance(data, dict):
-                        prods = data.get("products") or data.get("data", {}).get("products") or []
-                        if prods:
-                            return prods
+                for cat in categories:
+                    try:
+                        u = f"{b_url}/products?category={cat}&limit=35"
+                        req = urllib.request.Request(u, headers={"User-Agent": BROWSER_UA})
+                        with urllib.request.urlopen(req, timeout=3) as resp:
+                            data = json.loads(resp.read().decode())
+                            prods = data if isinstance(data, list) else (data.get("products") or [])
+                            combined.extend(prods)
+                    except Exception:
+                        pass
+                if len(combined) >= 20:
+                    cls._CACHED_FASHION_PRODUCTS = combined
+                    cls._LAST_CACHE_TIME = now
+                    return combined
             except Exception:
                 continue
 
-        return []
+        return cls._CACHED_FASHION_PRODUCTS or []
 
     @staticmethod
     def classify_item(p: dict) -> str:
@@ -1746,11 +1759,11 @@ class AiStylistEngine:
         return total_score, top_vibe
 
     @staticmethod
-    def generate_top_100_scored_outfits(target_product: dict, user_measurements: dict, gender: str = "male", limit: int = 5):
+    def generate_top_100_scored_outfits(target_product: dict, user_measurements: dict, gender: str = "male", limit: int = 100):
         """
-        Mô phỏng 100 bộ phối đồ từ kho hàng thực tế của ZeroMall,
-        chấm điểm tự động và trả về Top 5 bộ điểm cao nhất kèm chiết khấu combo.
-        Tốn 0 đồng chi phí AI sinh ảnh (Lazy generation).
+        Mô phỏng 100 bộ phối đồ độc nhất từ kho hàng thực tế của ZeroMall,
+        chấm điểm tự động và trả về danh sách các bộ phối sắp xếp theo điểm thẩm mỹ giảm dần.
+        Hỗ trợ phân trang 5 set/lần trên Frontend, tốn 0 đồng chi phí AI sinh ảnh (0 Gem).
         """
         try:
             all_prods = AiStylistEngine.fetch_real_zero_products()
@@ -1808,10 +1821,17 @@ class AiStylistEngine:
         if not accs: accs = [fallback_acc]
 
         # ---------------------------------------------------------------
-        # MÔ PHỎNG 100 SET PHỐI ĐỒ (100 Outfit Combinations)
+        # MÔ PHỎNG 100 SET PHỐI ĐỒ ĐỘC NHẤT (100 Outfit Combinations)
         # ---------------------------------------------------------------
         simulated_pool = []
-        for _ in range(100):
+        used_signatures = set()
+        max_attempts = 600
+        attempts = 0
+
+        target_limit = max(10, min(limit, 100))
+
+        while len(simulated_pool) < target_limit and attempts < max_attempts:
+            attempts += 1
             if target_role == "top":
                 b = random.choice(bottoms)
                 s = random.choice(shoes)
@@ -1833,6 +1853,11 @@ class AiStylistEngine:
                 s = random.choice(shoes)
                 outfit_items = [target_product, t, b, s]
 
+            sig = "-".join(sorted(str(it.get("id", "")) for it in outfit_items))
+            if sig in used_signatures:
+                continue
+            used_signatures.add(sig)
+
             score, top_vibe = AiStylistEngine.score_single_outfit(outfit_items, user_measurements)
             simulated_pool.append({
                 "score": score,
@@ -1840,29 +1865,16 @@ class AiStylistEngine:
                 "items": outfit_items
             })
 
-        # Sắp xếp 100 set theo điểm thẩm mỹ giảm dần
+        # Sắp xếp toàn bộ các set theo điểm thẩm mỹ giảm dần
         simulated_pool.sort(key=lambda x: x["score"], reverse=True)
-
-        # Lọc ra Top 5 set điểm cao nhất nhưng ĐA DẠNG phong cách (không trùng lặp)
-        top_chosen = []
-        used_signatures = set()
-        for cand in simulated_pool:
-            sig = "-".join(sorted(str(it.get("id", "")) for it in cand["items"]))
-            if sig not in used_signatures:
-                used_signatures.add(sig)
-                top_chosen.append(cand)
-            if len(top_chosen) == limit:
-                break
-
-        # Nếu chưa đủ 5 set thì lấy thêm các set kế tiếp
-        for cand in simulated_pool:
-            if len(top_chosen) >= limit:
-                break
-            if cand not in top_chosen:
-                top_chosen.append(cand)
+        top_chosen = simulated_pool[:target_limit]
 
         # Định dạng kết quả trả về cho Frontend
-        badges = ["🏆 Top 1 Điểm Cao Nhất", "🥈 Top 2 Khuyên Dùng", "🥉 Top 3 Thanh Lịch", "Top 4 Năng Động", "Top 5 Tối Giản"]
+        badges = [
+            "🏆 Top 1 Xuất Sắc", "🥈 Top 2 Khuyên Dùng", "🥉 Top 3 Thanh Lịch",
+            "✨ Top 4 Năng Động", "🌟 Top 5 Tối Giản", "Top 6 Hàn Quốc",
+            "Top 7 Vintage", "Top 8 Phố Thị", "Top 9 Thanh Xuân", "Top 10 Tiêu Biểu"
+        ]
         vibe_advice = {
             "Streetwear Cá Tính": "Phối hợp hài hòa giữa phom dáng phóng khoáng và điểm nhấn sneaker giúp kéo dài tỷ lệ chân, tôn trọn vóc dáng.",
             "Smart Casual Lịch Lãm": "Diện mạo chỉn chu, hiện đại phù hợp môi trường công sở hoặc hẹn hò, mang lại vẻ ngoài lịch thiệp và cuốn hút.",
@@ -1895,12 +1907,14 @@ class AiStylistEngine:
                     "product": it
                 })
 
+            badge_text = badges[idx] if idx < len(badges) else f"Set #{idx + 1}"
+
             results.append({
                 "id": f"outfit-bundle-{idx + 1}",
                 "rank": idx + 1,
-                "badge": badges[idx] if idx < len(badges) else f"Top {idx + 1}",
+                "badge": badge_text,
                 "score": cand["score"],
-                "title": f"Look {idx + 1}: {cand['vibe']} (Điểm {cand['score']}/100)",
+                "title": f"Look #{idx + 1}: {cand['vibe']} ({cand['score']}/100 đ)",
                 "tag": cand["vibe"],
                 "vibe": f"Phong cách {cand['vibe']} cân đối chuẩn vóc dáng",
                 "stylist_note": vibe_advice.get(cand["vibe"], "Phối hợp màu sắc và kiểu dáng hài hòa tôn dáng cơ thể."),
@@ -2030,20 +2044,21 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
 
         elif self.path in ["/api/tryon/generate-top-outfits", "/api/tryon/stylist-recommend"]:
-            # 3. Phối trộn mô phỏng 100 set, chấm điểm thời trang & chọn lọc Top 5 set điểm cao nhất
+            # 3. Phối trộn mô phỏng 100 set, chấm điểm thời trang & trả về 100 set
             h = float(payload.get("height_cm", 170))
             w = float(payload.get("weight_kg", 65))
             gender = payload.get("gender", "male")
             product = payload.get("product") or payload.get("pant") or {}
+            limit = int(payload.get("limit", 100))
 
             measurements = Body3DGenerator.calculate_measurements(h, w, gender)
             measurements["gender"] = gender
-            outfits = AiStylistEngine.generate_top_100_scored_outfits(product, measurements, gender=gender, limit=5)
+            outfits = AiStylistEngine.generate_top_100_scored_outfits(product, measurements, gender=gender, limit=limit)
 
             self._set_cors(200)
             res = {
                 "success": True,
-                "simulated_count": 100,
+                "simulated_count": len(outfits),
                 "target_product": product,
                 "outfits": outfits
             }
