@@ -1,1098 +1,45 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { API_BASE_URL, TRYON_SERVICE_URL } from '../../../config/api.config'
-import { formatCurrencyVND } from '../../../utils/formatters'
-import type { Product } from '../FlashSale'
-import type { CartItem } from '../../../models/cart.model'
+import React from 'react'
 import { OutfitSelectionModal } from './OutfitSelectionModal'
-
-interface BodyMeasurements {
-  bmi: number
-  body_type: string
-  shape_class: string
-  height_cm: number
-  weight_kg: number
-  gender: string
-  chest_cm: number
-  waist_cm: number
-  hip_cm: number
-  thigh_cm: number
-  shoulder_cm: number
-  inseam_cm: number
-  outseam_cm: number
-  recommended_pant_size: string
-}
-
-interface FitZone {
-  label: string
-  diff_percent?: number
-  diff_cm?: number
-  status: string
-  status_code: string
-  color: string
-}
-
-interface FitResult {
-  fit_score: number
-  recommended_size: string
-  silhouette?: string
-  body_tip?: string
-  zones: {
-    waist: FitZone
-    hip: FitZone
-    thigh: FitZone
-    length: FitZone
-  }
-  verdict: string
-  stylist_fit_advice: string
-}
-
-export interface OutfitItem {
-  role: string
-  slot?: 'top' | 'bottom' | 'shoes' | 'accessory'
-  product: Product
-}
-
-export interface ScoredOutfitBundle {
-  id: string
-  rank: number
-  badge: string
-  score: number
-  title: string
-  tag: string
-  vibe: string
-  stylist_note: string
-  items: OutfitItem[]
-  total_price: number
-  combo_price: number
-  savings: number
-  discount_percent: number
-}
-
-
-interface ExtractedGarment {
-  success: boolean
-  detected_category: string
-  dominant_colors: string[]
-  dimensions: { width: number; height: number; orig_width: number; orig_height: number }
-  bbox: number[]
-  mask_url: string
-  extracted_garment_url: string
-  pixels_count: number
-}
-
-interface CartFashionItem {
-  product: Product
-  variant?: string
-  quantity: number
-}
-
-interface VirtualTryOnModalProps {
-  isOpen: boolean
-  onClose: () => void
-  product?: Product | null
-  cart?: CartItem[]
-  onAddToCart?: (product: Product, quantity: number, variant: string) => void
-}
-
-// Dùng chung hàm định dạng chuẩn từ utils/formatters
-const formatDisplayPrice = formatCurrencyVND
-
-export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
-  isOpen,
-  onClose,
-  product,
-  cart,
-  onAddToCart
-}) => {
-  // 1. Ảnh người dùng & Thông số thể hình (Lưu trữ LocalStorage để đồng bộ xuyên suốt)
-  const [userPhoto, setUserPhoto] = useState<string>(() => {
-    const saved = localStorage.getItem('zeromall_tryon_user_photo')
-    const savedName = localStorage.getItem('zeromall_tryon_user_name')
-    // Nếu là ảnh cũ mặc định (Trấn Thành) mà người dùng không tự tải lên, tự động dọn sạch để không tự động thử đồ
-    if (!saved || saved.includes('tran_thanh') || (savedName && savedName.includes('Trấn Thành'))) {
-      try {
-        localStorage.removeItem('zeromall_tryon_user_photo')
-        localStorage.removeItem('zeromall_tryon_user_name')
-      } catch (_) {}
-      return ''
-    }
-    return saved
-  })
-  const [userPhotoName, setUserPhotoName] = useState<string>(() => {
-    const saved = localStorage.getItem('zeromall_tryon_user_name')
-    if (!saved || saved.includes('Trấn Thành') || saved.includes('tran_thanh')) return ''
-    return saved
-  })
-  const [height, setHeight] = useState<number>(() => {
-    return Number(localStorage.getItem('zeromall_tryon_user_height')) || 175
-  })
-  const [weight, setWeight] = useState<number>(() => {
-    return Number(localStorage.getItem('zeromall_tryon_user_weight')) || 68
-  })
-  const [gender, setGender] = useState<'male' | 'female'>(() => {
-    return (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
-  })
-
-  // Quản lý số dư Gem & Chế độ tiết kiệm Gem (Gem Shield Mode)
-  const [gemBalance, setGemBalance] = useState<number | null>(7060)
-  const [tryonEngineMode, setTryonEngineMode] = useState<'free' | 'mage'>('free')
-  const [showMageConfirmModal, setShowMageConfirmModal] = useState<boolean>(false)
-
-  // Đồng bộ dọn sạch ảnh Trấn Thành cũ và nạp số dư Gem thực tế từ Backend
-  useEffect(() => {
-    if (isOpen) {
-      const saved = localStorage.getItem('zeromall_tryon_user_photo')
-      const savedName = localStorage.getItem('zeromall_tryon_user_name')
-      if (!saved || saved.includes('tran_thanh') || (savedName && savedName.includes('Trấn Thành'))) {
-        try {
-          localStorage.removeItem('zeromall_tryon_user_photo')
-          localStorage.removeItem('zeromall_tryon_user_name')
-        } catch (_) {}
-        setUserPhoto('')
-        setUserPhotoName('')
-        setCompositeTryOnImage('')
-      }
-
-      fetch(`${TRYON_SERVICE_URL}/api/tryon/gem-status`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && typeof data.balance === 'number') {
-            setGemBalance(data.balance)
-          }
-        })
-        .catch(err => console.warn('[VirtualTryOnModal] gem-status fetch error:', err))
-    }
-  }, [isOpen])
-
-  // Lưu thông số thể hình vào LocalStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('zeromall_tryon_user_height', String(height))
-      localStorage.setItem('zeromall_tryon_user_weight', String(weight))
-      localStorage.setItem('zeromall_tryon_user_gender', gender)
-    } catch (e) {
-      console.warn('[VirtualTryOnModal] Failed to persist body stats to localStorage:', e)
-    }
-  }, [height, weight, gender])
-
-  // Tính toán BMI và phân loại thể hình theo chuẩn nhân trắc học
-  const hM = Math.max(1, height / 100)
-  const currentBmi = Number((weight / (hM * hM)).toFixed(1))
-
-  const getBodyPhysiqueInfo = (bmiVal: number) => {
-    if (bmiVal < 18.5) {
-      return {
-        label: 'Gầy mảnh khảnh (Ectomorph)',
-        badge: '🦴 Dáng Gầy (Skinny)',
-        color: 'text-sky-700 bg-sky-50 border-sky-300',
-        textColor: 'text-sky-600',
-        desc: 'Khung người gầy, chân tay thon nhỏ'
-      }
-    }
-    if (bmiVal < 22.0) {
-      return {
-        label: 'Thon gọn, thanh mảnh',
-        badge: '✨ Dáng Thon (Slim)',
-        color: 'text-emerald-700 bg-emerald-50 border-emerald-300',
-        textColor: 'text-emerald-600',
-        desc: 'Vóc dáng thon thả, eo nhỏ, chân gọn'
-      }
-    }
-    if (bmiVal < 25.0) {
-      return {
-        label: 'Cân đối tiêu chuẩn (Mesomorph)',
-        badge: '💪 Cân Đối (Standard)',
-        color: 'text-indigo-700 bg-indigo-50 border-indigo-300',
-        textColor: 'text-indigo-600',
-        desc: 'Vóc dáng tiêu chuẩn vừa vặn'
-      }
-    }
-    if (bmiVal < 29.0) {
-      return {
-        label: 'Đậm người / Cơ bắp (Endomorph)',
-        badge: '🏋️ Đậm Người (Stout)',
-        color: 'text-amber-800 bg-amber-50 border-amber-300',
-        textColor: 'text-amber-600',
-        desc: 'Khung người đậm, bắp chân & đùi to'
-      }
-    }
-    return {
-      label: 'Đầy đặn / Tròn trịa (Plus size)',
-      badge: '👕 Dáng Mập (Chubby)',
-      color: 'text-rose-700 bg-rose-50 border-rose-300',
-      textColor: 'text-rose-600',
-      desc: 'Khung người đậm, vòng bụng & đùi đầy đặn'
-    }
-  }
-
-  const physiqueInfo = getBodyPhysiqueInfo(currentBmi)
-
-  // Phân loại slot trang phục chính xác tuyệt đối theo loại sản phẩm (Top / Bottom / Shoes / Accessory / null)
-  const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory' | null => {
-    if (!p) return null
-    const name = ' ' + (p.name || '').toLowerCase().trim() + ' '
-    const cat = (p.category || '').toLowerCase().trim()
-    const slug = (p.categoryRef?.slug || '').toLowerCase().trim()
-
-    // 0. Loại trừ các danh mục và sản phẩm phi thời trang (Điện tử, Gia dụng, Sách, Mỹ phẩm, v.v.)
-    const nonFashionCats = [
-      'gia-dung', 'gia dụng', 'may-anh', 'máy ảnh', 'may-tinh-laptop', 'máy tính',
-      'dien-thoai-phu-kien', 'điện thoại', 'thiet-bi-dien-tu', 'thiết bị điện tử',
-      'sach-vpp', 'sách', 'me-va-be', 'mẹ & bé', 'sac-dep', 'sắc đẹp', 'suc-khoe', 'sức khỏe'
-    ]
-    if (nonFashionCats.some(c => cat.includes(c) || slug.includes(c))) {
-      return null
-    }
-    const nonFashionWords = [
-      'bàn là', 'bàn ủi', 'nồi cơm', 'nồi chiên', 'máy giặt', 'tủ lạnh', 'bếp điện', 'bếp từ', 'chảo chống dính',
-      'điện thoại', 'máy tính', 'laptop', 'màn hình', 'chuột máy tính', 'chuột gaming', 'bàn phím', 'cáp sạc', 'sạc dự phòng',
-      'son môi', 'kem dưỡng', 'serum', 'sữa rửa mặt', 'nước hoa', 'dầu gội', 'sữa tắm', 'phấn phủ',
-      'sách giáo khoa', 'tiểu thuyết', 'vở viết', 'bút bi', 'tã bỉm', 'sữa bột'
-    ]
-    if (nonFashionWords.some(w => name.includes(w))) {
-      return null
-    }
-
-    // 1. MŨ NÓN & PHỤ KIỆN & TRANG SỨC & TÚI VÍ (Accessories)
-    const isAccCat = slug.includes('phu-kien') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
-                     cat.includes('phụ kiện') || cat.includes('túi ví') || cat.includes('đồng hồ')
-    const isAccWords = [
-      'mũ', 'nón', 'cap', 'beanie', 'snapback', 'bucket', 'beret',
-      'kính', 'gọng kính', 'kính râm', 'kính mát', 'tròng kính',
-      'túi', 'ví', 'balo', 'ba lô', 'clutch', 'tote', 'túi xách', 'ví cầm tay', 'túi đeo',
-      'khăn', 'cà vạt', 'caravat', 'nơ cổ',
-      'kẹp tóc', 'cột tóc', 'dây thun', 'băng đô', 'cài tóc', 'bờm', 'chun buộc', 'kẹp càng cua',
-      'dây chuyền', 'vòng cổ', 'vòng tay', 'lắc tay', 'lắc chân', 'khuyên tai', 'hoa tai', 'bông tai', 'nhẫn', 'kiềng', 'charm', 'trâm cài', 'mặt dây',
-      'thắt lưng', 'dây nịt', 'belt',
-      'đồng hồ'
-    ].some(k => name.includes(k))
-
-    if (isAccCat || isAccWords) {
-      return 'accessory'
-    }
-
-    // 2. GIÀY DÉP (Footwear)
-    const isShoesCat = slug.includes('giay-dep') || cat.includes('giày dép') || cat.includes('giay dep')
-    const isShoesWords = [
-      'giày', 'giay', 'dép', 'dep', 'sneaker', 'sandal', 'guốc', 'guoc',
-      'cao gót', 'búp bê', 'loafer', 'derby', 'chelsea', 'boots', 'bốt', 'ủng', 'sục', 'mwc', 'slip-on', 'slip on'
-    ].some(k => name.includes(k))
-
-    if ((isShoesCat || isShoesWords) && !name.includes('hộp đựng') && !name.includes('túi đựng giày') && !name.includes('kệ để')) {
-      return 'shoes'
-    }
-
-    // 3. QUẦN & VÁY & ĐẦM (Bottoms / Lower Garments)
-    const isBottomWords = [
-      'quần', 'quan', 'jean', 'jeans', 'jogger', 'short', 'shorts', 'kaki', 'tây âu', 'quần tây',
-      'quần đùi', 'quần baggy', 'quần ống', 'quần culottes', 'quần legging',
-      'quần bò', 'quần lửng', 'quần nỉ', 'quần thun', 'boxer',
-      'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy tay bồng', 'váy công chúa', 'váy',
-      'đầm', 'dam', 'maxi', 'jumpsuit', 'set đồ bộ'
-    ].some(k => name.includes(k))
-
-    if (isBottomWords) {
-      return 'bottom'
-    }
-
-    // 4. ÁO (Tops / Upper Garments)
-    const isTopWords = [
-      'áo', 'ao', 'sơ mi', 'so mi', 'thun', 'polo', 'khoác', 'khoac', 'bomber', 'blazer',
-      'cardigan', 'hoodie', 'sweater', 'croptop', 'crop top', 'tank top', 'ba lỗ',
-      'gile', 'vest', 'bra', 'sát nách', 'cộc tay', 'tay phồng', 'len dệt kim', 'jacket', 'măng tô', 'áo gió', 'áo nỉ'
-    ].some(k => {
-      if (k === 'áo' || k === 'ao') {
-        return /(?:^|[^\p{L}])áo(?:[^\p{L}]|$)/ui.test(name) || name.includes(' áo ') || name.startsWith(' áo') || name.includes('áo-')
-      }
-      return name.includes(k)
-    })
-
-    if (isTopWords) {
-      return 'top'
-    }
-
-    return null
-  }
-
-  // Nhãn badge hiển thị chuẩn xác từng món đồ
-  const getSlotBadgeText = (p: any) => {
-    const slot = detectItemSlot(p)
-    if (slot === 'top') return '👔 Áo'
-    if (slot === 'bottom') return '👖 Quần/Váy'
-    if (slot === 'shoes') return '👟 Giày/Dép'
-    if (slot === 'accessory') {
-      const n = (p.name || '').toLowerCase()
-      if (n.includes('mũ') || n.includes('nón')) return '🧢 Mũ/Nón'
-      if (n.includes('kính')) return '🕶️ Kính'
-      if (n.includes('túi') || n.includes('ví') || n.includes('balo')) return '👜 Túi/Ví'
-      if (n.includes('khăn')) return '🧣 Khăn'
-      if (n.includes('kẹp tóc') || n.includes('cột tóc') || n.includes('băng đô') || n.includes('cài tóc')) return '🎀 Kẹp Tóc'
-      if (n.includes('dây chuyền') || n.includes('vòng cổ') || n.includes('vòng tay') || n.includes('lắc') || n.includes('nhẫn') || n.includes('khuyên tai') || n.includes('hoa tai') || n.includes('bông tai')) return '💍 Trang Sức'
-      return '✨ Phụ Kiện'
-    }
-    return 'Thời trang'
-  }
-
-  // 2. Món đồ được chọn để ướm thử & Nguồn cấp tủ đồ (Hỗ trợ Phối Đồ Đa Món Mix & Match)
-  const [selectedOutfit, setSelectedOutfit] = useState<{
-    top: Product | null
-    bottom: Product | null
-    shoes: Product | null
-    accessory: Product | null
-  }>(() => {
-    const init: {
-      top: Product | null
-      bottom: Product | null
-      shoes: Product | null
-      accessory: Product | null
-    } = { top: null, bottom: null, shoes: null, accessory: null }
-    if (product) {
-      const slot = detectItemSlot(product) || 'top'
-      init[slot] = product
-    }
-    return init
-  })
-  const [activeOutfitSlot, setActiveOutfitSlot] = useState<'top' | 'bottom' | 'shoes' | 'accessory'>(() => {
-    return (product ? detectItemSlot(product) : null) || 'top'
-  })
-
-  const [sourceTab, setSourceTab] = useState<'cart' | 'catalog'>('catalog')
-  const [cartFashionItems, setCartFashionItems] = useState<CartFashionItem[]>([])
-  const [availablePants, setAvailablePants] = useState<Product[]>(() => (product ? [product] : []))
-  const [selectedPant, setSelectedPant] = useState<Product | null>(() => product || null)
-  const [isLoadingPants, setIsLoadingPants] = useState<boolean>(true)
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'top' | 'bottom' | 'shoes' | 'accessory'>('all')
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [searchResults, setSearchResults] = useState<Product[]>([])
-  const [isSearchingDb, setIsSearchingDb] = useState<boolean>(false)
-  const searchTimeoutRef = useRef<any>(null)
-
-  // 3. Kết quả phân tích AI & Bóc tách đồ
-  const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false)
-  const [measurements, setMeasurements] = useState<BodyMeasurements | null>(null)
-  const [fitResult, setFitResult] = useState<FitResult | null>(null)
-  const [compositeTryOnImage, setCompositeTryOnImage] = useState<string>('')
-  const [extractedGarment, setExtractedGarment] = useState<ExtractedGarment | null>(null)
-  const [isScanningGarment, setIsScanningGarment] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'photo' | 'scanner' | 'heatmap'>('photo')
-  const [viewMode, setViewMode] = useState<'tryon' | 'original' | 'sidebyside'>('tryon')
-  const [toastMsg, setToastMsg] = useState<string>('')
-
-  // 4. Danh sách 100 Set Phối Đồ AI Đẹp Nhất (Mô phỏng từ kho ZeroMall)
-  const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
-  const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
-  const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(null)
-  const [rightColTab, setRightColTab] = useState<'outfits100' | 'wardrobe' | 'scanner'>('wardrobe')
-  const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
-
-
-  // Hàm tải và lọc các món thời trang trong giỏ hàng thực tế của người dùng
-  const loadCartFashionItems = (): CartFashionItem[] => {
-    try {
-      let rawCartItems: CartItem[] = []
-      if (cart && Array.isArray(cart)) {
-        rawCartItems = cart
-      } else {
-        const savedUser = localStorage.getItem('zm_user')
-        const user = savedUser ? JSON.parse(savedUser) : null
-        const key = user?.id ? `zm_cart_${user.id}` : 'zm_cart_guest'
-        const saved = localStorage.getItem(key) || localStorage.getItem('zm_cart_guest')
-        if (saved) {
-          rawCartItems = JSON.parse(saved)
-        }
-      }
-
-      if (Array.isArray(rawCartItems)) {
-        const fashionList: CartFashionItem[] = []
-        rawCartItems.forEach((item) => {
-          if (!item.product) return
-          // Chỉ lấy sản phẩm có thể phân loại chính xác vào 1 trong 4 slot thời trang
-          const slot = detectItemSlot(item.product)
-          if (slot !== null) {
-            const rawPrice = item.product.price || item.product.flashPrice || 0
-            const numericPrice = typeof rawPrice === 'number'
-              ? rawPrice
-              : (parseFloat(String(rawPrice).replace(/[^0-9]/g, '')) || 0)
-
-            const priceStr = numericPrice.toLocaleString('vi-VN') + 'đ'
-
-            fashionList.push({
-              product: {
-                id: item.product.id,
-                name: item.product.name,
-                price: priceStr,
-                flashPrice: item.product.flashPrice || priceStr,
-                originalPrice: item.product.originalPrice || priceStr,
-                image: item.product.image,
-                category: (item.product as any).category || 'Thời Trang',
-                rating: (item.product as any).rating || 0,
-                sold: item.product.sold || 0,
-                stock: item.product.stock || 99,
-                total: item.product.total || 100,
-              } as unknown as Product,
-              variant: item.selectedVariant,
-              quantity: item.quantity
-            })
-          }
-        })
-        setCartFashionItems(fashionList)
-        return fashionList
-      }
-    } catch (e) {
-      console.error('Lỗi khi nạp danh sách giỏ hàng cho thử đồ:', e)
-    }
-    setCartFashionItems([])
-    return []
-  }
-
-  // Hàm tìm kiếm đồ thời trang trong toàn bộ CSDL ZeroMall cho mục Gợi Ý
-  const handleSearchDatabase = (query: string) => {
-    setSearchQuery(query)
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-    const q = query.trim()
-    if (!q) {
-      setSearchResults([])
-      setIsSearchingDb(false)
-      return
-    }
-    setIsSearchingDb(true)
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/products?search=${encodeURIComponent(q)}&limit=60`)
-        if (res.ok) {
-          const raw = await res.json()
-          const prods: Product[] = Array.isArray(raw) ? raw : (raw.products || [])
-          // Chỉ lấy sản phẩm thời trang hợp lệ thuộc 1 trong 4 nhóm: Áo, Quần/Váy, Giày/Dép, Mũ/Phụ Kiện
-          const validFashion = prods.filter(p => detectItemSlot(p) !== null)
-          setSearchResults(validFashion)
-        }
-      } catch (err) {
-        console.error('Lỗi khi tìm kiếm sản phẩm trong database:', err)
-      } finally {
-        setIsSearchingDb(false)
-      }
-    }, 300)
-  }
-
-  // Khi mở modal hoặc khi product thay đổi: Đảm bảo chọn ngay sản phẩm được truyền vào
-  useEffect(() => {
-    if (isOpen && product) {
-      const slot = detectItemSlot(product) || 'top'
-      setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
-      setActiveOutfitSlot(slot)
-      setSelectedPant(product)
-      setSourceTab('catalog')
-    }
-  }, [isOpen, product])
-
-  // Tải danh sách trang phục thời trang từ CSDL thực tế ZeroMall & Giỏ hàng (Đầy đủ Áo, Quần, Giày Dép, Mũ Nón)
-  useEffect(() => {
-    if (!isOpen) return
-
-    // 1. Nạp danh sách đồ thời trang trong giỏ hàng
-    const cartItems = loadCartFashionItems()
-
-    // 2. Nạp danh sách đồ đa dạng từ CSDL sàn ZeroMall (Thời trang nam, nữ, giày dép, phụ kiện nón)
-    const fetchRealFashion = async () => {
-      setIsLoadingPants(true)
-      try {
-        const [resNam, resNu, resGiayNam, resGiayNu, resPhuKien, resTuiVi] = await Promise.all([
-          fetch(`${API_BASE_URL}/products?category=thoi-trang-nam&limit=40`),
-          fetch(`${API_BASE_URL}/products?category=thoi-trang-nu&limit=40`),
-          fetch(`${API_BASE_URL}/products?category=giay-dep-nam&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=giay-dep-nu&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=phu-kien-nu&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=tui-vi-nu&limit=25`),
-        ])
-
-        const parseList = async (res: Response) => {
-          if (!res.ok) return []
-          const data = await res.json()
-          return Array.isArray(data) ? data : (data.products || [])
-        }
-
-        const [listNam, listNu, listGiayNam, listGiayNu, listPhuKien, listTuiVi] = await Promise.all([
-          parseList(resNam),
-          parseList(resNu),
-          parseList(resGiayNam),
-          parseList(resGiayNu),
-          parseList(resPhuKien),
-          parseList(resTuiVi)
-        ])
-
-        const rawCombined = [...listNam, ...listNu, ...listGiayNam, ...listGiayNu, ...listPhuKien, ...listTuiVi]
-        
-        // Loại bỏ trùng lặp và loại bỏ các sản phẩm không thuộc 4 slot thời trang
-        const uniqueMap = new Map<string, Product>()
-        rawCombined.forEach(p => {
-          if (p && p.id && !uniqueMap.has(p.id) && detectItemSlot(p) !== null) {
-            uniqueMap.set(p.id, p)
-          }
-        })
-        const combined = Array.from(uniqueMap.values())
-        let effectivePants = combined.length > 0 ? combined : []
-
-        if (product) {
-          const filtered = effectivePants.filter(p => p.id !== product.id)
-          effectivePants = [product, ...filtered]
-          setAvailablePants(effectivePants)
-          const slot = detectItemSlot(product) || 'top'
-          setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
-          setActiveOutfitSlot(slot)
-          setSelectedPant(product)
-          setSourceTab('catalog')
-        } else {
-          setAvailablePants(effectivePants)
-          if (cartItems.length > 0) {
-            const first = cartItems[0].product
-            const slot = detectItemSlot(first) || 'top'
-            setSelectedOutfit({ top: null, bottom: null, shoes: null, accessory: null, [slot]: first })
-            setActiveOutfitSlot(slot)
-            setSelectedPant(first)
-            setSourceTab('cart')
-          } else if (effectivePants.length > 0) {
-            const first = effectivePants[0]
-            const slot = detectItemSlot(first) || 'top'
-            setSelectedOutfit({ top: null, bottom: null, shoes: null, accessory: null, [slot]: first })
-            setActiveOutfitSlot(slot)
-            setSelectedPant(first)
-            setSourceTab('catalog')
-          }
-        }
-      } catch (e) {
-        console.error('Lỗi khi tải sản phẩm ZeroMall:', e)
-        if (product) {
-          setAvailablePants([product])
-          const slot = detectItemSlot(product) || 'top'
-          setSelectedOutfit({ top: null, bottom: null, shoes: null, accessory: null, [slot]: product })
-          setSelectedPant(product)
-        }
-      } finally {
-        setIsLoadingPants(false)
-      }
-    }
-
-    fetchRealFashion()
-  }, [isOpen, product, cart])
-
-  // Xử lý tải ảnh người dùng lên
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setUserPhotoName(file.name)
-      const reader = new FileReader()
-      reader.onload = async (event) => {
-        if (event.target?.result) {
-          const dataUrl = event.target.result as string
-          setUserPhoto(dataUrl)
-          setCompositeTryOnImage('') // Xóa kết quả render cũ để hiển thị ảnh gốc của bạn
-          setViewMode('original')
-          try {
-            localStorage.setItem('zeromall_tryon_user_photo', dataUrl)
-            localStorage.setItem('zeromall_tryon_user_name', file.name)
-          } catch (eStorage) {
-            console.warn('[VirtualTryOnModal] Failed to cache user photo to localStorage:', eStorage)
-          }
-          triggerToast('📸 Đã tải ảnh của bạn! Bấm "Ướm Cả Bộ" để AI bắt đầu ướm đồ.')
-          // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
-        }
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  // Chọn nhanh ảnh người mẫu có sẵn
-  const handleSelectPresetModel = (modelUrl: string, modelName: string, modelGender: 'male' | 'female') => {
-    setUserPhoto(modelUrl)
-    setUserPhotoName(modelName)
-    setGender(modelGender)
-    setCompositeTryOnImage('')
-    setViewMode('original')
-    try {
-      localStorage.setItem('zeromall_tryon_user_photo', modelUrl)
-      localStorage.setItem('zeromall_tryon_user_name', modelName)
-    } catch (e) {
-      console.warn('[VirtualTryOnModal] Failed to cache selected model to localStorage:', e)
-    }
-    triggerToast(`Đã chọn [${modelName}]! Bấm "Ướm Cả Bộ" để AI thử đồ.`)
-    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG THỬ ĐỒ ĐỂ TRÁNH LÃNG PHÍ GEM
-  }
-
-  // Xóa ảnh người dùng để trở về trạng thái chưa có ảnh
-  const handleClearUserPhoto = () => {
-    setUserPhoto('')
-    setUserPhotoName('')
-    setCompositeTryOnImage('')
-    try {
-      localStorage.removeItem('zeromall_tryon_user_photo')
-      localStorage.removeItem('zeromall_tryon_user_name')
-    } catch (_) {}
-    triggerToast('Đã xóa ảnh người dùng!')
-  }
-
-  // Bóc tách trang phục theo yêu cầu (Scanner)
-  const handleScanGarment = async (garmentToScan?: Product) => {
-    const target = garmentToScan || selectedPant
-    if (!target || !target.image) return
-    setIsScanningGarment(true)
-    triggerToast('AI FashnHumanParser đang quét và bóc tách từng lớp vải...')
-
-    try {
-      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/extract-garment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: target.image,
-          garment_info: target
-        })
-      })
-      if (res.ok) {
-        const extData = await res.json()
-        if (extData.success) {
-          setExtractedGarment(extData)
-          setActiveTab('scanner')
-          triggerToast(`Bóc tách thành công [${extData.detected_category.toUpperCase()}]!`)
-        }
-      }
-    } catch (err) {
-      console.error(err)
-      triggerToast('Không thể kết nối AI Extractor.')
-    } finally {
-      setIsScanningGarment(false)
-    }
-  }
-
-  // Tải ảnh món đồ bất kỳ do người dùng cung cấp (không có trong CSDL)
-  const handleCustomGarmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async (evt) => {
-      const dataUrl = evt.target?.result as string
-      if (!dataUrl) return
-      setIsScanningGarment(true)
-      triggerToast('AI đang quét và bóc tách món đồ bạn vừa tải lên...')
-
-      try {
-        const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/extract-garment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            image: dataUrl,
-            garment_info: { name: file.name }
-          })
-        })
-        if (res.ok) {
-          const ext = await res.json()
-          if (ext.success) {
-            setExtractedGarment(ext)
-            const customProduct: Product = {
-              id: `custom-${Date.now()}`,
-              name: file.name.replace(/\.[^/.]+$/, ''),
-              price: '0',
-              originalPrice: '0',
-              flashPrice: '0',
-              sold: 0,
-              total: 10,
-              image: dataUrl,
-              category: ext.detected_category,
-              stock: 1
-            }
-            setSelectedPant(customProduct)
-            setActiveTab('scanner')
-            triggerToast(`AI đã bóc tách thành công: ${ext.detected_category.toUpperCase()}!`)
-            handleRunTryOn(customProduct)
-          }
-        }
-      } catch (err) {
-        console.error(err)
-        triggerToast('Lỗi khi bóc tách món đồ.')
-      } finally {
-        setIsScanningGarment(false)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // Chạy AI: Đo vóc dáng + Ướm thử đồ qua ảnh + Phối đồ đa món
-  const handleRunTryOn = async (
-    pantToTry?: Product,
-    overrideUserPhoto?: string,
-    overrideHeight?: number,
-    overrideWeight?: number,
-    overrideGender?: 'male' | 'female',
-    overrideOutfit?: {
-      top: Product | null
-      bottom: Product | null
-      shoes: Product | null
-      accessory: Product | null
-    }
-  ) => {
-    const effectivePhoto = overrideUserPhoto !== undefined ? overrideUserPhoto : userPhoto
-    if (!effectivePhoto || effectivePhoto.trim() === '') {
-      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-      fileInputRef.current?.click()
-      return
-    }
-
-    const effectiveOutfit = overrideOutfit || selectedOutfit
-    const activeItems = Object.values(effectiveOutfit).filter(Boolean) as Product[]
-    const targetPant = pantToTry || selectedPant || (activeItems.length > 0 ? activeItems[0] : null)
-    if (!targetPant && activeItems.length === 0) {
-      triggerToast('⚠️ Vui lòng chọn ít nhất 1 món đồ để thử!')
-      return
-    }
-
-    setIsLoadingAi(true)
-    const effectiveH = overrideHeight !== undefined ? overrideHeight : height
-    const effectiveW = overrideWeight !== undefined ? overrideWeight : weight
-    const effectiveG = overrideGender || gender
-
-    try {
-      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/full-pipeline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          height_cm: Number(effectiveH),
-          weight_kg: Number(effectiveW),
-          gender: effectiveG,
-          pant: targetPant || {},
-          outfit: effectiveOutfit,
-          user_image: effectivePhoto,
-          use_mage: tryonEngineMode === 'mage'
-        })
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success) {
-          setMeasurements(data.measurements)
-          setFitResult(data.fit)
-          if (data.preview && data.preview.composite_image) {
-            setCompositeTryOnImage(data.preview.composite_image)
-            setViewMode('tryon')
-          }
-          if (data.extracted_garment && data.extracted_garment.extracted_garment_url) {
-            setExtractedGarment(data.extracted_garment)
-          }
-          if (data.outfits && Array.isArray(data.outfits) && data.outfits.length > 0) {
-            setTopScoredOutfits(data.outfits)
-          }
-          const activeCount = Object.values(effectiveOutfit).filter(Boolean).length
-          if (activeCount > 1) {
-            triggerToast(`✨ Đã phối trọn bộ ${activeCount} món lên người mẫu thành công!`)
-          } else {
-            triggerToast(`Đã ướm thử theo khung người ${effectiveH}cm • ${effectiveW}kg thành công!`)
-          }
-
-          // Cập nhật lại số dư Gem thực tế từ backend
-          if (tryonEngineMode === 'mage') {
-            fetch(`${TRYON_SERVICE_URL}/api/tryon/gem-status`)
-              .then(r => r.json())
-              .then(d => { if (d && typeof d.balance === 'number') setGemBalance(d.balance) })
-              .catch(() => {})
-          }
-        }
-      }
-    } catch (e: any) {
-      console.error('Try-on API error:', e)
-      triggerToast('Không thể kết nối Local AI Service (Port 5006).')
-    } finally {
-      setIsLoadingAi(false)
-    }
-  }
-
-  // Quản lý gán món vào bộ phối đồ
-  const handleEquipItem = (item: Product, targetSlot?: 'top' | 'bottom' | 'shoes' | 'accessory') => {
-    const slot = targetSlot || detectItemSlot(item) || activeOutfitSlot || 'top'
-    const newOutfit = {
-      ...selectedOutfit,
-      [slot]: item
-    }
-    setSelectedOutfit(newOutfit)
-    setActiveOutfitSlot(slot)
-    setSelectedPant(item)
-    // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG GỌI handleRunTryOn ĐỂ TRÁNH LÃNG PHÍ GEM
-    const slotLabel = slot === 'top' ? 'Áo' : slot === 'bottom' ? 'Quần/Váy' : slot === 'shoes' ? 'Giày/Dép' : 'Mũ/Phụ Kiện'
-    triggerToast(`Đã chọn [${item.name.slice(0, 25)}...] vào ô ${slotLabel}. Bấm "Ướm Cả Bộ" để AI thử đồ!`)
-  }
-
-  const handleRemoveSlot = (slot: 'top' | 'bottom' | 'shoes' | 'accessory', e: React.MouseEvent) => {
-    e.stopPropagation()
-    const newOutfit = {
-      ...selectedOutfit,
-      [slot]: null
-    }
-    setSelectedOutfit(newOutfit)
-    const remaining = Object.values(newOutfit).filter(Boolean) as Product[]
-    if (remaining.length > 0) {
-      setSelectedPant(remaining[0])
-    } else {
-      setSelectedPant(null)
-      setCompositeTryOnImage('')
-    }
-    triggerToast('Đã gỡ món khỏi bộ phối đồ.')
-  }
-
-  const handleSelectSlot = (slot: 'top' | 'bottom' | 'shoes' | 'accessory') => {
-    setActiveOutfitSlot(slot)
-    setCategoryFilter(slot)
-  }
-
-  const handleApplyPreset = (presetName: string) => {
-    if (presetName === 'streetwear') {
-      const top = availablePants.find(p => (p.name || '').toLowerCase().includes('bomber')) || availablePants.find(p => detectItemSlot(p) === 'top')
-      const bottom = availablePants.find(p => (p.name || '').toLowerCase().includes('jean')) || availablePants.find(p => detectItemSlot(p) === 'bottom')
-      const shoes = availablePants.find(p => (p.name || '').toLowerCase().includes('sneaker')) || availablePants.find(p => detectItemSlot(p) === 'shoes')
-      const hat = availablePants.find(p => (p.name || '').toLowerCase().includes('nón') || (p.name || '').toLowerCase().includes('mũ')) || availablePants.find(p => detectItemSlot(p) === 'accessory')
-      const newOutfit = {
-        top: top || null,
-        bottom: bottom || null,
-        shoes: shoes || null,
-        accessory: hat || null
-      }
-      setSelectedOutfit(newOutfit)
-      triggerToast('🔥 Đã áp dụng Set Streetwear! Bấm "Ướm Cả Bộ" để AI thử đồ.')
-    } else if (presetName === 'office') {
-      const top = availablePants.find(p => (p.name || '').toLowerCase().includes('sơ mi') || (p.name || '').toLowerCase().includes('blazer')) || availablePants.find(p => detectItemSlot(p) === 'top')
-      const bottom = availablePants.find(p => (p.name || '').toLowerCase().includes('tây') || (p.name || '').toLowerCase().includes('slimfit')) || availablePants.find(p => detectItemSlot(p) === 'bottom')
-      const shoes = availablePants.find(p => (p.name || '').toLowerCase().includes('tây') || (p.name || '').toLowerCase().includes('loafer')) || availablePants.find(p => detectItemSlot(p) === 'shoes')
-      const newOutfit = {
-        top: top || null,
-        bottom: bottom || null,
-        shoes: shoes || null,
-        accessory: null
-      }
-      setSelectedOutfit(newOutfit)
-      triggerToast('👔 Đã áp dụng Set Công Sở! Bấm "Ướm Cả Bộ" để AI thử đồ.')
-    } else if (presetName === 'sport') {
-      const top = availablePants.find(p => (p.name || '').toLowerCase().includes('thun') || (p.name || '').toLowerCase().includes('cotton')) || availablePants.find(p => detectItemSlot(p) === 'top')
-      const bottom = availablePants.find(p => (p.name || '').toLowerCase().includes('jogger')) || availablePants.find(p => detectItemSlot(p) === 'bottom')
-      const shoes = availablePants.find(p => (p.name || '').toLowerCase().includes('sneaker') || (p.name || '').toLowerCase().includes('dép')) || availablePants.find(p => detectItemSlot(p) === 'shoes')
-      const newOutfit = {
-        top: top || null,
-        bottom: bottom || null,
-        shoes: shoes || null,
-        accessory: null
-      }
-      setSelectedOutfit(newOutfit)
-      triggerToast('⚡ Đã áp dụng Set Thể Thao! Bấm "Ướm Cả Bộ" để AI thử đồ.')
-    }
-  }
-
-  const handleAddWholeOutfitToCart = () => {
-    const items = Object.values(selectedOutfit).filter(Boolean) as Product[]
-    if (items.length === 0) {
-      triggerToast('Chưa có món đồ nào được chọn trong bộ phối!')
-      return
-    }
-    if (onAddToCart) {
-      items.forEach(item => {
-        onAddToCart(item, 1, `Size ${fitResult?.recommended_size || 'L'}`)
-      })
-      triggerToast(`🛒 Đã thêm trọn bộ ${items.length} món phối đồ vào giỏ hàng!`)
-      setTimeout(() => {
-        loadCartFashionItems()
-      }, 350)
-    }
-  }
-
-  // Truy vấn 100 Set phối đồ AI được mô phỏng & chấm điểm từ kho ZeroMall
-  const fetchTopScoredOutfits = async (targetProduct?: Product) => {
-    const activeItems = Object.values(selectedOutfit).filter(Boolean) as Product[]
-    const effectiveProd = targetProduct || selectedPant || product || (activeItems.length > 0 ? activeItems[0] : null)
-    if (!effectiveProd) return
-
-    setIsLoadingTopOutfits(true)
-    try {
-      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/generate-top-outfits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product: effectiveProd,
-          height_cm: Number(height),
-          weight_kg: Number(weight),
-          gender: gender,
-          limit: 100
-        })
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success && Array.isArray(data.outfits)) {
-          setTopScoredOutfits(data.outfits)
-        }
-      }
-    } catch (err) {
-      console.warn('[VirtualTryOnModal] Error fetching top scored outfits:', err)
-    } finally {
-      setIsLoadingTopOutfits(false)
-    }
-  }
-
-  // Khi chọn một slot hoặc bấm vào món đồ bất kỳ, tự động cập nhật món chính để phối 100 set
-  const handleAnchorItemTo100Sets = (item: Product) => {
-    setSelectedPant(item)
-    const slot = detectItemSlot(item) || 'top'
-    setSelectedOutfit(prev => ({ ...prev, [slot]: item }))
-    setActiveOutfitSlot(slot)
-    setIsOutfitModalOpen(true)
-    fetchTopScoredOutfits(item)
-    triggerToast(`🎯 AI đang mô phỏng 100 set phối đồ xoay quanh [${item.name.slice(0, 25)}...]!`)
-  }
-
-  // Bấm chọn 1 set trong danh sách để xem trước (Nạp vào 4 slot, ĐÃ CHỌN, KHÔNG tự động chạy AI thử đồ)
-  const handleSelectBundlePreview = (bundle: ScoredOutfitBundle) => {
-    setSelectedOutfitBundleId(bundle.id)
-    const newOutfit = {
-      top: null as Product | null,
-      bottom: null as Product | null,
-      shoes: null as Product | null,
-      accessory: null as Product | null
-    }
-
-    bundle.items.forEach((it) => {
-      const slot = it.slot || detectItemSlot(it.product)
-      if (slot && slot in newOutfit) {
-        newOutfit[slot] = it.product
-      }
-    })
-
-    setSelectedOutfit(newOutfit)
-    const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
-    if (primary) {
-      setSelectedPant(primary)
-    }
-
-    triggerToast(`✓ Đã chọn Set [${bundle.title}]. Hãy bấm "✨ THỬ SET NÀY" để xem lên người bạn!`)
-  }
-
-  // Bấm nút thử đồ sau khi người dùng đã chọn set ưng ý
-  const handleExecuteTryOnBundle = (bundle: ScoredOutfitBundle) => {
-    setIsOutfitModalOpen(false)
-    if (!userPhoto) {
-      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-      fileInputRef.current?.click()
-      return
-    }
-
-    const newOutfit = {
-      top: null as Product | null,
-      bottom: null as Product | null,
-      shoes: null as Product | null,
-      accessory: null as Product | null
-    }
-
-    bundle.items.forEach((it) => {
-      const slot = it.slot || detectItemSlot(it.product)
-      if (slot && slot in newOutfit) {
-        newOutfit[slot] = it.product
-      }
-    })
-
-    setSelectedOutfit(newOutfit)
-    setActiveTab('photo')
-    handleRunTryOn(undefined, undefined, undefined, undefined, undefined, newOutfit)
-  }
-
-  // Bấm Mua cả set (Thêm toàn bộ sản phẩm của combo vào giỏ hàng)
-  const handleAddScoredOutfitToCart = (bundle: ScoredOutfitBundle) => {
-    if (!onAddToCart) {
-      triggerToast('Chức năng thêm giỏ hàng chưa sẵn sàng!')
-      return
-    }
-    let addedCount = 0
-    bundle.items.forEach((it) => {
-      if (it.product) {
-        onAddToCart(it.product, 1, `Size ${fitResult?.recommended_size || 'L'}`)
-        addedCount++
-      }
-    })
-    triggerToast(`🎉 Đã thêm trọn bộ ${addedCount} món (Tiết kiệm ${formatDisplayPrice(bundle.savings)}) vào giỏ hàng thành công!`)
-    setTimeout(() => {
-      loadCartFashionItems()
-    }, 350)
-  }
-
-  // Tự động tải Top 5 Set phối đồ khi mở modal hoặc khi sản phẩm chính thay đổi
-  useEffect(() => {
-    if (isOpen) {
-      fetchTopScoredOutfits(selectedPant || product || undefined)
-    }
-  }, [isOpen, selectedPant?.id, height, weight, gender])
-
-  const triggerToast = (msg: string) => {
-    setToastMsg(msg)
-    setTimeout(() => setToastMsg(''), 3000)
-  }
-
-  const outfitItems = Object.values(selectedOutfit).filter(Boolean) as Product[]
-  const totalOutfitPrice = outfitItems.reduce((sum, item) => {
-    const raw = item.price || item.flashPrice || 0
-    const num = typeof raw === 'number' ? raw : (parseFloat(String(raw).replace(/[^0-9]/g, '')) || 0)
-    return sum + num
-  }, 0)
+import {
+  TryOnMirrorStudio,
+  TryOnMixMatchBuilder,
+  TryOnWardrobeTab,
+  TryOnScannerTab,
+  GemShieldBar,
+  MageConfirmModal,
+  useTryOnLogic,
+} from './tryon'
+import type { VirtualTryOnModalProps } from './tryon'
+
+// Re-export types for backwards compatibility
+export type { ScoredOutfitBundle, OutfitItem } from './tryon'
+
+export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
+  const { isOpen, onClose, product } = props
+  const logic = useTryOnLogic(props)
 
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
       {/* Toast */}
-      {toastMsg && (
+      {logic.toastMsg && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-60 bg-emerald-600 text-white font-black text-xs px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-2">
-          <span>✓</span> {toastMsg}
+          <span>✓</span> {logic.toastMsg}
         </div>
       )}
 
-      {/* Modal xác nhận kích hoạt Mage Ultra HD */}
-      {showMageConfirmModal && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl text-white space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl mx-auto">
-              ⚠️
-            </div>
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-black text-amber-400">
-                Xác Nhận Kích Hoạt Mage Ultra HD
-              </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Chế độ này sẽ gọi trực tiếp mô hình AI của Mage.space và tiêu hao khoảng <strong className="text-amber-300 font-bold">~350 Gem</strong> cho mỗi lần bạn bấm &quot;Ướm Cả Bộ&quot;.
-              </p>
-            </div>
-            <div className="bg-slate-950 p-3 rounded-xl border border-white/10 text-center">
-              <span className="text-[11px] text-slate-400 block mb-0.5">Số dư Gem hiện tại của bạn:</span>
-              <span className="text-lg font-black text-amber-400">
-                {gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gems
-              </span>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowMageConfirmModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer"
-              >
-                Hủy (Dùng 0 Gem)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTryonEngineMode('mage')
-                  setShowMageConfirmModal(false)
-                  triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Cả Bộ"!')
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs shadow-lg transition cursor-pointer"
-              >
-                Tôi Hiểu, Bật Mage
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal xác nhận Mage Ultra HD */}
+      <MageConfirmModal
+        isOpen={logic.showMageConfirmModal}
+        onClose={() => logic.setShowMageConfirmModal(false)}
+        onConfirm={() => {
+          logic.setTryonEngineMode('mage')
+          logic.setShowMageConfirmModal(false)
+          logic.triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Cả Bộ"!')
+        }}
+        gemBalance={logic.gemBalance}
+      />
 
       {/* Modal Dialog */}
       <div 
@@ -1114,21 +61,21 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   AI Neural Studio
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300">
-                Gửi ảnh của bạn + Nhập chiều cao cân nặng + Chọn món đồ để AI ướm thử trang phục chân thực qua ảnh
+              <p className="text-xs text-slate-400">
+                Gửi ảnh của bạn + Nhập chiều cao cân nặng + Chọn món đồ để AI ươm thử trang phục chân thực qua ảnh
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer text-sm font-bold"
+            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm font-black transition cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        {/* Banner Khám Phá 100 Set Phối Đồ AI (100 Set Simulation) */}
+        {/* Banner Khám Phá 100 Set Phối Đồ AI */}
         <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-inner shrink-0">
           <div className="flex items-center gap-2 text-slate-950">
             <span className="text-base shrink-0">⚡</span>
@@ -1139,8 +86,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           <button
             type="button"
             onClick={() => {
-              setIsOutfitModalOpen(true)
-              if (topScoredOutfits.length === 0) fetchTopScoredOutfits()
+              logic.setIsOutfitModalOpen(true)
+              if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
             }}
             className="px-3.5 py-1.5 rounded-xl bg-slate-950 text-amber-300 hover:text-white font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
           >
@@ -1148,965 +95,104 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body: 2 Columns - Ưu tiên hiển thị Ảnh Thử Đồ làm trung tâm */}
+        {/* Modal Body: 2 Columns */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-slate-950/40">
-          {/* THANH BẢO VỆ GEM VÀ CHỌN CHẾ ĐỘ THỬ ĐỒ (GEM SHIELD) */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-3.5 flex flex-wrap items-center justify-between gap-3 text-white shadow-md shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-lg shrink-0">
-                🛡️
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black tracking-wide text-white">CHẾ ĐỘ THỬ ĐỒ:</span>
-                  <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                    tryonEngineMode === 'free'
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-                  }`}>
-                    {tryonEngineMode === 'free' ? '✨ MIỄN PHÍ (0 Gem • Bảo vệ tài khoản)' : '💎 MAGE ULTRA HD (~350 Gem/lần)'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {tryonEngineMode === 'free'
-                    ? 'AI Local đa tầng bóc tách vải & ướm đồ siêu tốc. 0 Gem, không tiêu tốn tài khoản Mage.space của bạn.'
-                    : 'Mô hình Mage Mango 3 Turbo Studio AI. Tiêu hao ~350 Gem mỗi khi bấm Ướm Cả Bộ.'}
-                </p>
-              </div>
-            </div>
+          {/* Thanh bảo vệ Gem & Chế độ thử đồ */}
+          <GemShieldBar
+            tryonEngineMode={logic.tryonEngineMode}
+            onSetEngineMode={(mode) => {
+              logic.setTryonEngineMode(mode)
+              logic.triggerToast(`Đã chuyển sang chế độ ${mode === 'free' ? 'Local AI (0 Gem - Miễn phí)' : 'Mage Ultra HD'}.`)
+            }}
+            onOpenMageConfirm={() => logic.setShowMageConfirmModal(true)}
+            gemBalance={logic.gemBalance}
+          />
 
-            <div className="flex items-center gap-2.5 shrink-0 ml-auto">
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-white/10 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTryonEngineMode('free')
-                    triggerToast('Đã chuyển sang chế độ Local AI (0 Gem - Miễn phí).')
-                  }}
-                  className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
-                    tryonEngineMode === 'free'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>⚡</span> Local AI (0 Gem)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (tryonEngineMode === 'free') {
-                      setShowMageConfirmModal(true)
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
-                    tryonEngineMode === 'mage'
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>💎</span> Mage Ultra HD
-                </button>
-              </div>
-
-              <div className="px-3 py-1.5 bg-slate-800/90 border border-white/10 rounded-xl text-xs flex items-center gap-1.5 font-bold text-slate-300">
-                <span className="text-amber-400">💎</span> Số dư: <span className="font-black text-white">{gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gem</span>
-              </div>
-            </div>
-          </div>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
-            
-            {/* CỘT 1: HERO FITTING MIRROR & HỒ SƠ THỂ HÌNH (5 cols) */}
-            <div className="xl:col-span-5 space-y-4">
-              <div className="bg-slate-900 rounded-3xl p-4 text-white shadow-xl border border-slate-800 flex flex-col justify-between">
-                
-                {/* Header thanh công cụ của Gương Thử Đồ */}
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-3 border-b border-white/10">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('photo')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs ${
-                        activeTab === 'photo'
-                          ? 'bg-emerald-600 text-white ring-1 ring-emerald-400/50'
-                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                      }`}
-                    >
-                      <span>📸</span> Ảnh Mặc Thử AI HD
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('scanner')
-                        if (!extractedGarment) handleScanGarment()
-                      }}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                        activeTab === 'scanner'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
-                      }`}
-                    >
-                      <span>🔬</span> AI Bóc Tách Đồ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('heatmap')}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                        activeTab === 'heatmap'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
-                      }`}
-                    >
-                      <span>🔥</span> Áp Lực Vừa Vặn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsOutfitModalOpen(true)
-                        if (topScoredOutfits.length === 0) fetchTopScoredOutfits()
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 hover:brightness-110 shadow-xs flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <span>✨</span> 100 Set Phối Đồ AI 🔥
-                    </button>
-                  </div>
+            {/* CỘT 1: HERO FITTING MIRROR & HỒ SƠ THỂ HÌNH */}
+            <TryOnMirrorStudio
+              activeTab={logic.activeTab}
+              setActiveTab={logic.setActiveTab}
+              viewMode={logic.viewMode}
+              setViewMode={logic.setViewMode}
+              onOpen100SetsModal={() => {
+                logic.setIsOutfitModalOpen(true)
+                if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
+              }}
+              isLoadingAi={logic.isLoadingAi}
+              userPhoto={logic.userPhoto}
+              userPhotoName={logic.userPhotoName}
+              compositeTryOnImage={logic.compositeTryOnImage}
+              tryonEngineMode={logic.tryonEngineMode}
+              selectedPant={logic.selectedPant}
+              extractedGarment={logic.extractedGarment}
+              isScanningGarment={logic.isScanningGarment}
+              onScanGarment={logic.handleScanGarment}
+              fitResult={logic.fitResult}
+              measurements={logic.measurements}
+              outfitItems={logic.outfitItems}
+              totalOutfitPrice={logic.totalOutfitPrice}
+              onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
+              fileInputRef={logic.fileInputRef}
+              onPhotoUpload={logic.handlePhotoUpload}
+              onClearUserPhoto={logic.handleClearUserPhoto}
+              onSelectPresetModel={logic.handleSelectPresetModel}
+              height={logic.height}
+              setHeight={logic.setHeight}
+              weight={logic.weight}
+              setWeight={logic.setWeight}
+              gender={logic.gender}
+              physiqueInfo={logic.physiqueInfo}
+              currentBmi={logic.currentBmi}
+              onRunTryOn={() => {
+                if (!logic.userPhoto) {
+                  logic.triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                  logic.fileInputRef.current?.click()
+                  return
+                }
+                logic.handleRunTryOn(logic.selectedPant || product || undefined, logic.userPhoto, logic.height, logic.weight, logic.gender)
+              }}
+            />
 
-                  {/* Các nút chế độ khi đang ở tab Ảnh Mặc Thử */}
-                  {activeTab === 'photo' && (
-                    <div className="flex gap-1 bg-black/60 backdrop-blur-md p-1 rounded-xl border border-white/10 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('tryon')}
-                        className={`px-2 py-0.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                          viewMode === 'tryon' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
-                        }`}
-                      >
-                        <span>✨</span> Ảnh Ướm AI
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('original')}
-                        className={`px-2 py-0.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                          viewMode === 'original' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
-                        }`}
-                      >
-                        <span>👤</span> Ảnh Gốc
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('sidebyside')}
-                        className={`px-2 py-0.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                          viewMode === 'sidebyside' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
-                        }`}
-                      >
-                        <span>↔</span> So Sánh
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Khung Display Chính: Chiều cao lớn h-[520px] chuẩn tỷ lệ Studio thời trang */}
-                <div className="relative w-full h-[520px] bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-white/10 shadow-inner">
-                  
-                  {/* TAB 1: ẢNH MẶC THỬ THỰC TẾ (HERO) */}
-                  {activeTab === 'photo' && (
-                    <div className="relative w-full h-full flex items-center justify-center">
-                      
-                      {/* Trạng thái Loading khi AI đang chạy sinh ảnh */}
-                      {isLoadingAi && (
-                        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200">
-                          <div className="relative mb-4">
-                            <div className="w-16 h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center text-xl">✨</div>
-                          </div>
-                          <h4 className="text-white font-black text-sm mb-1.5 flex items-center gap-2">
-                            Đang xử lý Ảnh Mặc Thử AI HD...
-                          </h4>
-                          <p className="text-slate-400 text-xs max-w-sm leading-relaxed">
-                            Hệ thống AI đang phân tích vóc dáng và hoán đổi trang phục sắc nét chuẩn Studio HD
-                          </p>
-                          <div className="mt-4 flex items-center gap-2 text-[11px] text-indigo-400 font-bold bg-indigo-950/70 px-3.5 py-1.5 rounded-full border border-indigo-500/30">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                            ZeroMall AI • Neural Try-On Pipeline
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Chế độ so sánh Song Song (Side by Side) */}
-                      {viewMode === 'sidebyside' ? (
-                        <div className="grid grid-cols-2 gap-3 w-full h-full p-3">
-                          <div className="relative h-full rounded-xl overflow-hidden border border-white/10 bg-slate-900 shadow-md flex items-center justify-center">
-                            {userPhoto ? (
-                              <img
-                                src={userPhoto}
-                                alt="Original User"
-                                className="w-full h-full object-contain bg-slate-900"
-                              />
-                            ) : (
-                              <div className="text-center p-3">
-                                <span className="text-2xl block mb-1">👤</span>
-                                <span className="text-[11px] text-slate-400 font-bold">Chưa có ảnh của bạn</span>
-                              </div>
-                            )}
-                            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-300 border border-white/10">
-                              👤 Ảnh Gốc Ban Đầu
-                            </div>
-                          </div>
-                          <div className="relative h-full rounded-xl overflow-hidden border-2 border-indigo-500/80 bg-slate-900 shadow-md flex items-center justify-center">
-                            {compositeTryOnImage ? (
-                              <img
-                                src={compositeTryOnImage}
-                                alt="AI Try-on Result"
-                                className="w-full h-full object-contain bg-slate-900"
-                              />
-                            ) : (
-                              <div className="text-center p-3">
-                                <span className="text-2xl block mb-1">✨</span>
-                                <span className="text-[11px] text-slate-400 font-bold">Chưa có ảnh ướm thử</span>
-                                <p className="text-[10px] text-slate-500 mt-0.5">Bấm "Ướm Cả Bộ" để AI thử đồ</p>
-                              </div>
-                            )}
-                            <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-600 to-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black text-white shadow-md flex items-center gap-1.5">
-                              <span>✨</span> ZeroMall AI • Ảnh Ướm Thử
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Chế độ xem Đơn To Toàn Màn Hình */
-                        <div className="relative w-full h-full flex items-center justify-center p-2">
-                          {compositeTryOnImage && viewMode === 'tryon' ? (
-                            <>
-                              <img
-                                src={compositeTryOnImage}
-                                alt="Visual Fitting Result"
-                                className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
-                              />
-                              <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-indigo-300 border border-white/15 flex items-center gap-2 shadow-xl">
-                                <span className={`w-2.5 h-2.5 rounded-full ${tryonEngineMode === 'free' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`}></span>
-                                {tryonEngineMode === 'free' ? 'Ảnh Thử Đồ Local AI (0 Gem)' : 'Ảnh Thử Đồ Mage Ultra HD (~350 Gem)'}
-                              </div>
-                            </>
-                          ) : userPhoto ? (
-                            <>
-                              <img
-                                src={userPhoto}
-                                alt="Original User"
-                                className="max-h-full max-w-full object-contain rounded-xl shadow-2xl transition duration-300"
-                              />
-                              <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full text-[11px] font-bold text-slate-300 border border-white/15 flex items-center gap-2 shadow-xl">
-                                <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                                {viewMode === 'original' ? 'Ảnh gốc của bạn' : 'Ảnh gốc (Chưa ướm đồ - Bấm "Ướm Cả Bộ")'}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-center p-6 max-w-md animate-in fade-in duration-200">
-                              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-indigo-950/80 border border-indigo-500/30 flex items-center justify-center text-3xl shadow-inner">
-                                📸
-                              </div>
-                              <h4 className="text-white font-black text-sm mb-1.5">Chưa có ảnh của bạn</h4>
-                              <p className="text-slate-400 text-xs leading-relaxed mb-4">
-                                Vui lòng tải ảnh của bạn lên để AI ướm thử trang phục chân thực nhất. Hệ thống không tự ý thử đồ khi bạn đang duyệt sản phẩm!
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
-                              >
-                                <span>+</span> Tải Ảnh Của Bạn Lên Ngay
-                              </button>
-                            </div>
-                          )}
-
-                          {selectedPant && ((selectedPant.name || '').toLowerCase().includes('quần') || (selectedPant.name || '').toLowerCase().includes('jean') || (selectedPant.name || '').toLowerCase().includes('jogger')) && (
-                            <div className="absolute bottom-3 left-3 bg-indigo-950/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-[10px] font-bold text-indigo-200 border border-indigo-500/30 flex items-center gap-1.5 shadow-lg">
-                              <span>👖</span> Đang ướm Quần vào đôi chân & vóc dáng toàn thân
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* TAB 2: BỘ BÓC TÁCH & QUÉT TRANG PHỤC THÔNG MINH (AI GARMENT SCANNER) */}
-                  {activeTab === 'scanner' && (
-                    <div className="w-full h-full p-4 flex flex-col justify-between overflow-y-auto text-slate-200">
-                      <div>
-                        <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2.5">
-                          <div>
-                            <h4 className="text-sm font-black text-white flex items-center gap-2">
-                              <span>🔬</span> Bộ Bóc Tách Trang Phục Từng Lớp (FashnHumanParser AI)
-                            </h4>
-                            <p className="text-[11px] text-slate-400">
-                              Tự động bóc tách vải, khử nền sạch 100%, tạo Alpha Matte & trích xuất bảng màu
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleScanGarment()}
-                            disabled={isScanningGarment}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
-                          >
-                            <span>⚡</span> {isScanningGarment ? 'Đang Quét...' : 'Quét Lại Món Này'}
-                          </button>
-                        </div>
-
-                        {/* 3 Cột Trực Quan: Ảnh Gốc -> Mặt Nạ B&W -> Đồ Sạch Nền Trong Suốt */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                          {/* Cột 1: Ảnh Gốc */}
-                          <div className="bg-slate-900 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 self-start">
-                              1. Ảnh Gốc Món Đồ
-                            </span>
-                            <div className="w-full h-52 rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center border border-white/5">
-                              <img
-                                src={selectedPant?.image || ''}
-                                alt="Garment Original"
-                                className="max-h-full max-w-full object-contain"
-                              />
-                            </div>
-                            <span className="text-[10px] text-slate-400 mt-1.5 text-center truncate max-w-full">
-                              {selectedPant?.name}
-                            </span>
-                          </div>
-
-                          {/* Cột 2: Mặt Nạ Phân Đoạn (Segmentation Mask) */}
-                          <div className="bg-slate-900 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
-                              <span>🎭</span> 2. Mặt Nạ Phân Đoạn AI
-                            </span>
-                            <div className="w-full h-52 rounded-lg overflow-hidden bg-black flex items-center justify-center border border-white/5 relative">
-                              {extractedGarment?.mask_url ? (
-                                <img
-                                  src={extractedGarment.mask_url}
-                                  alt="AI Garment Mask"
-                                  className="max-h-full max-w-full object-contain"
-                                />
-                              ) : (
-                                <div className="text-center p-4">
-                                  <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                  <span className="text-xs text-slate-400">Đang tạo mặt nạ nhị phân...</span>
-                                </div>
-                              )}
-                              <div className="absolute bottom-1 right-1 bg-black/80 px-2 py-0.5 rounded text-[9px] font-mono text-emerald-400 border border-white/10">
-                                {extractedGarment?.pixels_count ? `${extractedGarment.pixels_count.toLocaleString()} px` : 'Mask 0/1'}
-                              </div>
-                            </div>
-                            <span className="text-[10px] text-slate-400 mt-1.5">
-                              Nhãn: {extractedGarment?.detected_category?.toUpperCase() || 'CHƯA QUÉT'}
-                            </span>
-                          </div>
-
-                          {/* Cột 3: Món Đồ Sạch Nền Trong Suốt */}
-                          <div className="bg-slate-900 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
-                              <span>✨</span> 3. Đồ Bóc Tách Sạch Nền
-                            </span>
-                            <div 
-                              className="w-full h-52 rounded-lg overflow-hidden flex items-center justify-center border border-white/5 relative"
-                              style={{
-                                backgroundImage: `linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)`,
-                                backgroundSize: '16px 16px',
-                                backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px'
-                              }}
-                            >
-                              {extractedGarment?.extracted_garment_url ? (
-                                <img
-                                  src={extractedGarment.extracted_garment_url}
-                                  alt="Isolated Garment"
-                                  className="max-h-full max-w-full object-contain drop-shadow-2xl"
-                                />
-                              ) : (
-                                <img
-                                  src={selectedPant?.image || ''}
-                                  alt="Isolated Garment"
-                                  className="max-h-full max-w-full object-contain opacity-70"
-                                />
-                              )}
-                              <div className="absolute bottom-1 right-1 bg-emerald-950/80 px-2 py-0.5 rounded text-[9px] font-mono text-emerald-300 border border-emerald-500/30">
-                                Alpha PNG 100%
-                              </div>
-                            </div>
-                            <span className="text-[10px] text-slate-400 mt-1.5">
-                              Khung: {extractedGarment?.dimensions?.width || 0} × {extractedGarment?.dimensions?.height || 0} px
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Thẻ Phân Tích Thuộc Tính Vải & Màu Sắc */}
-                        <div className="bg-slate-900/90 rounded-xl p-3 border border-white/10 flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-300">Bảng màu vải chủ đạo:</span>
-                            <div className="flex items-center gap-1.5">
-                              {(extractedGarment?.dominant_colors || ['#3b82f6', '#1e293b']).map((c, i) => (
-                                <div key={i} className="flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded-lg border border-white/10">
-                                  <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: c }}></span>
-                                  <span className="font-mono text-[10px] text-slate-300">{c}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab('photo')}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
-                            >
-                              <span>✨</span> Xem Ảnh Thử Bằng Neural AI
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: BẢN ĐỒ ÁP LỰC VỪA VẶN */}
-                  {activeTab === 'heatmap' && fitResult && (
-                    <div className="w-full h-full p-6 flex flex-col justify-center space-y-3.5 max-w-md mx-auto text-slate-800">
-                      <h4 className="text-white font-bold text-center text-sm mb-2">🔥 Bản Đồ Áp Lực Co Giãn Vải Theo Vóc Dáng</h4>
-                      {Object.entries(fitResult.zones).map(([key, zone]) => (
-                        <div key={key} className="bg-white/95 backdrop-blur-md p-3 rounded-xl border border-white/20 space-y-1.5 shadow-md">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-slate-800">{zone.label}</span>
-                            <span
-                              className="font-black px-2 py-0.5 rounded text-[10px]"
-                              style={{ backgroundColor: `${zone.color}25`, color: zone.color }}
-                            >
-                              {zone.status}
-                            </span>
-                          </div>
-                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{
-                                width: `${Math.min(100, Math.max(30, 85 - Math.abs(zone.diff_percent || zone.diff_cm || 0) * 3))}%`,
-                                backgroundColor: zone.color
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Món Đồ Đang Mặc & Nút Thao Tác Nhanh */}
-                {outfitItems.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex -space-x-2 overflow-hidden shrink-0">
-                        {outfitItems.map((item, idx) => (
-                          <img
-                            key={item.id + idx}
-                            src={item.image || 'https://placehold.co/80x80'}
-                            alt={item.name}
-                            className="w-10 h-10 object-cover rounded-xl border-2 border-slate-900 bg-white shadow-sm"
-                            title={item.name}
-                          />
-                        ))}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider block">
-                          {outfitItems.length > 1 ? `Đang Phối Bộ ${outfitItems.length} Món` : 'Đang Thử Trên Người'}
-                        </span>
-                        <h4 className="font-bold text-white text-xs sm:text-sm truncate max-w-[280px]">
-                          {outfitItems.map(i => i.name).join(' + ')}
-                        </h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-rose-400 font-black text-xs sm:text-sm">
-                            {totalOutfitPrice.toLocaleString('vi-VN')}đ
-                          </span>
-                          <span className="text-emerald-400 font-bold text-[10px] bg-emerald-500/20 px-2 py-0.2 rounded-full border border-emerald-500/30">
-                            Khớp vóc dáng: {fitResult?.fit_score || 95}% • Size {fitResult?.recommended_size || measurements?.recommended_pant_size || 'L'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {compositeTryOnImage && (
-                        <a
-                          href={compositeTryOnImage}
-                          download={`zeromall-outfit-${Date.now()}.jpg`}
-                          className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 border border-white/10"
-                          title="Tải ảnh mặc thử độ phân giải cao"
-                        >
-                          <span>⬇</span> Tải Ảnh HD
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleAddWholeOutfitToCart}
-                        className="px-4 py-2 bg-[#ee4d2d] hover:bg-[#d93b1d] text-white rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer shadow-md hover:shadow-lg active:scale-[0.98] flex items-center gap-1.5"
-                      >
-                        <span>🛒</span> {outfitItems.length > 1 ? `Thêm Trọn Bộ (${outfitItems.length} Món)` : 'Thêm Vào Giỏ Hàng'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* KHỐI 2: THÊM ẢNH NGƯỜI DÙNG ĐỂ THỬ ĐỒ (PROFILE & SỐ ĐO) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3.5 shadow-xl text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                      <span>📸</span> Thêm Ảnh Người Dùng
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      {((selectedPant?.name || '').toLowerCase().includes('quần') || (selectedPant?.name || '').toLowerCase().includes('jean') || (selectedPant?.name || '').toLowerCase().includes('jogger'))
-                        ? 'AI nhận diện vóc dáng và ghép quần vào đôi chân (chân dung hoặc toàn thân)'
-                        : 'Tải ảnh của bạn để AI tự động ướm đồ lên người bạn'}
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                    {height}cm • {weight}kg
-                  </span>
-                </div>
-
-                {/* Hero CTA Box: Bấm để chọn ảnh từ máy tính / điện thoại */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-emerald-400/60 hover:border-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition group"
-                >
-                  <div className="relative shrink-0">
-                    {userPhoto ? (
-                      <img
-                        src={userPhoto}
-                        alt="Avatar"
-                        className="w-13 h-13 sm:w-14 sm:h-14 object-cover rounded-xl border border-emerald-400/50 shadow-sm group-hover:scale-105 transition bg-slate-900"
-                      />
-                    ) : (
-                      <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-emerald-400/50 bg-emerald-900/30 flex items-center justify-center text-xl">
-                        👤
-                      </div>
-                    )}
-                    <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shadow">
-                      📷
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-black text-white group-hover:text-emerald-300 flex items-center gap-1">
-                      <span>+</span> Tải Ảnh Của Bạn Lên Đây
-                    </p>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-[11px] text-slate-400 truncate">
-                        Đang dùng: <span className="font-bold text-slate-200">{userPhoto ? (userPhotoName || 'Ảnh của bạn') : 'Chưa có ảnh'}</span>
-                      </p>
-                      {userPhoto && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleClearUserPhoto()
-                          }}
-                          className="text-[10px] text-rose-400 hover:text-rose-300 font-bold ml-2 underline shrink-0 cursor-pointer"
-                        >
-                          Xóa ảnh
-                        </button>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-emerald-400 font-bold block mt-0.5 group-hover:underline">
-                      Chọn file ảnh từ thiết bị (JPG, PNG) ➔
-                    </span>
-                  </div>
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-
-                {/* Quick Model Selector Pills */}
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                    Hoặc chọn nhanh ảnh mẫu thử có sẵn:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80', 'Người Mẫu Nam', 'male')}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                        userPhoto.includes('photo-1506794778202')
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      <span>👨</span> Người Mẫu Nam
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectPresetModel('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80', 'Người Mẫu Nữ', 'female')}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer truncate ${
-                        userPhoto.includes('photo-1534528741775')
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      <span>👩</span> Người Mẫu Nữ
-                    </button>
-                  </div>
-                </div>
-
-                {/* Nhập Chiều cao & Cân nặng để AI tự động tính vóc dáng */}
-                <div className="pt-2.5 border-t border-slate-800 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                        Chiều cao (cm)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="120"
-                          max="220"
-                          value={height || ''}
-                          onChange={(e) => setHeight(Number(e.target.value))}
-                          placeholder="175"
-                          className="w-full px-2.5 py-1.5 text-xs font-black text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                        />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                          cm
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                        Cân nặng (kg)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="30"
-                          max="150"
-                          value={weight || ''}
-                          onChange={(e) => setWeight(Number(e.target.value))}
-                          placeholder="50"
-                          className="w-full px-2.5 py-1.5 text-xs font-black text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                        />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
-                          kg
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Thông tin vóc dáng AI tự tính & Nút cập nhật số đo */}
-                  <div className="flex items-center justify-between text-[11px] bg-slate-800/80 px-2.5 py-1.5 rounded-xl border border-slate-700">
-                    <span className="text-slate-300 truncate">
-                      Vóc dáng: <strong className="text-indigo-300">{physiqueInfo.badge}</strong> (BMI {currentBmi})
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isLoadingAi || !selectedPant || !height || !weight}
-                      onClick={() => {
-                        if (!userPhoto) {
-                          triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-                          fileInputRef.current?.click()
-                          return
-                        }
-                        handleRunTryOn(selectedPant || product || undefined, userPhoto, height, weight, gender)
-                      }}
-                      className="text-emerald-400 hover:text-emerald-300 font-black text-[11px] shrink-0 ml-2 hover:underline cursor-pointer disabled:opacity-50"
-                    >
-                      Áp dụng ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* KHỐI 3: LỜI KHUYÊN TỪ AI STYLIST */}
-              {fitResult && (
-                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-3xl p-3.5 flex items-start gap-2.5 text-xs text-emerald-200 leading-relaxed shadow-md">
-                  <span className="text-base shrink-0">💡</span>
-                  <div>
-                    <p className="font-black text-emerald-300 text-xs mb-0.5">Phân Tích AI Stylist:</p>
-                    <p className="text-[11px] text-emerald-200/90">{fitResult.stylist_fit_advice}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* CỘT 2: TRUNG TÂM PHỐI ĐỒ & 100 SET PHỐI AI (7 cols) */}
+            {/* CỘT 2: TRUNG TÂM PHỐI ĐỒ & TỦ ĐỒ */}
             <div className="xl:col-span-7 space-y-4 flex flex-col">
-              
-              {/* KHỐI 1: BẢNG PHỐI ĐỒ ĐA NĂNG AI (OUTFIT MIX & MATCH BUILDER) */}
-              <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-3.5 text-white shadow-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 uppercase tracking-wide">
-                      <span>🎨</span> Bảng Phối Đồ AI (Mix & Match)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-                    {outfitItems.length}/4 Món Đã Phối
-                  </span>
-                </div>
+              {/* Bảng Mix & Match 4 món */}
+              <TryOnMixMatchBuilder
+                selectedOutfit={logic.selectedOutfit}
+                activeOutfitSlot={logic.activeOutfitSlot}
+                onSelectSlot={logic.handleSelectSlot}
+                onRemoveSlot={logic.handleRemoveSlot}
+                onApplyPreset={logic.handleApplyPreset}
+                isLoadingAi={logic.isLoadingAi}
+                tryonEngineMode={logic.tryonEngineMode}
+                totalOutfitPrice={logic.totalOutfitPrice}
+                outfitItems={logic.outfitItems}
+                onTryOnWholeOutfit={() => {
+                  if (!logic.userPhoto) {
+                    logic.triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
+                    logic.fileInputRef.current?.click()
+                    return
+                  }
+                  logic.handleRunTryOn(undefined, undefined, undefined, undefined, undefined, logic.selectedOutfit)
+                }}
+                onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
+                selectedOutfitBundleId={logic.selectedOutfitBundleId}
+                topScoredOutfits={logic.topScoredOutfits}
+                height={logic.height}
+                weight={logic.weight}
+                onOpen100SetsModal={() => {
+                  logic.setIsOutfitModalOpen(true)
+                  if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
+                }}
+              />
 
-                <p className="text-[11px] text-slate-400">
-                  Bấm vào từng ô để chọn phối áo, quần, giày dép, mũ nón... AI sẽ tự động ướm trọn bộ lên cơ thể!
-                </p>
-
-                {/* 4 NGĂN PHỐI ĐỒ: Áo, Quần, Giày, Mũ */}
-                <div className="grid grid-cols-4 gap-2">
-                  {/* Ô 1: ÁO */}
-                  <div
-                    onClick={() => handleSelectSlot('top')}
-                    className={`relative p-2 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
-                      activeOutfitSlot === 'top'
-                        ? 'border-indigo-400 bg-indigo-950/60 ring-2 ring-indigo-500/40 shadow-md'
-                        : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="text-[10px] font-black uppercase text-indigo-300 mb-1">👔 Áo</span>
-                    {selectedOutfit.top ? (
-                      <div className="w-full space-y-1">
-                        <div className="relative w-12 h-12 mx-auto">
-                          <img
-                            src={selectedOutfit.top.image || 'https://placehold.co/60x60'}
-                            alt={selectedOutfit.top.name}
-                            className="w-full h-full object-cover rounded-lg border border-white/20 bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoveSlot('top', e)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-bold shadow hover:bg-rose-500 cursor-pointer"
-                            title="Gỡ áo"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <p className="text-[9px] font-bold text-white truncate max-w-[70px]">{selectedOutfit.top.name}</p>
-                      </div>
-                    ) : (
-                      <div className="h-12 flex flex-col items-center justify-center text-slate-500 hover:text-indigo-300">
-                        <span className="text-sm">+</span>
-                        <span className="text-[9px] font-bold">Chọn Áo</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Ô 2: QUẦN / VÁY */}
-                  <div
-                    onClick={() => handleSelectSlot('bottom')}
-                    className={`relative p-2 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
-                      activeOutfitSlot === 'bottom'
-                        ? 'border-indigo-400 bg-indigo-950/60 ring-2 ring-indigo-500/40 shadow-md'
-                        : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="text-[10px] font-black uppercase text-indigo-300 mb-1">👖 Quần/Váy</span>
-                    {selectedOutfit.bottom ? (
-                      <div className="w-full space-y-1">
-                        <div className="relative w-12 h-12 mx-auto">
-                          <img
-                            src={selectedOutfit.bottom.image || 'https://placehold.co/60x60'}
-                            alt={selectedOutfit.bottom.name}
-                            className="w-full h-full object-cover rounded-lg border border-white/20 bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoveSlot('bottom', e)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-bold shadow hover:bg-rose-500 cursor-pointer"
-                            title="Gỡ quần"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <p className="text-[9px] font-bold text-white truncate max-w-[70px]">{selectedOutfit.bottom.name}</p>
-                      </div>
-                    ) : (
-                      <div className="h-12 flex flex-col items-center justify-center text-slate-500 hover:text-indigo-300">
-                        <span className="text-sm">+</span>
-                        <span className="text-[9px] font-bold">Chọn Quần</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Ô 3: GIÀY / DÉP */}
-                  <div
-                    onClick={() => handleSelectSlot('shoes')}
-                    className={`relative p-2 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
-                      activeOutfitSlot === 'shoes'
-                        ? 'border-indigo-400 bg-indigo-950/60 ring-2 ring-indigo-500/40 shadow-md'
-                        : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="text-[10px] font-black uppercase text-indigo-300 mb-1">👟 Giày/Dép</span>
-                    {selectedOutfit.shoes ? (
-                      <div className="w-full space-y-1">
-                        <div className="relative w-12 h-12 mx-auto">
-                          <img
-                            src={selectedOutfit.shoes.image || 'https://placehold.co/60x60'}
-                            alt={selectedOutfit.shoes.name}
-                            className="w-full h-full object-cover rounded-lg border border-white/20 bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoveSlot('shoes', e)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-bold shadow hover:bg-rose-500 cursor-pointer"
-                            title="Gỡ giày"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <p className="text-[9px] font-bold text-white truncate max-w-[70px]">{selectedOutfit.shoes.name}</p>
-                      </div>
-                    ) : (
-                      <div className="h-12 flex flex-col items-center justify-center text-slate-500 hover:text-indigo-300">
-                        <span className="text-sm">+</span>
-                        <span className="text-[9px] font-bold">Chọn Giày</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Ô 4: MŨ / PHỤ KIỆN */}
-                  <div
-                    onClick={() => handleSelectSlot('accessory')}
-                    className={`relative p-2 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
-                      activeOutfitSlot === 'accessory'
-                        ? 'border-indigo-400 bg-indigo-950/60 ring-2 ring-indigo-500/40 shadow-md'
-                        : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="text-[10px] font-black uppercase text-indigo-300 mb-1">🧢 Mũ/Nón</span>
-                    {selectedOutfit.accessory ? (
-                      <div className="w-full space-y-1">
-                        <div className="relative w-12 h-12 mx-auto">
-                          <img
-                            src={selectedOutfit.accessory.image || 'https://placehold.co/60x60'}
-                            alt={selectedOutfit.accessory.name}
-                            className="w-full h-full object-cover rounded-lg border border-white/20 bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => handleRemoveSlot('accessory', e)}
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-bold shadow hover:bg-rose-500 cursor-pointer"
-                            title="Gỡ mũ"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <p className="text-[9px] font-bold text-white truncate max-w-[70px]">{selectedOutfit.accessory.name}</p>
-                      </div>
-                    ) : (
-                      <div className="h-12 flex flex-col items-center justify-center text-slate-500 hover:text-indigo-300">
-                        <span className="text-sm">+</span>
-                        <span className="text-[9px] font-bold">Chọn Mũ</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Gợi ý phối set nhanh */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
-                  <span className="text-[10px] font-bold text-slate-400">Gợi ý phối sẵn:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyPreset('streetwear')}
-                    className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition cursor-pointer"
-                  >
-                    🔥 Set Streetwear (Bomber+Jean+Sneaker)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyPreset('office')}
-                    className="px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-500/30 transition cursor-pointer"
-                  >
-                    👔 Set Công Sở (Sơ mi+Quần tây+Giày)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApplyPreset('sport')}
-                    className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition cursor-pointer"
-                  >
-                    ⚡ Set Thể Thao (Thun+Jogger+Sneaker)
-                  </button>
-                </div>
-
-                {/* Total Outfit Price & Buy Whole Set Button */}
-                {outfitItems.length > 0 && (
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Tổng {outfitItems.length} món trong bộ:</span>
-                      <span className="text-sm font-black text-rose-400">{totalOutfitPrice.toLocaleString('vi-VN')}đ</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!userPhoto) {
-                            triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-                            fileInputRef.current?.click()
-                            return
-                          }
-                          handleRunTryOn(undefined, undefined, undefined, undefined, undefined, selectedOutfit)
-                        }}
-                        disabled={isLoadingAi}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md ${
-                          tryonEngineMode === 'free'
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950'
-                        }`}
-                      >
-                        <span>✨</span> {isLoadingAi ? 'Đang Ướm...' : (tryonEngineMode === 'free' ? 'Ướm Cả Bộ (0 Gem)' : 'Ướm Cả Bộ (~350 Gem)')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAddWholeOutfitToCart}
-                        className="px-3 py-1.5 bg-[#ee4d2d] hover:bg-[#d93b1d] text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-md"
-                      >
-                        <span>🛒</span> Mua Cả Bộ
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Banner CTA: Mở Modal 100 Set Phối Đồ AI */}
-                <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border border-amber-500/30 rounded-2xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md mt-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 flex items-center justify-center font-black text-lg shrink-0 shadow-sm">
-                      ⚡
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-amber-300 uppercase">100 Set Phối Đồ AI (AI Stylist)</span>
-                        <span className="text-[10px] font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full">
-                          Top 5 Đẹp Nhất
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 mt-0.5">
-                        {selectedOutfitBundleId
-                          ? `Đang chọn: ${topScoredOutfits.find(o => o.id === selectedOutfitBundleId)?.title || 'Set AI'} (Giảm 8% Combo)`
-                          : `Mô phỏng 100 bộ phối từ kho ZeroMall theo vóc dáng (${height}cm • ${weight}kg).`}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOutfitModalOpen(true)
-                      if (topScoredOutfits.length === 0) fetchTopScoredOutfits()
-                    }}
-                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 ml-auto sm:ml-0"
-                  >
-                    <span>✨</span> Chọn Set Đồ (100 Set) ➔
-                  </button>
-                </div>
-              </div>
-
-              {/* BỘ CHUYỂN TAB CỘT 2: 100 Set Phối Đồ AI (Mở Modal) vs Tủ Đồ / Giỏ Hàng vs Scanner */}
+              {/* Bộ chuyển tab Cột 2 */}
               <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setIsOutfitModalOpen(true)
-                    if (topScoredOutfits.length === 0) fetchTopScoredOutfits()
+                    logic.setIsOutfitModalOpen(true)
+                    if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
                   }}
                   className="px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
@@ -2118,9 +204,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setRightColTab('wardrobe')}
+                  onClick={() => logic.setRightColTab('wardrobe')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                    rightColTab === 'wardrobe'
+                    logic.rightColTab === 'wardrobe'
                       ? 'bg-indigo-600 text-white shadow-md'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
@@ -2130,9 +216,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setRightColTab('scanner')}
+                  onClick={() => logic.setRightColTab('scanner')}
                   className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                    rightColTab === 'scanner'
+                    logic.rightColTab === 'scanner'
                       ? 'bg-indigo-600 text-white shadow-md'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
@@ -2141,8 +227,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 </button>
               </div>
 
-              {/* TAB 1: MODAL LAUNCHER CHO 100 SET PHỐI ĐỒ AI */}
-              {rightColTab === 'outfits100' && (
+              {/* Tab 1: Launcher Card */}
+              {logic.rightColTab === 'outfits100' && (
                 <div className="bg-slate-900 border border-indigo-500/30 rounded-3xl p-6 text-white shadow-2xl space-y-4 text-center">
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 flex items-center justify-center font-black text-2xl shadow-lg">
                     ⚡
@@ -2152,7 +238,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       KHO 100 SET PHỐI ĐỒ AI (AI STYLIST)
                     </h3>
                     <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                      AI đã mô phỏng 100 bộ phối từ kho ZeroMall xoay quanh <strong className="text-amber-300">{(selectedPant || product || outfitItems[0])?.name || 'món đồ của bạn'}</strong> và chọn lọc 5 set điểm cao nhất theo vóc dáng ({height}cm • {weight}kg).
+                      AI đã mô phỏng 100 bộ phối từ kho ZeroMall xoay quanh <strong className="text-amber-300">{(logic.selectedPant || product || logic.outfitItems[0])?.name || 'món đồ của bạn'}</strong> và chọn lọc 5 set điểm cao nhất theo vóc dáng ({logic.height}cm • {logic.weight}kg).
                     </p>
                   </div>
 
@@ -2160,8 +246,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setIsOutfitModalOpen(true)
-                        if (topScoredOutfits.length === 0) fetchTopScoredOutfits()
+                        logic.setIsOutfitModalOpen(true)
+                        if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
                       }}
                       className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl transition flex items-center gap-2 cursor-pointer active:scale-95"
                     >
@@ -2169,7 +255,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setRightColTab('wardrobe')}
+                      onClick={() => logic.setRightColTab('wardrobe')}
                       className="px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
                     >
                       🛍️ Xem Kho Đồ / Giỏ Hàng
@@ -2178,338 +264,63 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: CHỌN MÓN ĐỂ PHỐI (KHO & GIỎ HÀNG) */}
-              {rightColTab === 'wardrobe' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 text-white shadow-xl space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                        <span>🛍️</span> Chọn Món Để Phối Vào Bảng Đồ
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        Chọn món để gắn vào ô hoặc bấm <strong>🎯 Phối 100 set</strong> để AI tạo bộ phối đẹp xoay quanh món đó
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
-                      {sourceTab === 'cart'
-                        ? `${cartFashionItems.length} món trong giỏ`
-                        : searchQuery.trim()
-                        ? `${searchResults.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} kết quả`
-                        : `${availablePants.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} mẫu`}
-                    </span>
-                  </div>
-
-                  {/* BỘ CHUYỂN NGUỒN: TRONG GIỎ HÀNG vs GỢI Ý CSDL */}
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-800/80 rounded-xl border border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => setSourceTab('cart')}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        sourceTab === 'cart'
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>🛒</span> Trong Giỏ Hàng
-                      {cartFashionItems.length > 0 && (
-                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-indigo-900 text-white">
-                          {cartFashionItems.length}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSourceTab('catalog')}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                        sourceTab === 'catalog'
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <span>💡</span> Kho Hàng ZeroMall
-                    </button>
-                  </div>
-
-                  {/* Nút Tải Ảnh Món Đồ Bất Kỳ Của Bạn */}
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => customGarmentInputRef.current?.click()}
-                      disabled={isScanningGarment}
-                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500/50 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <span>📸</span> {isScanningGarment ? 'AI Đang Quét...' : 'Tải Ảnh Đồ Của Bạn Để Thử & Phối 100 Set'}
-                    </button>
-                    <input
-                      ref={customGarmentInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCustomGarmentUpload}
-                      className="hidden"
-                    />
-                  </div>
-
-                  {/* Danh mục lọc */}
-                  <div className="flex gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
-                    {[
-                      { key: 'all', label: 'Tất cả' },
-                      { key: 'top', label: '👔 Áo (Tops)' },
-                      { key: 'bottom', label: '👖 Quần & Váy' },
-                      { key: 'shoes', label: '👟 Giày & Dép' },
-                      { key: 'accessory', label: '🧢 Phụ kiện' }
-                    ].map((tab) => (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setCategoryFilter(tab.key as any)}
-                        className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition cursor-pointer text-xs ${
-                          categoryFilter === tab.key
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Ô Tìm Kiếm (khi ở Catalog) */}
-                  {sourceTab === 'catalog' && (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => handleSearchDatabase(e.target.value)}
-                        placeholder="🔍 Tìm bất kỳ món nào (áo, sơ mi, jean, sneaker...)"
-                        className="w-full pl-8 pr-8 py-2 text-xs font-bold text-white bg-slate-800 border border-slate-700 rounded-xl focus:bg-slate-750 focus:border-indigo-500 transition shadow-2xs"
-                      />
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery('')
-                            setSearchResults([])
-                          }}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold w-5 h-5 flex items-center justify-center cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Danh sách items */}
-                  {isSearchingDb ? (
-                    <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
-                      <span className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
-                      Đang tìm kiếm đồ thời trang trong database ZeroMall...
-                    </div>
-                  ) : isLoadingPants ? (
-                    <div className="text-center py-8 text-xs text-slate-400 flex flex-col items-center gap-2">
-                      <span className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
-                      Đang nạp gợi ý từ CSDL ZeroMall...
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                      {(sourceTab === 'cart' ? cartFashionItems.map(c => c.product) : (searchQuery.trim() ? searchResults : availablePants))
-                        .filter((p) => {
-                          const slot = detectItemSlot(p)
-                          if (!slot) return false
-                          if (categoryFilter === 'all') return true
-                          return slot === categoryFilter
-                        })
-                        .map((item) => {
-                          const isEquipped = Object.values(selectedOutfit).some(it => it?.id === item.id)
-                          return (
-                            <div
-                              key={item.id}
-                              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-3 ${
-                                isEquipped
-                                  ? 'border-indigo-500 bg-indigo-950/60 ring-1 ring-indigo-500/40'
-                                  : 'border-slate-800 hover:border-slate-700 bg-slate-950/60'
-                              }`}
-                            >
-                              <img
-                                src={item.image || 'https://placehold.co/80x100?text=Item'}
-                                alt={item.name}
-                                className="w-12 h-14 object-cover rounded-xl border border-white/10 shrink-0 bg-white"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-bold truncate ${isEquipped ? 'text-indigo-200' : 'text-slate-200'}`}>
-                                  {item.name}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs font-black text-rose-400">
-                                    {formatDisplayPrice(item.price || item.flashPrice)}
-                                  </span>
-                                  <span className="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
-                                    {getSlotBadgeText(item)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAnchorItemTo100Sets(item)}
-                                  className="px-2.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
-                                  title="Phối 100 set đẹp xoay quanh món này"
-                                >
-                                  <span>🎯</span> Phối 100 Set
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEquipItem(item)}
-                                  className={`px-2 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                                    isEquipped
-                                      ? 'bg-indigo-600 text-white'
-                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                                  }`}
-                                >
-                                  {isEquipped ? '✓ Đang Phối' : '+ Phối'}
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
-
-                      {searchQuery.trim() && searchResults.length === 0 && (
-                        <div className="text-center py-6 px-3 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 text-slate-400 text-xs">
-                          Không tìm thấy món đồ thời trang nào khớp với &quot;{searchQuery}&quot; trong kho.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Tab 2: Tủ đồ & Giỏ hàng */}
+              {logic.rightColTab === 'wardrobe' && (
+                <TryOnWardrobeTab
+                  sourceTab={logic.sourceTab}
+                  setSourceTab={logic.setSourceTab}
+                  cartFashionItems={logic.cartFashionItems}
+                  availablePants={logic.availablePants}
+                  selectedOutfit={logic.selectedOutfit}
+                  categoryFilter={logic.categoryFilter}
+                  setCategoryFilter={logic.setCategoryFilter}
+                  searchQuery={logic.searchQuery}
+                  setSearchQuery={logic.setSearchQuery}
+                  searchResults={logic.searchResults}
+                  setSearchResults={logic.setSearchResults}
+                  isSearchingDb={logic.isSearchingDb}
+                  isLoadingPants={logic.isLoadingPants}
+                  isScanningGarment={logic.isScanningGarment}
+                  onSearchDatabase={logic.handleSearchDatabase}
+                  onEquipItem={logic.handleEquipItem}
+                  onAnchorItemTo100Sets={logic.handleAnchorItemTo100Sets}
+                  onCustomGarmentUpload={logic.handleCustomGarmentUpload}
+                  customGarmentInputRef={logic.customGarmentInputRef}
+                />
               )}
 
-              {/* TAB 3: BỘ QUÉT BÓC TÁCH TRANG PHỤC (AI SCANNER) */}
-              {rightColTab === 'scanner' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 text-white shadow-xl space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                    <div>
-                      <h4 className="text-sm font-black text-white flex items-center gap-2">
-                        <span>🔬</span> Bộ Bóc Tách Trang Phục Từng Lớp (FashnHumanParser AI)
-                      </h4>
-                      <p className="text-[11px] text-slate-400">
-                        Bóc tách vải, khử nền sạch 100%, tạo Alpha Matte & trích xuất bảng màu
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleScanGarment()}
-                      disabled={isScanningGarment}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
-                    >
-                      <span>⚡</span> {isScanningGarment ? 'Đang Quét...' : 'Quét Lại Món Này'}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 self-start">
-                        1. Ảnh Gốc Món Đồ
-                      </span>
-                      <div className="w-full h-44 rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center border border-white/5">
-                        <img
-                          src={selectedPant?.image || ''}
-                          alt="Garment Original"
-                          className="max-h-full max-w-full object-contain"
-                        />
-                      </div>
-                      <span className="text-[10px] text-slate-400 mt-1.5 text-center truncate max-w-full">
-                        {selectedPant?.name}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
-                        <span>🎭</span> 2. Mặt Nạ Phân Đoạn AI
-                      </span>
-                      <div className="w-full h-44 rounded-lg overflow-hidden bg-black flex items-center justify-center border border-white/5 relative">
-                        {extractedGarment?.mask_url ? (
-                          <img
-                            src={extractedGarment.mask_url}
-                            alt="AI Garment Mask"
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <div className="text-center p-4">
-                            <span className="text-xs text-slate-400">Mặt nạ nhị phân 0/1</span>
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 mt-1.5">
-                        Nhãn: {extractedGarment?.detected_category?.toUpperCase() || 'TRANG PHỤC'}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-950 rounded-xl p-2.5 border border-white/10 flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5 self-start flex items-center gap-1">
-                        <span>✨</span> 3. Đồ Bóc Tách Sạch Nền
-                      </span>
-                      <div 
-                        className="w-full h-44 rounded-lg overflow-hidden flex items-center justify-center border border-white/5 relative"
-                        style={{
-                          backgroundImage: `linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)`,
-                          backgroundSize: '16px 16px',
-                          backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px'
-                        }}
-                      >
-                        {extractedGarment?.extracted_garment_url ? (
-                          <img
-                            src={extractedGarment.extracted_garment_url}
-                            alt="Isolated Garment"
-                            className="max-h-full max-w-full object-contain drop-shadow-2xl"
-                          />
-                        ) : (
-                          <img
-                            src={selectedPant?.image || ''}
-                            alt="Isolated Garment"
-                            className="max-h-full max-w-full object-contain opacity-70"
-                          />
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 mt-1.5">Alpha PNG 100%</span>
-                    </div>
-                  </div>
-
-                  {selectedPant && (
-                    <div className="pt-2 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleAnchorItemTo100Sets(selectedPant)}
-                        className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 transition flex items-center gap-1.5 shadow-md cursor-pointer"
-                      >
-                        <span>🎯</span> Phối 100 Set Với Món Vừa Quét ➔
-                      </button>
-                    </div>
-                  )}
-                </div>
+              {/* Tab 3: AI Scanner */}
+              {logic.rightColTab === 'scanner' && (
+                <TryOnScannerTab
+                  selectedPant={logic.selectedPant}
+                  extractedGarment={logic.extractedGarment}
+                  isScanningGarment={logic.isScanningGarment}
+                  onScanGarment={logic.handleScanGarment}
+                  onAnchorItemTo100Sets={logic.handleAnchorItemTo100Sets}
+                />
               )}
-
             </div>
           </div>
         </div>
       </div>
 
-      {/* MODAL RIÊNG BIỆT: CHỌN 100 SET PHỐI ĐỒ AI (AI STYLIST) */}
+      {/* Modal riêng biệt: Chọn 100 Set Phối Đồ AI */}
       <OutfitSelectionModal
-        isOpen={isOutfitModalOpen}
-        onClose={() => setIsOutfitModalOpen(false)}
-        anchorItem={selectedPant || product || outfitItems[0] || null}
-        height={height}
-        weight={weight}
-        gender={gender}
-        isLoading={isLoadingTopOutfits}
-        outfits={topScoredOutfits}
-        selectedBundleId={selectedOutfitBundleId}
-        onRefresh={() => fetchTopScoredOutfits()}
-        onAnchorItem={(item) => handleAnchorItemTo100Sets(item)}
-        onSelectBundlePreview={(bundle) => handleSelectBundlePreview(bundle)}
-        onExecuteTryOn={(bundle) => handleExecuteTryOnBundle(bundle)}
-        onAddToCart={(bundle) => handleAddScoredOutfitToCart(bundle)}
-        isLoadingAi={isLoadingAi}
+        isOpen={logic.isOutfitModalOpen}
+        onClose={() => logic.setIsOutfitModalOpen(false)}
+        anchorItem={logic.selectedPant || product || logic.outfitItems[0] || null}
+        height={logic.height}
+        weight={logic.weight}
+        gender={logic.gender}
+        isLoading={logic.isLoadingTopOutfits}
+        outfits={logic.topScoredOutfits}
+        selectedBundleId={logic.selectedOutfitBundleId}
+        onRefresh={() => logic.fetchTopScoredOutfits()}
+        onAnchorItem={(item) => logic.handleAnchorItemTo100Sets(item)}
+        onSelectBundlePreview={(bundle) => logic.handleSelectBundlePreview(bundle)}
+        onExecuteTryOn={(bundle) => logic.handleExecuteTryOnBundle(bundle)}
+        onAddToCart={(bundle) => logic.handleAddScoredOutfitToCart(bundle)}
+        isLoadingAi={logic.isLoadingAi}
       />
     </div>
   )

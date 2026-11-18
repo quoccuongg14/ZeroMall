@@ -1,0 +1,159 @@
+import { formatCurrencyVND } from '../../../../utils/formatters'
+
+export const formatDisplayPrice = formatCurrencyVND
+
+// Các danh mục và sản phẩm phi thời trang (Điện tử, Gia dụng, Sách, Mỹ phẩm, v.v.)
+export const NON_FASHION_CATS = [
+  'gia-dung', 'gia dụng', 'may-anh', 'máy ảnh', 'may-tinh-laptop', 'máy tính',
+  'dien-thoai-phu-kien', 'điện thoại', 'thiet-bi-dien-tu', 'thiết bị điện tử',
+  'sach-vpp', 'sách', 'me-va-be', 'mẹ & bé', 'sac-dep', 'sắc đẹp', 'suc-khoe', 'sức khỏe'
+]
+
+export const NON_FASHION_WORDS = [
+  'bàn là', 'bàn ủi', 'nồi cơm', 'nồi chiên', 'máy giặt', 'tủ lạnh', 'bếp điện', 'bếp từ', 'chảo chống dính',
+  'điện thoại', 'máy tính', 'laptop', 'màn hình', 'chuột máy tính', 'chuột gaming', 'bàn phím', 'cáp sạc', 'sạc dự phòng',
+  'son môi', 'kem dưỡng', 'serum', 'sữa rửa mặt', 'nước hoa', 'dầu gội', 'sữa tắm', 'phấn phủ',
+  'sách giáo khoa', 'tiểu thuyết', 'vở viết', 'bút bi', 'tã bỉm', 'sữa bột'
+]
+
+// Tính toán BMI và phân loại thể hình theo chuẩn nhân trắc học
+export const getBodyPhysiqueInfo = (bmiVal: number) => {
+  if (bmiVal < 18.5) {
+    return {
+      label: 'Gầy mảnh khảnh (Ectomorph)',
+      badge: '🦴 Dáng Gầy (Skinny)',
+      color: 'text-sky-700 bg-sky-50 border-sky-300',
+      textColor: 'text-sky-600',
+      desc: 'Khung người gầy, chân tay thon nhỏ'
+    }
+  }
+  if (bmiVal < 22.0) {
+    return {
+      label: 'Thon gọn, thanh mảnh',
+      badge: '✨ Dáng Thon (Slim)',
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-300',
+      textColor: 'text-emerald-600',
+      desc: 'Vóc dáng thon thả, eo nhỏ, chân gọn'
+    }
+  }
+  if (bmiVal < 25.0) {
+    return {
+      label: 'Cân đối tiêu chuẩn (Mesomorph)',
+      badge: '💪 Cân Đối (Standard)',
+      color: 'text-indigo-700 bg-indigo-50 border-indigo-300',
+      textColor: 'text-indigo-600',
+      desc: 'Vóc dáng tiêu chuẩn vừa vặn'
+    }
+  }
+  if (bmiVal < 29.0) {
+    return {
+      label: 'Đậm người / Cơ bắp (Endomorph)',
+      badge: '🏋️ Đậm Người (Stout)',
+      color: 'text-amber-800 bg-amber-50 border-amber-300',
+      textColor: 'text-amber-600',
+      desc: 'Khung người đậm, bắp chân & đùi to'
+    }
+  }
+  return {
+    label: 'Đầy đặn / Tròn trịa (Plus size)',
+    badge: '👕 Dáng Mập (Chubby)',
+    color: 'text-rose-700 bg-rose-50 border-rose-300',
+    textColor: 'text-rose-600',
+    desc: 'Khung người đậm, vòng bụng & đùi đầy đặn'
+  }
+}
+
+// Phân loại slot trang phục chính xác tuyệt đối theo loại sản phẩm (Top / Bottom / Shoes / Accessory / null)
+export const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory' | null => {
+  if (!p) return null
+  const name = ' ' + (p.name || '').toLowerCase().trim() + ' '
+  const cat = (p.category || '').toLowerCase().trim()
+  const slug = (p.categoryRef?.slug || '').toLowerCase().trim()
+
+  // 0. Loại trừ các danh mục và sản phẩm phi thời trang
+  if (NON_FASHION_CATS.some(c => cat.includes(c) || slug.includes(c))) {
+    return null
+  }
+  if (NON_FASHION_WORDS.some(w => name.includes(w))) {
+    return null
+  }
+
+  // 1. MŨ NÓN & PHỤ KIỆN & TRANG SỨC & TÚI VÍ (Accessories)
+  const isAccCat = slug.includes('phu-kien') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
+                   cat.includes('phụ kiện') || cat.includes('túi ví') || cat.includes('đồng hồ')
+  const isAccWords = [
+    'mũ', 'nón', 'cap', 'beanie', 'snapback', 'bucket', 'beret',
+    'kính', 'gọng kính', 'kính râm', 'kính mát', 'tròng kính',
+    'túi', 'ví', 'balo', 'ba lô', 'clutch', 'tote', 'túi xách', 'ví cầm tay', 'túi đeo',
+    'khăn', 'cà vạt', 'caravat', 'nơ cổ',
+    'kẹp tóc', 'cột tóc', 'dây thun', 'băng đô', 'cài tóc', 'bờm', 'chun buộc', 'kẹp càng cua',
+    'dây chuyền', 'vòng cổ', 'vòng tay', 'lắc tay', 'lắc chân', 'khuyên tai', 'hoa tai', 'bông tai', 'nhẫn', 'kiềng', 'charm', 'trâm cài', 'mặt dây',
+    'thắt lưng', 'dây nịt', 'belt',
+    'đồng hồ'
+  ].some(k => name.includes(k))
+
+  if (isAccCat || isAccWords) {
+    return 'accessory'
+  }
+
+  // 2. GIÀY DÉP (Footwear)
+  const isShoesCat = slug.includes('giay-dep') || cat.includes('giày dép') || cat.includes('giay dep')
+  const isShoesWords = [
+    'giày', 'giay', 'dép', 'dep', 'sneaker', 'sandal', 'guốc', 'guoc',
+    'cao gót', 'búp bê', 'loafer', 'derby', 'chelsea', 'boots', 'bốt', 'ủng', 'sục', 'mwc', 'slip-on', 'slip on'
+  ].some(k => name.includes(k))
+
+  if ((isShoesCat || isShoesWords) && !name.includes('hộp đựng') && !name.includes('túi đựng giày') && !name.includes('kệ để')) {
+    return 'shoes'
+  }
+
+  // 3. QUẦN & VÁY & ĐẦM (Bottoms / Lower Garments)
+  const isBottomWords = [
+    'quần', 'quan', 'jean', 'jeans', 'jogger', 'short', 'shorts', 'kaki', 'tây âu', 'quần tây',
+    'quần đùi', 'quần baggy', 'quần ống', 'quần culottes', 'quần legging',
+    'quần bò', 'quần lửng', 'quần nỉ', 'quần thun', 'boxer',
+    'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy tay bồng', 'váy công chúa', 'váy',
+    'đầm', 'dam', 'maxi', 'jumpsuit', 'set đồ bộ'
+  ].some(k => name.includes(k))
+
+  if (isBottomWords) {
+    return 'bottom'
+  }
+
+  // 4. ÁO (Tops / Upper Garments)
+  const isTopWords = [
+    'áo', 'ao', 'sơ mi', 'so mi', 'thun', 'polo', 'khoác', 'khoac', 'bomber', 'blazer',
+    'cardigan', 'hoodie', 'sweater', 'croptop', 'crop top', 'tank top', 'ba lỗ',
+    'gile', 'vest', 'bra', 'sát nách', 'cộc tay', 'tay phồng', 'len dệt kim', 'jacket', 'măng tô', 'áo gió', 'áo nỉ'
+  ].some(k => {
+    if (k === 'áo' || k === 'ao') {
+      return /(?:^|[^\p{L}])áo(?:[^\p{L}]|$)/ui.test(name) || name.includes(' áo ') || name.startsWith(' áo') || name.includes('áo-')
+    }
+    return name.includes(k)
+  })
+
+  if (isTopWords) {
+    return 'top'
+  }
+
+  return null
+}
+
+// Nhãn badge hiển thị chuẩn xác từng món đồ
+export const getSlotBadgeText = (p: any) => {
+  const slot = detectItemSlot(p)
+  if (slot === 'top') return '👔 Áo'
+  if (slot === 'bottom') return '👖 Quần/Váy'
+  if (slot === 'shoes') return '👟 Giày/Dép'
+  if (slot === 'accessory') {
+    const n = (p.name || '').toLowerCase()
+    if (n.includes('mũ') || n.includes('nón')) return '🧢 Mũ/Nón'
+    if (n.includes('kính')) return '🕶️ Kính'
+    if (n.includes('túi') || n.includes('ví') || n.includes('balo')) return '👜 Túi/Ví'
+    if (n.includes('khăn')) return '🧣 Khăn'
+    if (n.includes('kẹp tóc') || n.includes('cột tóc') || n.includes('băng đô') || n.includes('cài tóc')) return '🎀 Kẹp Tóc'
+    if (n.includes('dây chuyền') || n.includes('vòng cổ') || n.includes('vòng tay') || n.includes('lắc') || n.includes('nhẫn') || n.includes('khuyên tai') || n.includes('hoa tai') || n.includes('bông tai')) return '💍 Trang Sức'
+    return '✨ Phụ Kiện'
+  }
+  return 'Thời trang'
+}
