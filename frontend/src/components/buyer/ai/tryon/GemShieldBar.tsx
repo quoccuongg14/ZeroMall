@@ -15,42 +15,34 @@ export const GemShieldBar: React.FC<GemShieldBarProps> = ({
   gemBalance,
 }) => {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-3.5 flex flex-wrap items-center justify-between gap-3 text-white shadow-md shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-lg shrink-0">
-          🛡️
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black tracking-wide text-white">CHẾ ĐỘ THỬ ĐỒ:</span>
-            <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-              tryonEngineMode === 'free'
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-400/40'
-                : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
-            }`}>
-              {tryonEngineMode === 'free' ? '✨ MIỄN PHÍ (0 Gem • Bảo vệ tài khoản)' : '💎 MAGE ULTRA HD (~350 Gem/lần)'}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            {tryonEngineMode === 'free'
-              ? 'AI Local đa tầng bóc tách vải & ướm đồ siêu tốc. 0 Gem, không tiêu tốn tài khoản Mage.space của bạn.'
-              : 'Mô hình Mage Mango 3 Turbo Studio AI. Tiêu hao ~350 Gem mỗi khi bấm Ướm Cả Bộ.'}
-          </p>
+    <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs shrink-0">
+      <div className="flex items-center gap-2.5">
+        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-slate-700">Chế độ thử đồ AI:</span>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+            tryonEngineMode === 'free'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border border-amber-200'
+          }`}>
+            {tryonEngineMode === 'free' ? '✨ Miễn phí (0 Gem)' : '💎 Mage Ultra HD (~350 Gem)'}
+          </span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">• Thử đồ không giới hạn, an toàn số dư Gem</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5 shrink-0 ml-auto">
-        <div className="flex bg-slate-950 p-1 rounded-xl border border-white/10 text-xs">
+      <div className="flex items-center gap-2 ml-auto shrink-0">
+        <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs">
           <button
             type="button"
             onClick={() => onSetEngineMode('free')}
-            className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
               tryonEngineMode === 'free'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span>⚡</span> Local AI (0 Gem)
+            Local AI (0 Gem)
           </button>
           <button
             type="button"
@@ -59,18 +51,19 @@ export const GemShieldBar: React.FC<GemShieldBarProps> = ({
                 onOpenMageConfirm()
               }
             }}
-            className={`px-3 py-1.5 rounded-lg font-black transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
               tryonEngineMode === 'mage'
-                ? 'bg-amber-500 text-slate-950 shadow-xs'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#ee4d2d] text-white shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span>💎</span> Mage Ultra HD
+            Mage Ultra HD
           </button>
         </div>
 
-        <div className="px-3 py-1.5 bg-slate-800/90 border border-white/10 rounded-xl text-xs flex items-center gap-1.5 font-bold text-slate-300">
-          <span className="text-amber-400">💎</span> Số dư: <span className="font-black text-white">{gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gem</span>
+        <div className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 flex items-center gap-1">
+          <span>💎</span>
+          <span>{gemBalance !== null ? gemBalance.toLocaleString('vi-VN') : '7.060'} Gem</span>
         </div>
       </div>
     </div>

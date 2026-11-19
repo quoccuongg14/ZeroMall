@@ -21,11 +21,11 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
-      {/* Toast */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      {/* Toast thông báo nhẹ nhàng */}
       {logic.toastMsg && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-60 bg-emerald-600 text-white font-black text-xs px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-2">
-          <span>✓</span> {logic.toastMsg}
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-60 bg-slate-900 text-white font-medium text-xs px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-2">
+          <span className="text-emerald-400">✓</span> {logic.toastMsg}
         </div>
       )}
 
@@ -36,51 +36,52 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         onConfirm={() => {
           logic.setTryonEngineMode('mage')
           logic.setShowMageConfirmModal(false)
-          logic.triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Cả Bộ"!')
+          logic.triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Thử"!')
         }}
         gemBalance={logic.gemBalance}
       />
 
-      {/* Modal Dialog */}
+      {/* Modal Dialog Container Chuẩn Tone Sáng ZeroMall */}
       <div 
-        className="bg-slate-900 w-[99vw] max-w-[1680px] h-[97vh] max-h-[97vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-800 text-slate-100"
+        className="bg-[#f8fafc] w-[98vw] max-w-[1560px] h-[96vh] max-h-[96vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 text-slate-800 font-sans"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header Bar */}
-        <div className="bg-slate-900 border-b border-slate-800 text-white px-6 py-3.5 flex items-center justify-between shrink-0">
+        {/* Header Bar Chuẩn Thương Hiệu ZeroMall */}
+        <div className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs">
           <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-xl shrink-0">
+            <span className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200/80 flex items-center justify-center text-xl text-[#ee4d2d] shrink-0">
               ✨
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-white">
-                  Phòng Thử Đồ Online AI • Mảng Thời Trang
+                <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
+                  Phòng Thử Đồ Trực Tuyến ZeroMall
                 </h2>
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  AI Neural Studio
+                <span className="bg-orange-50 text-[#ee4d2d] border border-orange-200 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  AI Fitting Room
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Gửi ảnh của bạn + Nhập chiều cao cân nặng + Chọn món đồ để AI ươm thử trang phục chân thực qua ảnh
+              <p className="text-xs text-slate-500">
+                Ướm thử trang phục chân thực lên cơ thể bằng AI • Chuẩn vóc dáng & miễn phí 0 Gem
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm font-black transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition cursor-pointer"
+            title="Đóng phòng thử đồ"
           >
             ✕
           </button>
         </div>
 
-        {/* Banner Khám Phá 100 Set Phối Đồ AI */}
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-inner shrink-0">
-          <div className="flex items-center gap-2 text-slate-950">
-            <span className="text-base shrink-0">⚡</span>
-            <p className="text-xs font-black">
-              AI Stylist đã mô phỏng 100 bộ phối đồ đẹp nhất cho bạn (Hiển thị 5 Set/lần • Giảm 8% Combo Cả Set)!
+        {/* Banner Gợi Ý 100 Set Phối Đồ AI */}
+        <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border-b border-orange-100 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-2xs shrink-0">
+          <div className="flex items-center gap-2 text-slate-800">
+            <span className="text-sm shrink-0">⚡</span>
+            <p className="text-xs font-semibold">
+              AI Stylist đã mô phỏng sẵn 100 bộ phối đẹp theo vóc dáng của bạn (Giảm 8% khi mua trọn Combo)!
             </p>
           </div>
           <button
@@ -89,15 +90,15 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               logic.setIsOutfitModalOpen(true)
               if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-950 text-amber-300 hover:text-white font-black text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+            className="px-3.5 py-1.5 rounded-xl bg-[#ee4d2d] hover:bg-[#d93b1d] text-white font-bold text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
           >
-            <span>✨</span> Khám Phá 100 Set Phối Đồ Ngay ➔
+            <span>✨</span> Khám Phá 100 Set Phối Đồ ➔
           </button>
         </div>
 
         {/* Modal Body: 2 Columns */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-slate-950/40">
-          {/* Thanh bảo vệ Gem & Chế độ thử đồ */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-[#f8fafc]">
+          {/* Thanh bảo vệ Gem & Chế độ thử đồ (Gọn gàng, tinh tế) */}
           <GemShieldBar
             tryonEngineMode={logic.tryonEngineMode}
             onSetEngineMode={(mode) => {
@@ -186,86 +187,35 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 }}
               />
 
-              {/* Bộ chuyển tab Cột 2 */}
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    logic.setIsOutfitModalOpen(true)
-                    if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
-                  }}
-                  className="px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-                >
-                  <span>✨</span> Chọn 100 Set Đồ AI
-                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300">
-                    Top 5 Đẹp Nhất
-                  </span>
-                </button>
-
+              {/* Bộ chuyển tab Cột 2 (Gọn gàng chỉ 2 tab trực quan) */}
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                 <button
                   type="button"
                   onClick={() => logic.setRightColTab('wardrobe')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     logic.rightColTab === 'wardrobe'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  <span>🛍️</span> Chọn Món Trong Kho / Giỏ
+                  <span>🛍️</span> Chọn Món Trong Kho / Giỏ Hàng
                 </button>
 
                 <button
                   type="button"
                   onClick={() => logic.setRightColTab('scanner')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     logic.rightColTab === 'scanner'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  <span>🔬</span> Quét & Bóc Tách (AI Scanner)
+                  <span>🔬</span> Bóc Tách Vải (AI Parser)
                 </button>
               </div>
 
-              {/* Tab 1: Launcher Card */}
-              {logic.rightColTab === 'outfits100' && (
-                <div className="bg-slate-900 border border-indigo-500/30 rounded-3xl p-6 text-white shadow-2xl space-y-4 text-center">
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950 flex items-center justify-center font-black text-2xl shadow-lg">
-                    ⚡
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-base font-black text-white">
-                      KHO 100 SET PHỐI ĐỒ AI (AI STYLIST)
-                    </h3>
-                    <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                      AI đã mô phỏng 100 bộ phối từ kho ZeroMall xoay quanh <strong className="text-amber-300">{(logic.selectedPant || product || logic.outfitItems[0])?.name || 'món đồ của bạn'}</strong> và chọn lọc 5 set điểm cao nhất theo vóc dáng ({logic.height}cm • {logic.weight}kg).
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logic.setIsOutfitModalOpen(true)
-                        if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
-                      }}
-                      className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl transition flex items-center gap-2 cursor-pointer active:scale-95"
-                    >
-                      <span>✨</span> Mở Bảng Chọn 100 Set Phối Đồ AI ➔
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => logic.setRightColTab('wardrobe')}
-                      className="px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition cursor-pointer"
-                    >
-                      🛍️ Xem Kho Đồ / Giỏ Hàng
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Tủ đồ & Giỏ hàng */}
-              {logic.rightColTab === 'wardrobe' && (
+              {/* Tab 1: Tủ đồ & Giỏ hàng */}
+              {logic.rightColTab !== 'scanner' && (
                 <TryOnWardrobeTab
                   sourceTab={logic.sourceTab}
                   setSourceTab={logic.setSourceTab}
@@ -289,7 +239,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 />
               )}
 
-              {/* Tab 3: AI Scanner */}
+              {/* Tab 2: AI Scanner */}
               {logic.rightColTab === 'scanner' && (
                 <TryOnScannerTab
                   selectedPant={logic.selectedPant}
