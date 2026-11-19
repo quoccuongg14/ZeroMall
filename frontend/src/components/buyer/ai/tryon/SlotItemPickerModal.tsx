@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import type { Product } from '../../FlashSale'
 import type { CartFashionItem, OutfitSlots } from './types'
 import { detectItemSlot } from './tryonUtils'
@@ -29,11 +29,11 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   isOpen,
   onClose,
   slot,
-  cartFashionItems,
-  availableProducts,
-  selectedOutfit,
-  height,
-  weight,
+  cartFashionItems = [],
+  availableProducts = [],
+  selectedOutfit = { top: null, bottom: null, shoes: null, accessory: null },
+  height = 175,
+  weight = 68,
   onSelectItem,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -41,7 +41,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   const [visibleCount, setVisibleCount] = useState<number>(ITEMS_PER_PAGE)
 
   // Reset pagination và filter khi mở modal hoặc đổi slot
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       setVisibleCount(ITEMS_PER_PAGE)
       setSearchQuery('')
@@ -49,30 +49,31 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
     }
   }, [isOpen, slot])
 
-  if (!isOpen || !slot) return null
-
-  const meta = SLOT_META[slot]
-
   // Danh sách các món đồ đang được trang bị ở các slot khác để AI phân tích tính tương hợp
-  const otherEquippedItems = Object.entries(selectedOutfit)
-    .filter(([s, p]) => s !== slot && p !== null)
-    .map(([s, p]) => ({ slot: s, product: p! }))
+  const otherEquippedItems = useMemo(() => {
+    if (!slot || !selectedOutfit) return []
+    return Object.entries(selectedOutfit)
+      .filter(([s, p]) => s !== slot && p !== null)
+      .map(([s, p]) => ({ slot: s, product: p! }))
+  }, [slot, selectedOutfit])
 
   // Thuật toán AI Stylist: Phân tích hành vi & chấm điểm tương hợp từng món đồ
   const analyzedProducts = useMemo(() => {
+    if (!slot || !Array.isArray(availableProducts)) return []
+
     // 1. Lọc tất cả sản phẩm thuộc đúng slot này
-    const matchingProducts = availableProducts.filter(p => detectItemSlot(p) === slot)
+    const matchingProducts = availableProducts.filter(p => p && detectItemSlot(p) === slot)
 
     // Tạo tập set ID các món có trong giỏ hàng để ưu tiên hàng đầu
     const cartProductIds = new Set(
-      cartFashionItems
-        .filter(c => detectItemSlot(c.product) === slot)
+      (Array.isArray(cartFashionItems) ? cartFashionItems : [])
+        .filter(c => c && c.product && detectItemSlot(c.product) === slot)
         .map(c => c.product.id)
     )
 
     // Từ khóa của các món đồ đang mặc để tính phối đồ
     const equippedText = otherEquippedItems
-      .map(it => (it.product.name || '').toLowerCase())
+      .map(it => (it.product?.name || '').toLowerCase())
       .join(' ')
 
     const hasSneaker = equippedText.includes('sneaker') || equippedText.includes('thể thao')
@@ -81,8 +82,8 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
     const hasFormal = equippedText.includes('sơ mi') || equippedText.includes('tây') || equippedText.includes('blazer')
 
     return matchingProducts.map(item => {
-      const nameLower = (item.name || '').toLowerCase()
-      const inCart = cartProductIds.has(item.id)
+      const nameLower = (item?.name || '').toLowerCase()
+      const inCart = Boolean(item?.id && cartProductIds.has(item.id))
 
       // Chấm điểm AI dựa trên hành vi và sự tương hợp
       let score = 86
@@ -137,7 +138,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim()
-      list = list.filter(item => (item.product.name || '').toLowerCase().includes(q))
+      list = list.filter(item => (item.product?.name || '').toLowerCase().includes(q))
     }
 
     if (filterMode === 'cart') {
@@ -158,8 +159,13 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
     setVisibleCount(prev => prev + ITEMS_PER_PAGE)
   }
 
-  // Tên món đang được chọn ở slot này (nếu có)
-  const currentlyEquippedInThisSlot = selectedOutfit[slot]
+  // TẤT CẢ HOOKS ĐÃ ĐƯỢC GỌI VÔ ĐIỀU KIỆN Ở TRÊN. GIỜ MỚI CHECK ĐIỀU KIỆN HIỂN THỊ:
+  if (!isOpen || !slot || !SLOT_META[slot]) {
+    return null
+  }
+
+  const meta = SLOT_META[slot]
+  const currentlyEquippedInThisSlot = selectedOutfit ? selectedOutfit[slot] : null
 
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -189,7 +195,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
                     <>
                       Đang phối cùng:{' '}
                       <strong className="text-slate-800">
-                        {otherEquippedItems.map(it => it.product.name).join(' + ')}
+                        {otherEquippedItems.map(it => it.product?.name).filter(Boolean).join(' + ')}
                       </strong>
                     </>
                   ) : (
@@ -223,7 +229,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
               </div>
               <p className="text-xs text-slate-600 mt-1 leading-relaxed">
                 {otherEquippedItems.length > 0
-                  ? `Dựa trên ${otherEquippedItems.map(it => it.product.name).slice(0, 2).join(' và ')} bạn đang chọn, AI ưu tiên các sản phẩm trong giỏ hàng lên đầu và tự động chấm điểm độ hợp phom dáng cho từng mẫu ${meta.label.toLowerCase()}.`
+                  ? `Dựa trên ${otherEquippedItems.map(it => it.product?.name).filter(Boolean).slice(0, 2).join(' và ')} bạn đang chọn, AI ưu tiên các sản phẩm trong giỏ hàng lên đầu và tự động chấm điểm độ hợp phom dáng cho từng mẫu ${meta.label.toLowerCase()}.`
                   : `Dựa vào vóc dáng và sở thích mua sắm của bạn, AI ưu tiên sản phẩm trong giỏ hàng và tuyển chọn các mẫu ${meta.label.toLowerCase()} có điểm thẩm mỹ cao nhất.`}
               </p>
             </div>
