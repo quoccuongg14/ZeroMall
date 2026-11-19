@@ -32,6 +32,7 @@ interface TryOnMirrorStudioProps {
   weight: number
   setWeight: (w: number) => void
   gender: 'male' | 'female'
+  setGender: (g: 'male' | 'female') => void
   physiqueInfo: { badge: string }
   currentBmi: number
   onRunTryOn: () => void
@@ -61,6 +62,8 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
   setHeight,
   weight,
   setWeight,
+  gender,
+  setGender,
   physiqueInfo,
   currentBmi,
   onRunTryOn,
@@ -424,6 +427,38 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
               }`}
             >
               <span>👩</span> Mẫu Nữ
+            </button>
+          </div>
+        </div>
+
+        {/* Lựa chọn giới tính thời trang */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-bold text-slate-700 block">Giới tính trang phục:</span>
+            <span className="text-[10px] text-slate-400">AI tự động lọc đồ nam hoặc nữ</span>
+          </div>
+          <div className="flex bg-slate-100 p-0.5 rounded-xl text-xs">
+            <button
+              type="button"
+              onClick={() => setGender('male')}
+              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                gender === 'male'
+                  ? 'bg-[#ee4d2d] text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>👨</span> Nam
+            </button>
+            <button
+              type="button"
+              onClick={() => setGender('female')}
+              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                gender === 'female'
+                  ? 'bg-[#ee4d2d] text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>👩</span> Nữ
             </button>
           </div>
         </div>

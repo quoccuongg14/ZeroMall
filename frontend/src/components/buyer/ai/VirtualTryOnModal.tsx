@@ -144,6 +144,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               weight={logic.weight}
               setWeight={logic.setWeight}
               gender={logic.gender}
+              setGender={logic.setGender}
               physiqueInfo={logic.physiqueInfo}
               currentBmi={logic.currentBmi}
               onRunTryOn={() => {
@@ -218,6 +219,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               {/* Tab 1: Tủ đồ & Giỏ hàng */}
               {logic.rightColTab !== 'scanner' && (
                 <TryOnWardrobeTab
+                  gender={logic.gender}
                   sourceTab={logic.sourceTab}
                   setSourceTab={logic.setSourceTab}
                   cartFashionItems={logic.cartFashionItems}
@@ -284,6 +286,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         selectedOutfit={logic.selectedOutfit}
         height={logic.height}
         weight={logic.weight}
+        gender={logic.gender}
+        onGenderChange={logic.setGender}
         onSelectItem={(item, slot) => logic.handleSelectSlotItem(item, slot)}
       />
     </div>

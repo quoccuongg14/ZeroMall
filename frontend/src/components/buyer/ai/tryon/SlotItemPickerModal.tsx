@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import type { Product } from '../../FlashSale'
 import type { CartFashionItem, OutfitSlots } from './types'
-import { detectItemSlot } from './tryonUtils'
+import { detectItemSlot, isProductMatchingGender } from './tryonUtils'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 export interface SlotItemPickerModalProps {
@@ -13,6 +13,8 @@ export interface SlotItemPickerModalProps {
   selectedOutfit: OutfitSlots
   height: number
   weight: number
+  gender?: 'male' | 'female'
+  onGenderChange?: (gender: 'male' | 'female') => void
   onSelectItem: (item: Product, slot: 'top' | 'bottom' | 'shoes' | 'accessory') => void
 }
 
@@ -34,20 +36,24 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   selectedOutfit = { top: null, bottom: null, shoes: null, accessory: null },
   height = 175,
   weight = 68,
+  gender = 'male',
+  onGenderChange,
   onSelectItem,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [filterMode, setFilterMode] = useState<'all' | 'cart' | 'ai_recommended'>('all')
+  const [genderFilter, setGenderFilter] = useState<'male' | 'female' | 'all'>(gender || 'male')
   const [visibleCount, setVisibleCount] = useState<number>(ITEMS_PER_PAGE)
 
-  // Reset pagination và filter khi mở modal hoặc đổi slot
+  // Reset pagination và filter khi mở modal hoặc đổi slot / đổi giới tính
   useEffect(() => {
     if (isOpen) {
       setVisibleCount(ITEMS_PER_PAGE)
       setSearchQuery('')
       setFilterMode('all')
+      setGenderFilter(gender || 'male')
     }
-  }, [isOpen, slot])
+  }, [isOpen, slot, gender])
 
   // Danh sách các món đồ đang được trang bị ở các slot khác để AI phân tích tính tương hợp
   const otherEquippedItems = useMemo(() => {
@@ -57,17 +63,20 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
       .map(([s, p]) => ({ slot: s, product: p! }))
   }, [slot, selectedOutfit])
 
-  // Thuật toán AI Stylist: Phân tích hành vi & chấm điểm tương hợp từng món đồ
+  // Thuật toán AI Stylist: Phân tích hành vi & chấm điểm tương hợp từng món đồ theo giới tính
   const analyzedProducts = useMemo(() => {
     if (!slot || !Array.isArray(availableProducts)) return []
 
-    // 1. Lọc tất cả sản phẩm thuộc đúng slot này
-    const matchingProducts = availableProducts.filter(p => p && detectItemSlot(p) === slot)
+    // 1. Lọc sản phẩm thuộc đúng slot này VÀ phù hợp với giới tính đang chọn (Nam / Nữ / Unisex)
+    const matchingProducts = availableProducts.filter(p => {
+      if (!p || detectItemSlot(p) !== slot) return false
+      return isProductMatchingGender(p, genderFilter)
+    })
 
     // Tạo tập set ID các món có trong giỏ hàng để ưu tiên hàng đầu
     const cartProductIds = new Set(
       (Array.isArray(cartFashionItems) ? cartFashionItems : [])
-        .filter(c => c && c.product && detectItemSlot(c.product) === slot)
+        .filter(c => c && c.product && detectItemSlot(c.product) === slot && isProductMatchingGender(c.product, genderFilter))
         .map(c => c.product.id)
     )
 
@@ -130,7 +139,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
       // Ưu tiên số 2: Điểm số AI cao nhất
       return b.aiScore - a.aiScore
     })
-  }, [availableProducts, cartFashionItems, slot, otherEquippedItems, height, weight])
+  }, [availableProducts, cartFashionItems, slot, otherEquippedItems, height, weight, genderFilter])
 
   // Lọc theo tìm kiếm và bộ lọc nhanh
   const filteredList = useMemo(() => {
@@ -260,49 +269,101 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterMode('all')
-                  setVisibleCount(ITEMS_PER_PAGE)
-                }}
-                className={`px-3 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap ${
-                  filterMode === 'all'
-                    ? 'bg-[#ee4d2d] text-white font-bold shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Tất cả ({analyzedProducts.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterMode('cart')
-                  setVisibleCount(ITEMS_PER_PAGE)
-                }}
-                className={`px-3 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-                  filterMode === 'cart'
-                    ? 'bg-[#ee4d2d] text-white font-bold shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <span>🛒</span> Trong Giỏ Hàng ({analyzedProducts.filter(i => i.inCart).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterMode('ai_recommended')
-                  setVisibleCount(ITEMS_PER_PAGE)
-                }}
-                className={`px-3 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-                  filterMode === 'ai_recommended'
-                    ? 'bg-[#ee4d2d] text-white font-bold shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <span>⚡</span> AI Chấm Cao (≥94%)
-              </button>
+            {/* BỘ LỌC GIỚI TÍNH & PHONG CÁCH */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              {/* Lọc Giới Tính (Nam / Nữ / Tất Cả) */}
+              <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenderFilter('male')
+                    onGenderChange?.('male')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                    genderFilter === 'male'
+                      ? 'bg-[#ee4d2d] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>👨</span> Đồ Nam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenderFilter('female')
+                    onGenderChange?.('female')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                    genderFilter === 'female'
+                      ? 'bg-[#ee4d2d] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>👩</span> Đồ Nữ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenderFilter('all')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                    genderFilter === 'all'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Tất Cả
+                </button>
+              </div>
+
+              {/* Lọc Nguồn & AI */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterMode('all')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2.5 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap ${
+                    filterMode === 'all'
+                      ? 'bg-slate-900 text-white font-bold shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Tất cả ({analyzedProducts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterMode('cart')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2.5 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                    filterMode === 'cart'
+                      ? 'bg-slate-900 text-white font-bold shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>🛒</span> Giỏ ({analyzedProducts.filter(i => i.inCart).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterMode('ai_recommended')
+                    setVisibleCount(ITEMS_PER_PAGE)
+                  }}
+                  className={`px-2.5 py-1.5 rounded-xl font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                    filterMode === 'ai_recommended'
+                      ? 'bg-slate-900 text-white font-bold shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>⚡</span> AI Cao (≥94%)
+                </button>
+              </div>
             </div>
           </div>
         </div>

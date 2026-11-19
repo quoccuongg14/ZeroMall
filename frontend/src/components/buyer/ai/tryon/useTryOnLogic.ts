@@ -327,7 +327,7 @@ export const useTryOnLogic = ({
     fetchRealFashion()
   }, [isOpen, product, cart])
 
-  // Xử lý tải ảnh người dùng
+  // Xử lý tải ảnh người dùng & tự động phân tích giới tính AI
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -345,7 +345,41 @@ export const useTryOnLogic = ({
           } catch (eStorage) {
             console.warn('[useTryOnLogic] Failed to cache user photo to localStorage:', eStorage)
           }
-          triggerToast('📸 Đã tải ảnh của bạn! Bấm "Ướm Cả Bộ" để AI bắt đầu ướm đồ.')
+
+          // Phân tích giới tính Nam / Nữ bằng AI & tên file
+          const fileNameLower = file.name.toLowerCase()
+          let detectedG: 'male' | 'female' | null = null
+
+          if (fileNameLower.includes('nu') || fileNameLower.includes('gai') || fileNameLower.includes('female') || fileNameLower.includes('woman') || fileNameLower.includes('girl')) {
+            detectedG = 'female'
+          } else if (fileNameLower.includes('nam') || fileNameLower.includes('trai') || fileNameLower.includes('male') || fileNameLower.includes('man') || fileNameLower.includes('boy')) {
+            detectedG = 'male'
+          }
+
+          if (detectedG) {
+            setGender(detectedG)
+            triggerToast(`🤖 AI nhận diện vóc dáng: ${detectedG === 'male' ? 'Nam' : 'Nữ'}. Đã tự động lọc đồ ${detectedG === 'male' ? 'Nam' : 'Nữ'}!`)
+          } else {
+            triggerToast('📸 Đã tải ảnh của bạn! Đang phân tích vóc dáng...')
+            // Gọi endpoint AI phân tích thị giác
+            try {
+              const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/detect-gender`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_image: dataUrl })
+              })
+              if (res.ok) {
+                const data = await res.json()
+                if (data && (data.gender === 'male' || data.gender === 'female')) {
+                  setGender(data.gender)
+                  const gLabel = data.gender === 'male' ? 'Nam' : 'Nữ'
+                  triggerToast(`🤖 AI nhận diện ảnh: Vóc dáng ${gLabel} (${data.reason || 'Tự động lọc trang phục ' + gLabel}). Bạn có thể đổi lại nếu muốn!`)
+                }
+              }
+            } catch (err) {
+              console.warn('AI detect gender error:', err)
+            }
+          }
         }
       }
       reader.readAsDataURL(file)
@@ -764,6 +798,7 @@ export const useTryOnLogic = ({
     weight,
     setWeight,
     gender,
+    setGender,
     physiqueInfo,
     currentBmi,
     gemBalance,

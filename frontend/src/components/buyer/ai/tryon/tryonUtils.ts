@@ -139,6 +139,59 @@ export const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory'
   return null
 }
 
+// Phân loại giới tính sản phẩm: 'male' | 'female' | 'unisex'
+export const detectProductGender = (p: any): 'male' | 'female' | 'unisex' => {
+  if (!p) return 'unisex'
+  const name = ' ' + (p.name || '').toLowerCase() + ' '
+  const cat = ((p.category || '') + ' ' + (p.categoryRef?.slug || '')).toLowerCase()
+
+  // 1. Phân loại theo category / slug rõ ràng
+  const isMaleCat = cat.includes('thoi-trang-nam') || cat.includes('giay-dep-nam') || cat.includes('thời trang nam')
+  const isFemaleCat = cat.includes('thoi-trang-nu') || cat.includes('giay-dep-nu') || cat.includes('phu-kien-nu') || cat.includes('tui-vi-nu') || cat.includes('thời trang nữ')
+
+  // 2. Từ khóa unisex
+  if (name.includes('unisex') || name.includes('nam nữ') || name.includes('nam & nữ') || name.includes('nam/nữ')) {
+    return 'unisex'
+  }
+
+  // 3. Từ khóa đặc thù nữ
+  const strictlyFemaleWords = [
+    'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy',
+    'đầm', 'dam', 'croptop', 'crop top', 'hai dây', 'pastel ngọt ngào', 'công chúa', 'bèo nhún', 'ren nữ', 'babydoll', 'yếm nữ'
+  ]
+  if (strictlyFemaleWords.some(w => name.includes(w))) {
+    return 'female'
+  }
+
+  // 4. Từ khóa đặc thù nam
+  const strictlyMaleWords = [
+    'sơ mi nam', 'quần tây nam', 'quần đùi nam', 'boxer', 'kaki nam', 'vest nam', 'suit nam'
+  ]
+  if (strictlyMaleWords.some(w => name.includes(w))) {
+    return 'male'
+  }
+
+  // 5. Kiểm tra chữ "nam" vs "nữ" trong tên
+  const hasNam = name.includes(' nam ') || name.includes(' nam') || name.includes('-nam')
+  const hasNu = name.includes(' nữ ') || name.includes(' nu ') || name.includes(' nữ') || name.includes('-nữ')
+
+  if (hasNam && !hasNu) return 'male'
+  if (hasNu && !hasNam) return 'female'
+
+  if (isMaleCat && !isFemaleCat) return 'male'
+  if (isFemaleCat && !isMaleCat) return 'female'
+
+  return 'unisex'
+}
+
+// Kiểm tra xem sản phẩm có phù hợp với giới tính targetGender ('male' | 'female') không
+export const isProductMatchingGender = (p: any, targetGender: 'male' | 'female' | 'all'): boolean => {
+  if (targetGender === 'all') return true
+  const itemGender = detectProductGender(p)
+  if (itemGender === 'unisex') return true
+  return itemGender === targetGender
+}
+
 // Nhãn badge hiển thị chuẩn xác từng món đồ
 export const getSlotBadgeText = (p: any) => {
   const slot = detectItemSlot(p)

@@ -1,10 +1,11 @@
 import React from 'react'
 import type { Product } from '../../FlashSale'
 import type { CartFashionItem, OutfitSlots } from './types'
-import { detectItemSlot, getSlotBadgeText } from './tryonUtils'
+import { detectItemSlot, getSlotBadgeText, isProductMatchingGender } from './tryonUtils'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 interface TryOnWardrobeTabProps {
+  gender?: 'male' | 'female'
   sourceTab: 'cart' | 'catalog'
   setSourceTab: (tab: 'cart' | 'catalog') => void
   cartFashionItems: CartFashionItem[]
@@ -27,6 +28,7 @@ interface TryOnWardrobeTabProps {
 }
 
 export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
+  gender = 'male',
   sourceTab,
   setSourceTab,
   cartFashionItems,
@@ -184,6 +186,7 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
             .filter((p) => {
               const slot = detectItemSlot(p)
               if (!slot) return false
+              if (gender && !isProductMatchingGender(p, gender)) return false
               if (categoryFilter === 'all') return true
               return slot === categoryFilter
             })
