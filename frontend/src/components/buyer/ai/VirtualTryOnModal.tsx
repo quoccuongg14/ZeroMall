@@ -7,6 +7,7 @@ import {
   TryOnScannerTab,
   GemShieldBar,
   MageConfirmModal,
+  SlotItemPickerModal,
   useTryOnLogic,
 } from './tryon'
 import type { VirtualTryOnModalProps } from './tryon'
@@ -271,6 +272,19 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         onExecuteTryOn={(bundle) => logic.handleExecuteTryOnBundle(bundle)}
         onAddToCart={(bundle) => logic.handleAddScoredOutfitToCart(bundle)}
         isLoadingAi={logic.isLoadingAi}
+      />
+
+      {/* Modal chuyên biệt: Chọn món theo từng ô (Áo / Quần / Giày / Phụ kiện) với AI phân tích hành vi */}
+      <SlotItemPickerModal
+        isOpen={logic.isSlotPickerOpen}
+        onClose={() => logic.setIsSlotPickerOpen(false)}
+        slot={logic.slotPickerTarget}
+        cartFashionItems={logic.cartFashionItems}
+        availableProducts={logic.availablePants}
+        selectedOutfit={logic.selectedOutfit}
+        height={logic.height}
+        weight={logic.weight}
+        onSelectItem={(item, slot) => logic.handleSelectSlotItem(item, slot)}
       />
     </div>
   )

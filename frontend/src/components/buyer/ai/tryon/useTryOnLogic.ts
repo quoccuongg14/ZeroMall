@@ -135,6 +135,8 @@ export const useTryOnLogic = ({
   const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(null)
   const [rightColTab, setRightColTab] = useState<'outfits100' | 'wardrobe' | 'scanner'>('wardrobe')
   const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
+  const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
+  const [slotPickerTarget, setSlotPickerTarget] = useState<'top' | 'bottom' | 'shoes' | 'accessory' | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -578,6 +580,21 @@ export const useTryOnLogic = ({
   const handleSelectSlot = (slot: 'top' | 'bottom' | 'shoes' | 'accessory') => {
     setActiveOutfitSlot(slot)
     setCategoryFilter(slot)
+    setSlotPickerTarget(slot)
+    setIsSlotPickerOpen(true)
+  }
+
+  const handleSelectSlotItem = (item: Product, slot: 'top' | 'bottom' | 'shoes' | 'accessory') => {
+    setSelectedOutfit(prev => ({ ...prev, [slot]: item }))
+    setSelectedPant(item)
+    setIsSlotPickerOpen(false)
+    const slotNames: Record<'top' | 'bottom' | 'shoes' | 'accessory', string> = {
+      top: 'Áo',
+      bottom: 'Quần & Váy',
+      shoes: 'Giày & Dép',
+      accessory: 'Phụ kiện',
+    }
+    triggerToast(`✓ Đã thêm ${item.name} vào ô ${slotNames[slot]}!`)
   }
 
   const handleApplyPreset = (presetName: string) => {
@@ -787,6 +804,11 @@ export const useTryOnLogic = ({
     setRightColTab,
     isOutfitModalOpen,
     setIsOutfitModalOpen,
+    isSlotPickerOpen,
+    setIsSlotPickerOpen,
+    slotPickerTarget,
+    setSlotPickerTarget,
+    handleSelectSlotItem,
     fileInputRef,
     customGarmentInputRef,
     outfitItems,
