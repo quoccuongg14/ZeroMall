@@ -138,13 +138,35 @@ export class AuthController {
   }
 
   @Get('audit-logs')
-  async getAuditLogs() {
-    return this.authService.getAuditLogs();
+  async getAuditLogs(
+    @Query('module') module?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.authService.getAuditLogs(module, search);
   }
 
   @Post('audit-logs')
-  async createAuditLog(@Body() dto: { user: string; action: string }) {
-    return this.authService.createAuditLog(dto.user, dto.action);
+  async createAuditLog(@Body() dto: {
+    user: string;
+    action: string;
+    module?: string;
+    actionType?: string;
+    targetId?: string;
+    targetName?: string;
+    ipAddress?: string;
+    metadata?: any;
+  }) {
+    const metaStr = typeof dto.metadata === 'object' ? JSON.stringify(dto.metadata) : dto.metadata;
+    return this.authService.createAuditLog(
+      dto.user,
+      dto.action,
+      dto.module,
+      dto.actionType,
+      dto.targetId,
+      dto.targetName,
+      dto.ipAddress,
+      metaStr,
+    );
   }
 
   // Quản lý địa chỉ giao hàng của người dùng (User Addresses)

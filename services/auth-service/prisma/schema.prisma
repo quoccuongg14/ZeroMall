@@ -74,10 +74,16 @@ model ShopFollow {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  timestamp DateTime @default(now())
-  user      String
-  action    String
+  id         String   @id @default(uuid())
+  timestamp  DateTime @default(now())
+  user       String
+  action     String
+  module     String?  @default("SYSTEM")
+  actionType String?  @default("UPDATE")
+  targetId   String?
+  targetName String?
+  ipAddress  String?  @default("127.0.0.1")
+  metadata   String?  @db.Text
 }
 
 model UserAddress {

@@ -522,16 +522,89 @@ export class AuthService {
     });
   }
 
-  async getAuditLogs() {
-    return this.prisma.auditLog.findMany({
+  async getAuditLogs(module?: string, search?: string) {
+    const where: any = {};
+    if (module && module !== 'ALL') {
+      where.module = module;
+    }
+    if (search && search.trim()) {
+      where.OR = [
+        { action: { contains: search, mode: 'insensitive' } },
+        { user: { contains: search, mode: 'insensitive' } },
+        { targetId: { contains: search, mode: 'insensitive' } },
+        { targetName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    return (this.prisma as any).auditLog.findMany({
+      where,
       orderBy: { timestamp: 'desc' },
-      take: 100
+      take: 200,
     });
   }
 
-  async createAuditLog(user: string, action: string) {
-    return this.prisma.auditLog.create({
-      data: { user, action }
+  async createAuditLog(
+    user: string,
+    action: string,
+    module?: string,
+    actionType?: string,
+    targetId?: string,
+    targetName?: string,
+    ipAddress?: string,
+    metadata?: string,
+  ) {
+    let effectiveModule = module || 'SYSTEM';
+    let effectiveType = actionType || 'UPDATE';
+
+    if (!module) {
+      const actLower = (action || '').toLowerCase();
+      if (actLower.includes('đơn hàng') || actLower.includes('giao hàng') || actLower.includes('bưu cục') || actLower.includes('tài xế')) {
+        effectiveModule = 'ORDERS';
+      } else if (actLower.includes('rút tiền') || actLower.includes('chiết khấu') || actLower.includes('ví') || actLower.includes('hoàn tiền')) {
+        effectiveModule = 'FINANCE';
+      } else if (actLower.includes('sản phẩm') || actLower.includes('ngành hàng') || actLower.includes('vi phạm')) {
+        effectiveModule = 'PRODUCTS';
+      } else if (actLower.includes('cửa hàng') || actLower.includes('shop')) {
+        effectiveModule = 'SHOPS';
+      } else if (actLower.includes('tài khoản') || actLower.includes('người dùng') || actLower.includes('user')) {
+        effectiveModule = 'USERS';
+      } else if (actLower.includes('banner') || actLower.includes('voucher') || actLower.includes('flash sale')) {
+        effectiveModule = 'MARKETING';
+      } else if (actLower.includes('cskh') || actLower.includes('bảo mật') || actLower.includes('xuất báo cáo') || actLower.includes('phân quyền')) {
+        effectiveModule = 'SECURITY';
+      }
+    }
+
+    if (!actionType) {
+      const actLower = (action || '').toLowerCase();
+      if (actLower.includes('tạo') || actLower.includes('thêm') || actLower.includes('đăng ký')) {
+        effectiveType = 'CREATE';
+      } else if (actLower.includes('phê duyệt') || actLower.includes('kích hoạt') || actLower.includes('chấp nhận')) {
+        effectiveType = 'APPROVE';
+      } else if (actLower.includes('mở khóa')) {
+        effectiveType = 'UNLOCK';
+      } else if (actLower.includes('khóa') || actLower.includes('tạm ngưng')) {
+        effectiveType = 'LOCK';
+      } else if (actLower.includes('xóa')) {
+        effectiveType = 'DELETE';
+      } else if (actLower.includes('từ chối')) {
+        effectiveType = 'REJECT';
+      } else if (actLower.includes('xuất')) {
+        effectiveType = 'SECURITY';
+      }
+    }
+
+    return (this.prisma as any).auditLog.create({
+      data: {
+        user,
+        action,
+        module: effectiveModule,
+        actionType: effectiveType,
+        targetId: targetId || null,
+        targetName: targetName || null,
+        ipAddress: ipAddress || '127.0.0.1',
+        metadata: metadata || null,
+      },
     });
   }
 
