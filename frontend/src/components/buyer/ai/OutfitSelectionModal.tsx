@@ -86,8 +86,8 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 font-sans">
+    <div className="fixed inset-0 z-70 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 font-sans">
         
         {/* MODAL HEADER */}
         <div className="px-6 py-4 border-b border-slate-200 bg-white shrink-0 space-y-3">
@@ -229,40 +229,54 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
                       &quot;{bundle.stylist_note}&quot;
                     </p>
 
-                    {/* 4 Items in Set */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                    {/* 4 Items in Set: Hiển thị dạng thẻ đứng với ảnh to rõ ràng, tên & giá nằm ngay dưới */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5 mb-3.5">
                       {bundle.items.map((it, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition group relative"
+                          className="flex flex-col p-2.5 rounded-2xl bg-slate-50/80 border border-slate-200/90 hover:border-slate-300 hover:shadow-xs transition group relative"
                         >
-                          <img
-                            src={it.product.image || 'https://placehold.co/60x60'}
-                            alt={it.product.name}
-                            className="w-12 h-12 object-cover rounded-lg bg-white shrink-0 border border-slate-200"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase block truncate">
+                          {/* Khung ảnh to rõ nét */}
+                          <div className="relative w-full h-36 sm:h-44 md:h-48 rounded-xl overflow-hidden bg-white border border-slate-200/80 flex items-center justify-center p-2">
+                            <img
+                              src={it.product.image || 'https://placehold.co/200x200?text=Item'}
+                              alt={it.product.name}
+                              className="w-full h-full object-contain group-hover:scale-105 transition duration-200"
+                            />
+
+                            {/* Tag vai trò món đồ */}
+                            <span className="absolute top-2 left-2 text-[10px] font-bold text-slate-700 bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-md shadow-2xs border border-slate-200/80 truncate max-w-[85%]">
                               {it.role}
                             </span>
-                            <p className="text-xs font-semibold text-slate-800 truncate">
+
+                            {/* Nút phối 100 set quanh món này */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onAnchorItem(it.product)
+                              }}
+                              title="Phối 100 set xoay quanh món này"
+                              className="opacity-0 group-hover:opacity-100 absolute top-2 right-2 w-6 h-6 rounded-lg bg-white/95 hover:bg-orange-50 border border-slate-200 text-slate-700 hover:text-[#ee4d2d] flex items-center justify-center text-xs shadow-xs transition cursor-pointer"
+                            >
+                              🎯
+                            </button>
+                          </div>
+
+                          {/* Tên sản phẩm & giá nằm ngay dưới ảnh */}
+                          <div className="mt-2.5 flex-1 flex flex-col justify-between">
+                            <p 
+                              className="text-xs font-semibold text-slate-800 line-clamp-2 leading-snug group-hover:text-[#ee4d2d] transition min-h-[32px]"
+                              title={it.product.name}
+                            >
                               {it.product.name}
                             </p>
-                            <span className="text-xs font-bold text-[#ee4d2d] block mt-0.5">
-                              {formatCurrencyVND(it.product.price)}
-                            </span>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-sm font-bold text-[#ee4d2d]">
+                                {formatCurrencyVND(it.product.price)}
+                              </span>
+                            </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onAnchorItem(it.product)
-                            }}
-                            title="Phối 100 set xoay quanh món này"
-                            className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 w-5 h-5 rounded-md bg-white border border-slate-200 text-slate-600 flex items-center justify-center text-[10px] shadow-xs transition cursor-pointer"
-                          >
-                            🎯
-                          </button>
                         </div>
                       ))}
                     </div>
