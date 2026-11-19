@@ -247,6 +247,28 @@ export const CsShopsTab: React.FC<CsShopsTabProps> = ({
                 </div>
               </div>
 
+              {shop.status === 'APPROVED' && (
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
+                      const buyerPort = window.location.port ? `:${window.location.port}` : ''
+                      const rawUser = localStorage.getItem('zm_user') || ''
+                      const rawToken = localStorage.getItem('zm_token') || ''
+                      if (isSubdomain) {
+                        window.open(`${window.location.protocol}//zeromall.local${buyerPort}/shop/${shop.id}?sso_user=${encodeURIComponent(rawUser)}&sso_token=${encodeURIComponent(rawToken)}`, '_blank')
+                      } else {
+                        window.open(`/shop/${shop.id}`, '_blank')
+                      }
+                    }}
+                    className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-lg text-xs cursor-pointer shadow-3xs transition flex items-center justify-center gap-1.5"
+                  >
+                    <span>🏪</span> Xem Trang Shop & Thanh Điều Hành
+                  </button>
+                </div>
+              )}
+
               {shop.status === 'PENDING_APPROVAL' && (
                 <div className="mt-4 flex gap-2">
                   <button

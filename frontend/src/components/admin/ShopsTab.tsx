@@ -116,6 +116,22 @@ export const ShopsTab: React.FC<ShopsTabProps> = ({ shops, fetchShops, triggerAu
     }
   }
 
+  // Mở trang Storefront gian hàng kèm thanh điều hành ZERO CONTROL
+  const handleOpenStorefront = (shopId: string) => {
+    const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
+    if (isSubdomain) {
+      const buyerPort = window.location.port ? `:${window.location.port}` : ''
+      const protocol = window.location.protocol
+      const rawUser = localStorage.getItem('zm_user') || ''
+      const rawToken = localStorage.getItem('zm_token') || ''
+      const ssoUser = encodeURIComponent(rawUser)
+      const ssoToken = encodeURIComponent(rawToken)
+      window.open(`${protocol}//zeromall.local${buyerPort}/shop/${shopId}?sso_user=${ssoUser}&sso_token=${ssoToken}`, '_blank')
+    } else {
+      window.open(`/shop/${shopId}`, '_blank')
+    }
+  }
+
   // Lọc danh sách theo từ khóa tìm kiếm và bộ lọc trạng thái
   const filteredShops = shops.filter((s) => {
     const q = searchQuery.toLowerCase().trim()
@@ -283,6 +299,17 @@ export const ShopsTab: React.FC<ShopsTabProps> = ({ shops, fetchShops, triggerAu
                     {/* Actions */}
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {/* Open Live Storefront Governance Button */}
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleOpenStorefront(s.id)}
+                          className="h-7 text-[10px] px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold flex items-center gap-1 cursor-pointer"
+                          title="Mở trang bán hàng công khai của Shop kèm Thanh Điều Hành ZERO CONTROL"
+                        >
+                          <span>🏪</span> Trang Shop
+                        </Button>
+
                         {/* View Detail Modal Button */}
                         <Button
                           variant="outline"

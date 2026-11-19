@@ -244,6 +244,47 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
 
       {/* Main Content View Container */}
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {/* Admin / CSKH Platform Guidance Banner */}
+        {(user?.role === 'ADMIN' || user?.role === 'PLATFORM_SUPPORT') && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-xl border border-indigo-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl p-2 bg-indigo-500/20 rounded-xl border border-indigo-400/30 shrink-0">
+                {user.role === 'ADMIN' ? '🛡️' : '🎧'}
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-sm text-indigo-300">
+                    {user.role === 'ADMIN' ? 'QUẢN TRỊ VIÊN SÀN (ADMIN)' : 'NHÂN VIÊN HỖ TRỢ (CSKH)'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40">
+                    Chế độ Điều Hành Storefront
+                  </span>
+                </div>
+                <p className="text-slate-300 text-[11px] mt-0.5">
+                  Bạn đang duyệt giao diện Chợ. Khi bấm vào xem bất kỳ Gian hàng Shop nào, hệ thống sẽ mở <strong className="text-white">Thanh Điều Hành ZERO CONTROL</strong> (Gỡ banner vi phạm, Khóa shop khẩn cấp, Ghost Login).
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                onClick={() => {
+                  const targetShop = dbProducts.find((p) => p.shopId)?.shopId || '2ed31737-7ce2-4ed1-b32c-97f2c21d9988'
+                  navigate(`/shop/${targetShop}`)
+                }}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <span>🏪</span> Thử Thanh Điều Hành Shop
+              </button>
+              <button
+                onClick={() => navigate('/admin')}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition flex items-center gap-1 border border-slate-600 cursor-pointer"
+              >
+                <span>⚙️</span> Portal Quản Trị
+              </button>
+            </div>
+          </div>
+        )}
+
         <Routes>
           <Route
             path="/"
