@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { RedisService } from './redis/redis.service';
-import { CreateProductDto, UpdateProductDto, UpdatePriceDto, ImportBatchDto, RegisterFlashSaleDto } from './product.dto';
+import { CreateProductDto, UpdateProductDto, UpdatePriceDto, ImportBatchDto, RegisterFlashSaleDto, CreateBannerDto, UpdateBannerDto } from './product.dto';
 import { CreateReviewDto } from './review.dto';
 import { findProhibitedKeyword } from './banned-words';
 import { AiCategoryAuditorService } from './ai/ai-category-auditor.service';
@@ -1865,5 +1865,85 @@ export class ProductService {
     } catch (e: any) {
       console.warn(`[ProductService] Bỏ qua tính toán vector ảnh cho sản phẩm ${productId}:`, e?.message);
     }
+  }
+
+  // --- BANNER MANAGEMENT ---
+  async getBanners(position?: string, activeOnly = false) {
+    const where: any = {};
+    if (position && position !== 'ALL') {
+      where.position = position;
+    }
+    if (activeOnly) {
+      where.isActive = true;
+    }
+
+    return (this.prisma as any).banner.findMany({
+      where,
+      orderBy: [
+        { displayOrder: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
+  }
+
+  async createBanner(dto: CreateBannerDto) {
+    const maxOrder = await (this.prisma as any).banner.aggregate({
+      where: { position: dto.position || 'CAROUSEL' },
+      _max: { displayOrder: true },
+    });
+    const nextOrder = dto.displayOrder !== undefined ? dto.displayOrder : ((maxOrder._max?.displayOrder ?? -1) + 1);
+
+    return (this.prisma as any).banner.create({
+      data: {
+        title: dto.title,
+        subTitle: dto.subTitle,
+        badge: dto.badge,
+        imageUrl: dto.imageUrl,
+        linkUrl: dto.linkUrl,
+        position: dto.position || 'CAROUSEL',
+        displayOrder: nextOrder,
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
+      },
+    });
+  }
+
+  async updateBanner(id: string, dto: UpdateBannerDto) {
+    return (this.prisma as any).banner.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.subTitle !== undefined && { subTitle: dto.subTitle }),
+        ...(dto.badge !== undefined && { badge: dto.badge }),
+        ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
+        ...(dto.linkUrl !== undefined && { linkUrl: dto.linkUrl }),
+        ...(dto.position !== undefined && { position: dto.position }),
+        ...(dto.displayOrder !== undefined && { displayOrder: dto.displayOrder }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+    });
+  }
+
+  async toggleBannerActive(id: string) {
+    const banner = await (this.prisma as any).banner.findUnique({ where: { id } });
+    if (!banner) throw new NotFoundException('Banner không tồn tại');
+    return (this.prisma as any).banner.update({
+      where: { id },
+      data: { isActive: !banner.isActive },
+    });
+  }
+
+  async deleteBanner(id: string) {
+    return (this.prisma as any).banner.delete({ where: { id } });
+  }
+
+  async reorderBanners(orders: { id: string; displayOrder: number }[]) {
+    if (!Array.isArray(orders)) return { success: false };
+    for (const item of orders) {
+      await (this.prisma as any).banner.update({
+        where: { id: item.id },
+        data: { displayOrder: item.displayOrder },
+      }).catch(() => {});
+    }
+    return { success: true };
   }
 }

@@ -109,5 +109,27 @@ export class AiVisualSearchDto {
   customApiKey?: string;
 }
 
+export class CreateBannerDto {
+  title: string;
+  subTitle?: string;
+  badge?: string;
+  imageUrl: string;
+  linkUrl?: string;
+  position?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export class UpdateBannerDto {
+  title?: string;
+  subTitle?: string;
+  badge?: string;
+  imageUrl?: string;
+  linkUrl?: string;
+  position?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
 
 

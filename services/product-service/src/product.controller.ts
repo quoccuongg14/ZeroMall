@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Logger } from '@nestjs/common';
 import { ProductService } from './product.service';
-import { CreateProductDto, UpdateProductDto, UpdatePriceDto, ImportBatchDto, RegisterFlashSaleDto } from './product.dto';
+import { CreateProductDto, UpdateProductDto, UpdatePriceDto, ImportBatchDto, RegisterFlashSaleDto, CreateBannerDto, UpdateBannerDto } from './product.dto';
 import { CreateReviewDto } from './review.dto';
 
 @Controller('products')
@@ -88,6 +88,40 @@ export class ProductController {
   @Delete('categories/:id')
   async deleteCategory(@Param('id') id: string) {
     return this.productService.deleteCategory(id);
+  }
+
+  // --- BANNER MANAGEMENT ROUTES ---
+  @Get('banners')
+  async getBanners(
+    @Query('position') position?: string,
+    @Query('activeOnly') activeOnly?: string,
+  ) {
+    return this.productService.getBanners(position, activeOnly === 'true');
+  }
+
+  @Post('banners')
+  async createBanner(@Body() dto: CreateBannerDto) {
+    return this.productService.createBanner(dto);
+  }
+
+  @Put('banners/reorder')
+  async reorderBanners(@Body('orders') orders: { id: string; displayOrder: number }[]) {
+    return this.productService.reorderBanners(orders);
+  }
+
+  @Put('banners/:id/toggle')
+  async toggleBannerActive(@Param('id') id: string) {
+    return this.productService.toggleBannerActive(id);
+  }
+
+  @Put('banners/:id')
+  async updateBanner(@Param('id') id: string, @Body() dto: UpdateBannerDto) {
+    return this.productService.updateBanner(id, dto);
+  }
+
+  @Delete('banners/:id')
+  async deleteBanner(@Param('id') id: string) {
+    return this.productService.deleteBanner(id);
   }
 
   @Get('violations')

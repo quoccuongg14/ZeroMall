@@ -225,3 +225,19 @@ model UserActivity {
   @@index([action])
   @@index([category])
 }
+
+model Banner {
+  id           String   @id @default(uuid())
+  title        String
+  subTitle     String?
+  badge        String?
+  imageUrl     String   @db.Text
+  linkUrl      String?
+  position     String   @default("CAROUSEL") // "CAROUSEL" | "SIDE_TOP" | "SIDE_BOTTOM"
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([position, isActive, displayOrder])
+}
