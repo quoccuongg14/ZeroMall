@@ -280,7 +280,159 @@ export class AuthService {
     });
   }
 
-  async approveShop(id: string, status: string, blockedUntil?: string | null, blockReason?: string | null) {
+  async resetStorefront(
+    id: string,
+    operatorEmail: string,
+    operatorRole: string,
+    ipAddress?: string,
+    reason?: string,
+  ) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id },
+      include: { owner: true },
+    });
+    if (!shop) {
+      throw new NotFoundException(`Cửa hàng với ID ${id} không tồn tại`);
+    }
+
+    const oldLogo = shop.logo;
+    const updatedShop = await this.prisma.shop.update({
+      where: { id },
+      data: {
+        logo: null,
+      },
+    });
+
+    // Gửi thông báo đến chủ shop
+    try {
+      const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+      const targetIds = [shop.id];
+      if (shop.ownerId && shop.ownerId !== shop.id) {
+        targetIds.push(shop.ownerId);
+      }
+
+      for (const targetId of targetIds) {
+        fetch(`${notifServiceUrl}/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: targetId,
+            title: 'Cảnh báo vi phạm giao diện Shop ⚠️',
+            content: reason
+              ? `Giao diện / banner của Shop đã bị gỡ bỏ do vi phạm quy định sàn: "${reason}". Vui lòng cập nhật hình ảnh đúng chuẩn.`
+              : 'Giao diện / banner trang trí của Shop đã bị Ban Quản Trị cưỡng chế gỡ bỏ do vi phạm tiêu chuẩn cộng đồng. Vui lòng cập nhật hình ảnh đúng quy định.',
+            type: 'SYSTEM',
+            metadata: { action: 'RESET_STOREFRONT', shopId: id },
+          }),
+        }).catch((err) => console.error('Error sending reset storefront notification:', err));
+      }
+    } catch (err) {
+      console.error('Notification trigger error:', err);
+    }
+
+    // Ghi vết vào AuditLog
+    const roleLabel = operatorRole === 'PLATFORM_SUPPORT' ? 'CSKH' : 'Admin';
+    await this.createAuditLog(
+      operatorEmail || 'admin@zeromall.com',
+      `[CƯỠNG CHẾ GỠ BANNER SHOP] ${roleLabel} đã cưỡng chế gỡ giao diện & banner vi phạm của Shop "${shop.name}" (Mã: ${shop.id})${reason ? `. Lý do: ${reason}` : ''}`,
+      'MARKETING',
+      'DELETE',
+      shop.id,
+      shop.name,
+      ipAddress || '127.0.0.1',
+      JSON.stringify({
+        action: 'RESET_STOREFRONT',
+        previousLogo: oldLogo,
+        operatorRole,
+        reason,
+      }),
+    );
+
+    return updatedShop;
+  }
+
+  async impersonateShop(
+    shopId: string,
+    operatorEmail: string,
+    operatorRole: string,
+    ipAddress?: string,
+  ) {
+    if (operatorRole !== 'ADMIN' && operatorRole !== 'PLATFORM_SUPPORT') {
+      throw new UnauthorizedException('Bạn không có quyền truy cập đại diện Shop');
+    }
+
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      include: { owner: true },
+    });
+
+    if (!shop) {
+      throw new NotFoundException(`Cửa hàng với ID ${shopId} không tồn tại`);
+    }
+
+    const isReadOnly = operatorRole === 'PLATFORM_SUPPORT';
+    const roleLabel = isReadOnly ? 'CSKH' : 'Admin';
+
+    // Ghi vết vào AuditLog
+    await this.createAuditLog(
+      operatorEmail || 'admin@zeromall.com',
+      `[ĐĂNG NHẬP ĐẠI DIỆN SHOP] ${roleLabel} đã truy cập Kênh Người Bán của Shop "${shop.name}" (Chế độ: ${isReadOnly ? 'Chỉ Xem' : 'Toàn Quyền'})`,
+      'SECURITY',
+      'IMPERSONATE',
+      shop.id,
+      shop.name,
+      ipAddress || '127.0.0.1',
+      JSON.stringify({
+        impersonatedShopId: shop.id,
+        shopOwnerEmail: shop.owner?.email,
+        isReadOnly,
+        operatorRole,
+      }),
+    );
+
+    // Tạo JWT token với thông tin đại diện
+    const payload = {
+      sub: shop.owner?.id || shop.id,
+      email: shop.owner?.email || shop.email || 'seller@zeromall.com',
+      name: shop.owner?.name || shop.name,
+      role: 'SHOP_OWNER',
+      shopId: shop.id,
+      isImpersonated: true,
+      impersonatedBy: operatorEmail,
+      impersonatedByRole: operatorRole,
+      isReadOnly,
+    };
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: {
+        id: shop.owner?.id || shop.id,
+        email: shop.owner?.email || shop.email || 'seller@zeromall.com',
+        name: shop.owner?.name || shop.name,
+        role: 'SHOP_OWNER',
+        shopId: shop.id,
+        isImpersonated: true,
+        impersonatedBy: operatorEmail,
+        impersonatedByRole: operatorRole,
+        isReadOnly,
+      },
+      shop: {
+        id: shop.id,
+        name: shop.name,
+        status: shop.status,
+      },
+    };
+  }
+
+  async approveShop(
+    id: string,
+    status: string,
+    blockedUntil?: string | null,
+    blockReason?: string | null,
+    operatorEmail?: string,
+    operatorRole?: string,
+    ipAddress?: string,
+  ) {
     const shop = await this.prisma.shop.findUnique({
       where: { id },
     });
@@ -293,9 +445,20 @@ export class AuthService {
       throw new BadRequestException('Trạng thái phê duyệt không hợp lệ');
     }
 
+    let finalBlockedUntil = blockedUntil ? new Date(blockedUntil) : null;
+    if (operatorRole === 'PLATFORM_SUPPORT' && status === 'BLOCKED') {
+      const max24h = new Date(Date.now() + 24 * 60 * 60 * 1000 + 60 * 1000);
+      if (!finalBlockedUntil || finalBlockedUntil.getTime() > max24h.getTime()) {
+        finalBlockedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      }
+      if (!blockReason || blockReason.trim().length < 10) {
+        throw new BadRequestException('CSKH bắt buộc nhập biên bản lý do tạm khóa khẩn cấp');
+      }
+    }
+
     const dataToUpdate: any = { status };
     if (status === 'BLOCKED') {
-      dataToUpdate.blockedUntil = blockedUntil ? new Date(blockedUntil) : null;
+      dataToUpdate.blockedUntil = finalBlockedUntil;
       dataToUpdate.blockReason = blockReason || 'Vi phạm điều khoản hoạt động ZeroMall';
     } else if (status === 'APPROVED') {
       dataToUpdate.blockedUntil = null;
@@ -312,6 +475,41 @@ export class AuthService {
         where: { id: shop.ownerId },
         data: { shopId: shop.id },
       });
+    }
+
+    // Ghi vết vào AuditLog nếu có thông tin người thao tác
+    if (operatorEmail) {
+      const roleName = operatorRole === 'PLATFORM_SUPPORT' ? 'CSKH' : 'Admin';
+      let actionLog = '';
+      let actType = 'UPDATE';
+      if (status === 'BLOCKED') {
+        actType = 'SUSPEND';
+        const durationText = finalBlockedUntil
+          ? `Thời hạn: ${Math.round((finalBlockedUntil.getTime() - Date.now()) / (1000 * 60 * 60))} giờ`
+          : 'Khóa vĩnh viễn';
+        actionLog = `[KHÓA SHOP] ${roleName} ${operatorEmail} đã khóa cửa hàng "${shop.name}" (Mã: ${shop.id}, ${durationText}, Lý do: ${blockReason || 'Vi phạm tiêu chuẩn sàn'})`;
+      } else if (status === 'APPROVED') {
+        actType = 'APPROVE';
+        actionLog = `[MỞ KHÓA SHOP] ${roleName} ${operatorEmail} đã kích hoạt mở khóa hoạt động cho cửa hàng "${shop.name}" (Mã: ${shop.id})`;
+      } else {
+        actionLog = `[CẬP NHẬT TRẠNG THÁI SHOP] ${roleName} ${operatorEmail} đã đổi trạng thái shop "${shop.name}" thành ${status}`;
+      }
+
+      await this.createAuditLog(
+        operatorEmail,
+        actionLog,
+        'SHOPS',
+        actType,
+        shop.id,
+        shop.name,
+        ipAddress || '127.0.0.1',
+        JSON.stringify({
+          status,
+          blockedUntil: finalBlockedUntil,
+          blockReason,
+          operatorRole,
+        }),
+      );
     }
 
     return updatedShop;

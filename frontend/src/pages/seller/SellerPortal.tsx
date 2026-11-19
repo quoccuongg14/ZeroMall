@@ -44,6 +44,31 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
   // Sidebar Menu Navigation State (Synced with URL Query Params)
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Impersonation State (Ghost Login)
+  const impersonationSession = (() => {
+    try {
+      const raw = sessionStorage.getItem('zm_impersonation_original_session')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })()
+
+  const isImpersonating = !!impersonationSession || !!user?.isImpersonated
+  const isReadOnly = user?.isReadOnly === true || impersonationSession?.user?.role === 'PLATFORM_SUPPORT'
+  const impersonatorRole = user?.impersonatedByRole || impersonationSession?.user?.role || 'ADMIN'
+
+  const handleExitImpersonation = () => {
+    if (impersonationSession) {
+      localStorage.setItem('zm_user', JSON.stringify(impersonationSession.user))
+      localStorage.setItem('zm_token', impersonationSession.token)
+      sessionStorage.removeItem('zm_impersonation_original_session')
+      window.location.href = impersonationSession.returnUrl || '/admin'
+    } else {
+      onLogout()
+    }
+  }
+
   const activeMenu = searchParams.get('menu') || searchParams.get('tab') || 'dashboard'
   const activeSubMenu = searchParams.get('sub') || (
     activeMenu === 'dashboard' ? 'summary' :
@@ -362,6 +387,39 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
   // 5. Main Seller Dashboard
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-slate-800 font-sans text-left">
+      {/* Impersonation Floating Governance Banner */}
+      {isImpersonating && (
+        <div
+          className={`px-6 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-white shadow-md z-50 shrink-0 transition-all ${
+            isReadOnly
+              ? 'bg-amber-600 border-b border-amber-700'
+              : 'bg-indigo-700 border-b border-indigo-800'
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-base">{isReadOnly ? '⚠️' : '🛡️'}</span>
+            <span className="font-black uppercase tracking-wide">
+              ĐANG TRUY CẬP ĐẠI DIỆN SHOP BỞI {impersonatorRole === 'ADMIN' ? 'QUẢN TRỊ VIÊN SÀN (ADMIN)' : 'CHĂM SÓC KHÁCH HÀNG (CSKH)'}
+            </span>
+            <span className="bg-black/30 px-2 py-0.5 rounded-md text-[10px] font-black uppercase font-mono tracking-wider">
+              {isReadOnly ? 'Chế độ: CHỈ XEM (READ-ONLY)' : 'Chế độ: TOÀN QUYỀN (FULL CONTROL)'}
+            </span>
+            {isReadOnly && (
+              <span className="text-[11px] text-amber-100 italic hidden lg:inline">
+                (Các thao tác rút tiền và đổi tài khoản ngân hàng của Shop bị khóa an toàn)
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleExitImpersonation}
+            className="bg-white text-slate-900 hover:bg-slate-100 font-extrabold px-3 py-1.5 rounded-xl transition shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0 text-xs hover:scale-102"
+          >
+            <span>🚪</span>
+            <span>Thoát Chế Độ Đại Diện</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <header className="bg-white border-b border-slate-200/80 h-16 shrink-0 flex items-center justify-between px-6 z-40 sticky top-0 shadow-3xs">
         <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>

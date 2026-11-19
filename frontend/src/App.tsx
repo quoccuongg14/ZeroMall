@@ -59,24 +59,50 @@ function DeliveryPortalWrapper() {
 }
 
 function SellerPortalWrapper({ user, token, handleAuthSuccess, handleLogout }: { user: any, token: any, handleAuthSuccess: any, handleLogout: any }) {
+  const handleBackToMarket = () => {
+    const buyerUrl = getBuyerHomeUrl();
+    const effectiveToken = token || localStorage.getItem('zm_token') || '';
+    if (user && effectiveToken) {
+      const ssoUser = encodeURIComponent(JSON.stringify(user));
+      const ssoToken = encodeURIComponent(effectiveToken);
+      const sep = buyerUrl.includes('?') ? '&' : '?';
+      window.location.href = `${buyerUrl}${sep}sso_user=${ssoUser}&sso_token=${ssoToken}`;
+    } else {
+      window.location.href = buyerUrl;
+    }
+  };
+
   return (
     <SellerPortal
       user={user}
       token={token}
       onAuthSuccess={handleAuthSuccess}
       onLogout={handleLogout}
-      onBackToHome={() => { window.location.href = getBuyerHomeUrl(); }}
+      onBackToHome={handleBackToMarket}
     />
   )
 }
 
 function AdminPortalWrapper({ user, handleAuthSuccess, handleLogout }: { user: any, handleAuthSuccess: any, handleLogout: any }) {
+  const handleBackToMarket = () => {
+    const buyerUrl = getBuyerHomeUrl();
+    const effectiveToken = localStorage.getItem('zm_token') || '';
+    if (user && effectiveToken) {
+      const ssoUser = encodeURIComponent(JSON.stringify(user));
+      const ssoToken = encodeURIComponent(effectiveToken);
+      const sep = buyerUrl.includes('?') ? '&' : '?';
+      window.location.href = `${buyerUrl}${sep}sso_user=${ssoUser}&sso_token=${ssoToken}`;
+    } else {
+      window.location.href = buyerUrl;
+    }
+  };
+
   return (
     <AdminPortal
       user={user}
       onAuthSuccess={handleAuthSuccess}
       onLogout={handleLogout}
-      onBackToHome={() => { window.location.href = getBuyerHomeUrl(); }}
+      onBackToHome={handleBackToMarket}
     />
   )
 }
@@ -527,18 +553,47 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
 }
 
 function App() {
-  // Auth states - initialize synchronously from localStorage
-  const [user, setUser] = useState<any>(() => {
+  // Auth states - initialize synchronously from URL SSO parameters or localStorage
+  const initializeAuth = () => {
     try {
-      const savedUser = localStorage.getItem('zm_user')
-      return savedUser ? JSON.parse(savedUser) : null
-    } catch {
-      return null
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const ssoUserRaw = params.get('sso_user');
+        const ssoToken = params.get('sso_token');
+        if (ssoUserRaw && ssoToken) {
+          const ssoUser = JSON.parse(decodeURIComponent(ssoUserRaw));
+          localStorage.setItem('zm_user', JSON.stringify(ssoUser));
+          localStorage.setItem('zm_token', ssoToken);
+          localStorage.setItem('zm_last_active_time', Date.now().toString());
+          sessionStorage.setItem('zm_tab_session_id', 'active_session');
+
+          // Clean up URL parameters cleanly
+          params.delete('sso_user');
+          params.delete('sso_token');
+          const remainingQuery = params.toString() ? `?${params.toString()}` : '';
+          window.history.replaceState({}, document.title, `${window.location.pathname}${remainingQuery}`);
+
+          return { user: ssoUser, token: ssoToken };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse SSO params:', e);
     }
-  })
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('zm_token') || null
-  })
+    try {
+      const savedUser = localStorage.getItem('zm_user');
+      const savedToken = localStorage.getItem('zm_token');
+      return {
+        user: savedUser ? JSON.parse(savedUser) : null,
+        token: savedToken || null,
+      };
+    } catch {
+      return { user: null, token: null };
+    }
+  };
+
+  const initialAuth = initializeAuth();
+  const [user, setUser] = useState<any>(initialAuth.user);
+  const [token, setToken] = useState<string | null>(initialAuth.token);
   const [isAuthOpen, setIsAuthOpen] = useState(false)
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login')
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -648,9 +703,6 @@ function App() {
         const parsed = JSON.parse(savedUser)
         setUser(parsed)
         setToken(savedToken)
-        if ((parsed?.role === 'ADMIN' || parsed?.role === 'PLATFORM_SUPPORT') && window.location.pathname !== '/admin') {
-          window.location.href = '/admin'
-        }
       } else {
         const lastActive = localStorage.getItem('zm_last_active_time')
         const timePassed = Date.now() - (lastActive ? parseInt(lastActive, 10) : 0)
@@ -661,9 +713,6 @@ function App() {
           setToken(savedToken)
           sessionStorage.setItem('zm_tab_session_id', 'active_session')
           localStorage.setItem('zm_last_active_time', Date.now().toString())
-          if ((parsed?.role === 'ADMIN' || parsed?.role === 'PLATFORM_SUPPORT') && window.location.pathname !== '/admin') {
-            window.location.href = '/admin'
-          }
         } else {
           handleLogout()
         }

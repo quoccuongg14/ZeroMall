@@ -49,6 +49,17 @@ export const saveLinkedBankAccounts = (ownerId: string, accounts: LinkedBankAcco
 export const ShopBankAccounts: React.FC<ShopBankAccountsProps> = ({ user, shopId }) => {
   const ownerId = shopId || user?.shopId || user?.id || 'shop-test-id'
 
+  const isReadOnly = user?.isReadOnly === true || (() => {
+    try {
+      const s = sessionStorage.getItem('zm_impersonation_original_session')
+      if (s) {
+        const parsed = JSON.parse(s)
+        return parsed.user?.role === 'PLATFORM_SUPPORT'
+      }
+    } catch {}
+    return false
+  })()
+
   const [accounts, setAccounts] = useState<LinkedBankAccount[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<LinkedBankAccount | null>(null)
@@ -159,6 +170,10 @@ export const ShopBankAccounts: React.FC<ShopBankAccountsProps> = ({ user, shopId
   }
 
   const handleDelete = (id: string, name: string) => {
+    if (isReadOnly) {
+      alert('Chức năng xóa tài khoản ngân hàng bị vô hiệu hóa trong phiên hỗ trợ của CSKH.')
+      return
+    }
     if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản ngân hàng "${name}"?`)) {
       let updated = accounts.filter(a => a.id !== id)
       if (updated.length > 0 && !updated.some(a => a.isDefault)) {
@@ -170,6 +185,10 @@ export const ShopBankAccounts: React.FC<ShopBankAccountsProps> = ({ user, shopId
   }
 
   const handleSetDefault = (id: string) => {
+    if (isReadOnly) {
+      alert('Chức năng đổi tài khoản ngân hàng mặc định bị vô hiệu hóa trong phiên hỗ trợ của CSKH.')
+      return
+    }
     const updated = accounts.map(a => ({
       ...a,
       isDefault: a.id === id
@@ -192,12 +211,18 @@ export const ShopBankAccounts: React.FC<ShopBankAccountsProps> = ({ user, shopId
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
-        >
-          <span>＋</span> Thêm Tài Khoản Ngân Hàng
-        </button>
+        {isReadOnly ? (
+          <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs">
+            <span>🔒</span> Khóa chỉnh sửa trong phiên CSKH
+          </span>
+        ) : (
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
+          >
+            <span>＋</span> Thêm Tài Khoản Ngân Hàng
+          </button>
+        )}
       </div>
 
       {/* Account List Grid */}

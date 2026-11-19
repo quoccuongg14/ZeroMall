@@ -56,6 +56,17 @@ export const ShopWallet: React.FC<ShopWalletProps> = ({ user, onNavigateToBankAc
 
   const shopId = user?.shopId || user?.id || 'shop-test-id'
 
+  const isReadOnly = user?.isReadOnly === true || (() => {
+    try {
+      const s = sessionStorage.getItem('zm_impersonation_original_session')
+      if (s) {
+        const parsed = JSON.parse(s)
+        return parsed.user?.role === 'PLATFORM_SUPPORT'
+      }
+    } catch {}
+    return false
+  })()
+
   const fetchWalletData = async () => {
     setIsLoading(true)
     try {
@@ -112,6 +123,14 @@ export const ShopWallet: React.FC<ShopWalletProps> = ({ user, onNavigateToBankAc
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setActionMessage(null)
+
+    if (isReadOnly) {
+      setActionMessage({
+        text: '🔒 Bạn đang ở phiên đại diện Chỉ Xem của CSKH. Tính năng rút tiền bị khóa để bảo vệ tài sản của Người bán.',
+        type: 'error',
+      })
+      return
+    }
 
     const amount = parseFloat(withdrawAmount)
     if (isNaN(amount) || amount < 2000) {
@@ -300,12 +319,19 @@ export const ShopWallet: React.FC<ShopWalletProps> = ({ user, onNavigateToBankAc
                   </div>
                 )}
 
-                <button 
-                  type="submit"
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition duration-150 shadow-md cursor-pointer text-xs"
-                >
-                  Gửi Yêu Cầu Rút Tiền
-                </button>
+                {isReadOnly ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
+                    <span>🔒</span>
+                    <span>Tính năng rút tiền bị vô hiệu hóa trong phiên hỗ trợ Chỉ Xem của CSKH.</span>
+                  </div>
+                ) : (
+                  <button 
+                    type="submit"
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition duration-150 shadow-md cursor-pointer text-xs"
+                  >
+                    Gửi Yêu Cầu Rút Tiền
+                  </button>
+                )}
               </form>
             </div>
 

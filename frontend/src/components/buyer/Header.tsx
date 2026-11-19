@@ -78,9 +78,10 @@ export const Header: React.FC<HeaderProps> = ({
               <>
                 <button 
                   onClick={onOpenAdminPortal}
-                  className="hover:text-rose-600 transition bg-transparent border-none p-0 cursor-pointer font-bold text-rose-500 text-xs"
+                  className="hover:opacity-80 transition bg-transparent border-none p-0 cursor-pointer font-extrabold text-xs flex items-center gap-1.5 text-indigo-600"
                 >
-                  {t('header.platform_support', '🎧 Kênh CSKH Sàn')}
+                  <span>{user?.role === 'ADMIN' ? '🛡️' : '🎧'}</span>
+                  <span>{user?.role === 'ADMIN' ? 'Trang Quản Trị Sàn' : 'Kênh CSKH Sàn'}</span>
                 </button>
                 <span className="text-slate-200">|</span>
               </>
@@ -120,17 +121,39 @@ export const Header: React.FC<HeaderProps> = ({
               {user ? (
                 <div className="relative group flex items-center gap-2 cursor-pointer py-1">
                   <img 
-                    src={user.avatar || 'https://placehold.co/100x100?text=User'} 
+                    src={user.avatar || (user.role === 'ADMIN' ? 'https://ui-avatars.com/api/?name=Admin+ZeroMall&background=4f46e5&color=fff' : user.role === 'PLATFORM_SUPPORT' ? 'https://ui-avatars.com/api/?name=CSKH+ZeroMall&background=0d9488&color=fff' : 'https://placehold.co/100x100?text=User')} 
                     alt="avatar" 
                     className="w-5 h-5 rounded-full object-cover border border-slate-200"
                   />
-                  <span className="text-slate-600 hover:text-[#ee4d2d] transition font-semibold text-xs">
-                    {user.username || user.name || 'cuonggquoc'}
+                  <span className="text-slate-600 hover:text-[#ee4d2d] transition font-semibold text-xs flex items-center gap-1.5">
+                    <span>{user.name || user.username || user.email}</span>
+                    {user.role === 'ADMIN' && (
+                      <span className="text-[9px] bg-indigo-600 text-white font-black px-1.5 py-0.5 rounded uppercase">
+                        ADMIN
+                      </span>
+                    )}
+                    {user.role === 'PLATFORM_SUPPORT' && (
+                      <span className="text-[9px] bg-teal-600 text-white font-black px-1.5 py-0.5 rounded uppercase">
+                        CSKH
+                      </span>
+                    )}
                   </span>
                   
                   {/* Dropdown menu wrapper */}
                   <div className="absolute top-full right-0 pt-2 hidden group-hover:block z-55 animate-in fade-in slide-in-from-top-1 duration-150">
-                    <div className="w-[150px] bg-white border border-slate-100 rounded-lg shadow-md py-1.5 text-left font-normal text-slate-700">
+                    <div className="w-[170px] bg-white border border-slate-100 rounded-lg shadow-md py-1.5 text-left font-normal text-slate-700">
+                      {(user.role === 'ADMIN' || user.role === 'PLATFORM_SUPPORT') && onOpenAdminPortal && (
+                        <>
+                          <button
+                            onClick={onOpenAdminPortal}
+                            className="w-full text-left px-4 py-2 hover:bg-slate-50 transition cursor-pointer text-xs font-black text-indigo-600 flex items-center gap-1.5 border-b border-slate-100"
+                          >
+                            <span>{user.role === 'ADMIN' ? '🛡️' : '🎧'}</span>
+                            <span>{user.role === 'ADMIN' ? 'Trang Quản Trị Sàn' : 'Kênh CSKH Sàn'}</span>
+                          </button>
+                        </>
+                      )}
+                      
                       <button
                         onClick={() => navigate('/user/account/profile')}
                         className="w-full text-left px-4 py-2 hover:bg-slate-50 hover:text-[#ee4d2d] transition cursor-pointer text-xs"
@@ -149,15 +172,6 @@ export const Header: React.FC<HeaderProps> = ({
                       >
                         {t('header.my_wallet', 'Ví ZeroMall')}
                       </button>
-                      
-                      {(user.role === 'ADMIN' || user.role === 'PLATFORM_SUPPORT') && onOpenAdminPortal ? (
-                        <button
-                          onClick={onOpenAdminPortal}
-                          className="w-full text-left px-4 py-2 hover:bg-slate-50 hover:text-[#ee4d2d] transition cursor-pointer text-xs font-bold text-rose-600"
-                        >
-                          {t('header.platform_support', '🎧 Kênh CSKH Sàn')}
-                        </button>
-                      ) : null}
                       
                       <hr className="border-slate-100 my-1" />
                       

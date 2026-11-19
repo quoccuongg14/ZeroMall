@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { toSlug } from '../../utils/slug'
+import { StorefrontGovernanceBar } from '../../components/admin/storefront/StorefrontGovernanceBar'
 
 interface Product {
   id: string
@@ -30,6 +31,8 @@ interface ShopDetails {
   responseRate?: number
   responseTime?: string
   status?: string
+  blockedUntil?: string | null
+  blockReason?: string | null
   email?: string
   phoneNumber?: string
   pickupAddress?: string
@@ -73,143 +76,132 @@ export const ShopDetailPage: React.FC<ShopDetailPageProps> = ({
   const [claimedVouchers, setClaimedVouchers] = useState<Record<string, boolean>>({})
 
   // 1. Fetch Shop Details & Products
-  useEffect(() => {
-    let isMounted = true
+  const fetchShopInfo = useCallback(async () => {
     setLoading(true)
-
-    const fetchShopInfo = async () => {
-      try {
-        // Fetch Shop Info
-        const shopRes = await fetch(`${API_BASE_URL}/auth/shops/${targetShopId}`)
-        if (shopRes.ok) {
-          const sData = await shopRes.json()
-          if (isMounted) {
-            setShopDetails(sData)
-            setFollowersCount(sData.followers ?? 0)
-          }
-        } else {
-          if (isMounted) {
-            setShopDetails(null)
-            setFollowersCount(0)
-          }
-        }
-
-        // Fetch Shop Products
-        const prodRes = await fetch(`${API_BASE_URL}/products?shopId=${targetShopId}`)
-        if (prodRes.ok) {
-          const pData = await prodRes.json()
-          if (isMounted && Array.isArray(pData)) {
-            const formatted = pData.map((p: any) => {
-              const parseNum = (val: any) => {
-                if (!val) return 0
-                if (typeof val === 'number') return val
-                return parseInt(String(val).replace(/\D/g, ''), 10) || 0
-              }
-              let priceNum = parseNum(p.price)
-              let origNum = parseNum(p.originalPrice)
-
-              // Parse variationRows if hasVariations
-              let parsedVariationRows: any[] = []
-              if (p.hasVariations && p.variationRows) {
-                try {
-                  parsedVariationRows = typeof p.variationRows === 'string' ? JSON.parse(p.variationRows) : p.variationRows
-                } catch (e) {
-                  console.error('Failed to parse variationRows', e)
-                }
-              }
-
-              if (Array.isArray(parsedVariationRows) && parsedVariationRows.length > 0) {
-                const validVariationPrices: { price: number; originalPrice: number }[] = []
-                for (const row of parsedVariationRows) {
-                  const rPrice = parseNum(row.price)
-                  const rOrig = parseNum(row.originalPrice)
-                  if (rPrice > 0) {
-                    validVariationPrices.push({ price: rPrice, originalPrice: rOrig })
-                  }
-                }
-
-                if (validVariationPrices.length > 0) {
-                  validVariationPrices.sort((a, b) => a.price - b.price)
-                  const cheapest = validVariationPrices[0]
-                  priceNum = cheapest.price
-                  if (cheapest.originalPrice > 0) {
-                    origNum = cheapest.originalPrice
-                  }
-                }
-              }
-
-              const flashPriceStr = priceNum.toLocaleString('vi-VN') + 'đ'
-              const originalPriceStr = origNum > priceNum ? origNum.toLocaleString('vi-VN') + 'đ' : ''
-
-              return {
-                id: p.id,
-                name: p.name,
-                originalPrice: originalPriceStr,
-                flashPrice: flashPriceStr,
-                price: flashPriceStr,
-                image: p.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
-                sold: p.sales || p.sold || 0,
-                sales: p.sales || p.sold || 0,
-                stock: p.stock !== undefined ? p.stock : 0,
-                status: p.status || 'active',
-                rating: p.rating && p.rating > 0 ? p.rating : 5.0,
-                category: p.category,
-                shopId: p.shopId
-              }
-            })
-            setShopProducts(formatted.filter((p: any) => p.status !== 'hidden'))
-          }
-        } else if (propsProducts && propsProducts.length > 0) {
-          if (isMounted) {
-            setShopProducts(propsProducts.filter((p: any) => (p.shopId === targetShopId || !p.shopId) && p.status !== 'hidden'))
-          }
-        }
-
-        // Fetch Shop Stats
-        const statsRes = await fetch(`${API_BASE_URL}/products/shops/${targetShopId}/stats`)
-        if (statsRes.ok && isMounted) {
-          const statsData = await statsRes.json()
-          setShopStats(statsData)
-        }
-
-        // Fetch Real Shop Vouchers from discount-service CSDL
-        try {
-          const voucherRes = await fetch(`${API_BASE_URL}/discounts/active?shopId=${targetShopId}`)
-          if (voucherRes.ok && isMounted) {
-            const vData = await voucherRes.json()
-            if (Array.isArray(vData)) {
-              setDbVouchers(vData)
-            }
-          }
-        } catch (ve) {
-          console.warn('Could not fetch shop vouchers:', ve)
-        }
-
-        // Fetch Follow Status & Real Follower Count
-        try {
-          const followRes = await fetch(`${API_BASE_URL}/auth/shops/${targetShopId}/follow-status?userId=${user?.id || ''}`)
-          if (followRes.ok && isMounted) {
-            const fData = await followRes.json()
-            setIsFollowing(!!fData.isFollowing)
-            if (typeof fData.count === 'number') {
-              setFollowersCount(fData.count)
-            }
-          }
-        } catch (fe) {
-          console.warn('Could not fetch follow status:', fe)
-        }
-      } catch (err) {
-        console.error('Error fetching shop detail page data:', err)
-      } finally {
-        if (isMounted) setLoading(false)
+    try {
+      // Fetch Shop Info
+      const shopRes = await fetch(`${API_BASE_URL}/auth/shops/${targetShopId}`)
+      if (shopRes.ok) {
+        const sData = await shopRes.json()
+        setShopDetails(sData)
+        setFollowersCount(sData.followers ?? 0)
+      } else {
+        setShopDetails(null)
+        setFollowersCount(0)
       }
-    }
 
-    fetchShopInfo()
-    return () => {
-      isMounted = false
+      // Fetch Shop Products
+      const prodRes = await fetch(`${API_BASE_URL}/products?shopId=${targetShopId}`)
+      if (prodRes.ok) {
+        const pData = await prodRes.json()
+        if (Array.isArray(pData)) {
+          const formatted = pData.map((p: any) => {
+            const parseNum = (val: any) => {
+              if (!val) return 0
+              if (typeof val === 'number') return val
+              return parseInt(String(val).replace(/\D/g, ''), 10) || 0
+            }
+            let priceNum = parseNum(p.price)
+            let origNum = parseNum(p.originalPrice)
+
+            // Parse variationRows if hasVariations
+            let parsedVariationRows: any[] = []
+            if (p.hasVariations && p.variationRows) {
+              try {
+                parsedVariationRows = typeof p.variationRows === 'string' ? JSON.parse(p.variationRows) : p.variationRows
+              } catch (e) {
+                console.error('Failed to parse variationRows', e)
+              }
+            }
+
+            if (Array.isArray(parsedVariationRows) && parsedVariationRows.length > 0) {
+              const validVariationPrices: { price: number; originalPrice: number }[] = []
+              for (const row of parsedVariationRows) {
+                const rPrice = parseNum(row.price)
+                const rOrig = parseNum(row.originalPrice)
+                if (rPrice > 0) {
+                  validVariationPrices.push({ price: rPrice, originalPrice: rOrig })
+                }
+              }
+
+              if (validVariationPrices.length > 0) {
+                validVariationPrices.sort((a, b) => a.price - b.price)
+                const cheapest = validVariationPrices[0]
+                priceNum = cheapest.price
+                if (cheapest.originalPrice > 0) {
+                  origNum = cheapest.originalPrice
+                }
+              }
+            }
+
+            const flashPriceStr = priceNum.toLocaleString('vi-VN') + 'đ'
+            const originalPriceStr = origNum > priceNum ? origNum.toLocaleString('vi-VN') + 'đ' : ''
+
+            return {
+              id: p.id,
+              name: p.name,
+              originalPrice: originalPriceStr,
+              flashPrice: flashPriceStr,
+              price: flashPriceStr,
+              image: p.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+              sold: p.sales || p.sold || 0,
+              sales: p.sales || p.sold || 0,
+              stock: p.stock !== undefined ? p.stock : 0,
+              status: p.status || 'active',
+              rating: p.rating && p.rating > 0 ? p.rating : 5.0,
+              category: p.category,
+              shopId: p.shopId
+            }
+          })
+          setShopProducts(formatted.filter((p: any) => p.status !== 'hidden'))
+        }
+      } else if (propsProducts && propsProducts.length > 0) {
+        setShopProducts(propsProducts.filter((p: any) => (p.shopId === targetShopId || !p.shopId) && p.status !== 'hidden'))
+      }
+
+      // Fetch Shop Stats
+      const statsRes = await fetch(`${API_BASE_URL}/products/shops/${targetShopId}/stats`)
+      if (statsRes.ok) {
+        const statsData = await statsRes.json()
+        setShopStats(statsData)
+      }
+
+      // Fetch Real Shop Vouchers from discount-service CSDL
+      try {
+        const voucherRes = await fetch(`${API_BASE_URL}/discounts/active?shopId=${targetShopId}`)
+        if (voucherRes.ok) {
+          const vData = await voucherRes.json()
+          if (Array.isArray(vData)) {
+            setDbVouchers(vData)
+          }
+        }
+      } catch (ve) {
+        console.warn('Could not fetch shop vouchers:', ve)
+      }
+
+      // Fetch Follow Status & Real Follower Count
+      try {
+        const followRes = await fetch(`${API_BASE_URL}/auth/shops/${targetShopId}/follow-status?userId=${user?.id || ''}`)
+        if (followRes.ok) {
+          const fData = await followRes.json()
+          setIsFollowing(!!fData.isFollowing)
+          if (typeof fData.count === 'number') {
+            setFollowersCount(fData.count)
+          }
+        }
+      } catch (fe) {
+        console.warn('Could not fetch follow status:', fe)
+      }
+    } catch (err) {
+      console.error('Error fetching shop detail page data:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [targetShopId, user])
+  }, [targetShopId, user?.id, propsProducts])
+
+  useEffect(() => {
+    fetchShopInfo()
+  }, [fetchShopInfo])
 
   // Handle follow toggle
   const handleToggleFollow = async () => {
@@ -341,6 +333,36 @@ export const ShopDetailPage: React.FC<ShopDetailPageProps> = ({
   return (
     <div className="space-y-6 text-left font-sans">
       
+      {/* Storefront Governance Bar (Floating for Admin & CSKH) */}
+      <StorefrontGovernanceBar
+        shop={shopDetails}
+        user={user}
+        onShopUpdated={fetchShopInfo}
+      />
+
+      {/* Suspended Shop Banner Notice */}
+      {shopDetails?.status === 'BLOCKED' && (
+        <div className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-700 text-white p-4 rounded-2xl shadow-lg border border-rose-500 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl p-2 bg-black/20 rounded-xl">⚠️</span>
+            <div>
+              <p className="font-extrabold text-sm">Gian Hàng Đang Tạm Ngưng Hoạt Động</p>
+              <p className="text-xs text-rose-100 font-medium">
+                {shopDetails?.blockReason || 'Gian hàng đang bị tạm khóa để xác minh tiêu chuẩn hoạt động của ZeroMall.'}
+              </p>
+            </div>
+          </div>
+          {shopDetails?.blockedUntil && (
+            <div className="bg-black/25 px-3 py-1.5 rounded-xl border border-white/20 text-right shrink-0">
+              <span className="text-[10px] text-rose-200 uppercase font-bold block">Thời gian mở lại dự kiến:</span>
+              <span className="text-xs font-black font-mono text-white">
+                {new Date(shopDetails.blockedUntil).toLocaleString('vi-VN')}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Breadcrumbs */}
       <nav className="flex items-center gap-2 text-xs text-slate-500 font-medium">
         <Link to="/" className="hover:text-emerald-600 transition flex items-center gap-1 font-bold">
@@ -397,12 +419,21 @@ export const ShopDetailPage: React.FC<ShopDetailPageProps> = ({
                   </span>
                 )}
               </h1>
-              <p className="text-[11px] text-emerald-300 font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Đang hoạt động</span>
-                <span className="text-white/40">•</span>
-                <span className="text-slate-300 font-semibold">Chính hãng 100%</span>
-              </p>
+              {shopDetails?.status === 'BLOCKED' ? (
+                <p className="text-[11px] text-rose-300 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  <span>Tạm ngưng hoạt động</span>
+                  <span className="text-white/40">•</span>
+                  <span className="text-slate-300 font-semibold">{shopDetails.blockReason || 'Đang xác minh'}</span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-emerald-300 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Đang hoạt động</span>
+                  <span className="text-white/40">•</span>
+                  <span className="text-slate-300 font-semibold">Chính hãng 100%</span>
+                </p>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2 pt-1">

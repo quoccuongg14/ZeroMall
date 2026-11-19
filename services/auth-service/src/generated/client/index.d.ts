@@ -4973,6 +4973,12 @@ export namespace Prisma {
     timestamp: Date | null
     user: string | null
     action: string | null
+    module: string | null
+    actionType: string | null
+    targetId: string | null
+    targetName: string | null
+    ipAddress: string | null
+    metadata: string | null
   }
 
   export type AuditLogMaxAggregateOutputType = {
@@ -4980,6 +4986,12 @@ export namespace Prisma {
     timestamp: Date | null
     user: string | null
     action: string | null
+    module: string | null
+    actionType: string | null
+    targetId: string | null
+    targetName: string | null
+    ipAddress: string | null
+    metadata: string | null
   }
 
   export type AuditLogCountAggregateOutputType = {
@@ -4987,6 +4999,12 @@ export namespace Prisma {
     timestamp: number
     user: number
     action: number
+    module: number
+    actionType: number
+    targetId: number
+    targetName: number
+    ipAddress: number
+    metadata: number
     _all: number
   }
 
@@ -4996,6 +5014,12 @@ export namespace Prisma {
     timestamp?: true
     user?: true
     action?: true
+    module?: true
+    actionType?: true
+    targetId?: true
+    targetName?: true
+    ipAddress?: true
+    metadata?: true
   }
 
   export type AuditLogMaxAggregateInputType = {
@@ -5003,6 +5027,12 @@ export namespace Prisma {
     timestamp?: true
     user?: true
     action?: true
+    module?: true
+    actionType?: true
+    targetId?: true
+    targetName?: true
+    ipAddress?: true
+    metadata?: true
   }
 
   export type AuditLogCountAggregateInputType = {
@@ -5010,6 +5040,12 @@ export namespace Prisma {
     timestamp?: true
     user?: true
     action?: true
+    module?: true
+    actionType?: true
+    targetId?: true
+    targetName?: true
+    ipAddress?: true
+    metadata?: true
     _all?: true
   }
 
@@ -5090,6 +5126,12 @@ export namespace Prisma {
     timestamp: Date
     user: string
     action: string
+    module: string | null
+    actionType: string | null
+    targetId: string | null
+    targetName: string | null
+    ipAddress: string | null
+    metadata: string | null
     _count: AuditLogCountAggregateOutputType | null
     _min: AuditLogMinAggregateOutputType | null
     _max: AuditLogMaxAggregateOutputType | null
@@ -5114,6 +5156,12 @@ export namespace Prisma {
     timestamp?: boolean
     user?: boolean
     action?: boolean
+    module?: boolean
+    actionType?: boolean
+    targetId?: boolean
+    targetName?: boolean
+    ipAddress?: boolean
+    metadata?: boolean
   }, ExtArgs["result"]["auditLog"]>
 
   export type AuditLogSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -5121,6 +5169,12 @@ export namespace Prisma {
     timestamp?: boolean
     user?: boolean
     action?: boolean
+    module?: boolean
+    actionType?: boolean
+    targetId?: boolean
+    targetName?: boolean
+    ipAddress?: boolean
+    metadata?: boolean
   }, ExtArgs["result"]["auditLog"]>
 
   export type AuditLogSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -5128,6 +5182,12 @@ export namespace Prisma {
     timestamp?: boolean
     user?: boolean
     action?: boolean
+    module?: boolean
+    actionType?: boolean
+    targetId?: boolean
+    targetName?: boolean
+    ipAddress?: boolean
+    metadata?: boolean
   }, ExtArgs["result"]["auditLog"]>
 
   export type AuditLogSelectScalar = {
@@ -5135,9 +5195,15 @@ export namespace Prisma {
     timestamp?: boolean
     user?: boolean
     action?: boolean
+    module?: boolean
+    actionType?: boolean
+    targetId?: boolean
+    targetName?: boolean
+    ipAddress?: boolean
+    metadata?: boolean
   }
 
-  export type AuditLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "timestamp" | "user" | "action", ExtArgs["result"]["auditLog"]>
+  export type AuditLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "timestamp" | "user" | "action" | "module" | "actionType" | "targetId" | "targetName" | "ipAddress" | "metadata", ExtArgs["result"]["auditLog"]>
 
   export type $AuditLogPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "AuditLog"
@@ -5147,6 +5213,12 @@ export namespace Prisma {
       timestamp: Date
       user: string
       action: string
+      module: string | null
+      actionType: string | null
+      targetId: string | null
+      targetName: string | null
+      ipAddress: string | null
+      metadata: string | null
     }, ExtArgs["result"]["auditLog"]>
     composites: {}
   }
@@ -5574,6 +5646,12 @@ export namespace Prisma {
     readonly timestamp: FieldRef<"AuditLog", 'DateTime'>
     readonly user: FieldRef<"AuditLog", 'String'>
     readonly action: FieldRef<"AuditLog", 'String'>
+    readonly module: FieldRef<"AuditLog", 'String'>
+    readonly actionType: FieldRef<"AuditLog", 'String'>
+    readonly targetId: FieldRef<"AuditLog", 'String'>
+    readonly targetName: FieldRef<"AuditLog", 'String'>
+    readonly ipAddress: FieldRef<"AuditLog", 'String'>
+    readonly metadata: FieldRef<"AuditLog", 'String'>
   }
     
 
@@ -7225,7 +7303,13 @@ export namespace Prisma {
     id: 'id',
     timestamp: 'timestamp',
     user: 'user',
-    action: 'action'
+    action: 'action',
+    module: 'module',
+    actionType: 'actionType',
+    targetId: 'targetId',
+    targetName: 'targetName',
+    ipAddress: 'ipAddress',
+    metadata: 'metadata'
   };
 
   export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
@@ -7639,6 +7723,12 @@ export namespace Prisma {
     timestamp?: DateTimeFilter<"AuditLog"> | Date | string
     user?: StringFilter<"AuditLog"> | string
     action?: StringFilter<"AuditLog"> | string
+    module?: StringNullableFilter<"AuditLog"> | string | null
+    actionType?: StringNullableFilter<"AuditLog"> | string | null
+    targetId?: StringNullableFilter<"AuditLog"> | string | null
+    targetName?: StringNullableFilter<"AuditLog"> | string | null
+    ipAddress?: StringNullableFilter<"AuditLog"> | string | null
+    metadata?: StringNullableFilter<"AuditLog"> | string | null
   }
 
   export type AuditLogOrderByWithRelationInput = {
@@ -7646,6 +7736,12 @@ export namespace Prisma {
     timestamp?: SortOrder
     user?: SortOrder
     action?: SortOrder
+    module?: SortOrderInput | SortOrder
+    actionType?: SortOrderInput | SortOrder
+    targetId?: SortOrderInput | SortOrder
+    targetName?: SortOrderInput | SortOrder
+    ipAddress?: SortOrderInput | SortOrder
+    metadata?: SortOrderInput | SortOrder
   }
 
   export type AuditLogWhereUniqueInput = Prisma.AtLeast<{
@@ -7656,6 +7752,12 @@ export namespace Prisma {
     timestamp?: DateTimeFilter<"AuditLog"> | Date | string
     user?: StringFilter<"AuditLog"> | string
     action?: StringFilter<"AuditLog"> | string
+    module?: StringNullableFilter<"AuditLog"> | string | null
+    actionType?: StringNullableFilter<"AuditLog"> | string | null
+    targetId?: StringNullableFilter<"AuditLog"> | string | null
+    targetName?: StringNullableFilter<"AuditLog"> | string | null
+    ipAddress?: StringNullableFilter<"AuditLog"> | string | null
+    metadata?: StringNullableFilter<"AuditLog"> | string | null
   }, "id">
 
   export type AuditLogOrderByWithAggregationInput = {
@@ -7663,6 +7765,12 @@ export namespace Prisma {
     timestamp?: SortOrder
     user?: SortOrder
     action?: SortOrder
+    module?: SortOrderInput | SortOrder
+    actionType?: SortOrderInput | SortOrder
+    targetId?: SortOrderInput | SortOrder
+    targetName?: SortOrderInput | SortOrder
+    ipAddress?: SortOrderInput | SortOrder
+    metadata?: SortOrderInput | SortOrder
     _count?: AuditLogCountOrderByAggregateInput
     _max?: AuditLogMaxOrderByAggregateInput
     _min?: AuditLogMinOrderByAggregateInput
@@ -7676,6 +7784,12 @@ export namespace Prisma {
     timestamp?: DateTimeWithAggregatesFilter<"AuditLog"> | Date | string
     user?: StringWithAggregatesFilter<"AuditLog"> | string
     action?: StringWithAggregatesFilter<"AuditLog"> | string
+    module?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
+    actionType?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
+    targetId?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
+    targetName?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
+    ipAddress?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
+    metadata?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
   }
 
   export type UserAddressWhereInput = {
@@ -8104,6 +8218,12 @@ export namespace Prisma {
     timestamp?: Date | string
     user: string
     action: string
+    module?: string | null
+    actionType?: string | null
+    targetId?: string | null
+    targetName?: string | null
+    ipAddress?: string | null
+    metadata?: string | null
   }
 
   export type AuditLogUncheckedCreateInput = {
@@ -8111,6 +8231,12 @@ export namespace Prisma {
     timestamp?: Date | string
     user: string
     action: string
+    module?: string | null
+    actionType?: string | null
+    targetId?: string | null
+    targetName?: string | null
+    ipAddress?: string | null
+    metadata?: string | null
   }
 
   export type AuditLogUpdateInput = {
@@ -8118,6 +8244,12 @@ export namespace Prisma {
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: StringFieldUpdateOperationsInput | string
     action?: StringFieldUpdateOperationsInput | string
+    module?: NullableStringFieldUpdateOperationsInput | string | null
+    actionType?: NullableStringFieldUpdateOperationsInput | string | null
+    targetId?: NullableStringFieldUpdateOperationsInput | string | null
+    targetName?: NullableStringFieldUpdateOperationsInput | string | null
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type AuditLogUncheckedUpdateInput = {
@@ -8125,6 +8257,12 @@ export namespace Prisma {
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: StringFieldUpdateOperationsInput | string
     action?: StringFieldUpdateOperationsInput | string
+    module?: NullableStringFieldUpdateOperationsInput | string | null
+    actionType?: NullableStringFieldUpdateOperationsInput | string | null
+    targetId?: NullableStringFieldUpdateOperationsInput | string | null
+    targetName?: NullableStringFieldUpdateOperationsInput | string | null
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type AuditLogCreateManyInput = {
@@ -8132,6 +8270,12 @@ export namespace Prisma {
     timestamp?: Date | string
     user: string
     action: string
+    module?: string | null
+    actionType?: string | null
+    targetId?: string | null
+    targetName?: string | null
+    ipAddress?: string | null
+    metadata?: string | null
   }
 
   export type AuditLogUpdateManyMutationInput = {
@@ -8139,6 +8283,12 @@ export namespace Prisma {
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: StringFieldUpdateOperationsInput | string
     action?: StringFieldUpdateOperationsInput | string
+    module?: NullableStringFieldUpdateOperationsInput | string | null
+    actionType?: NullableStringFieldUpdateOperationsInput | string | null
+    targetId?: NullableStringFieldUpdateOperationsInput | string | null
+    targetName?: NullableStringFieldUpdateOperationsInput | string | null
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type AuditLogUncheckedUpdateManyInput = {
@@ -8146,6 +8296,12 @@ export namespace Prisma {
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
     user?: StringFieldUpdateOperationsInput | string
     action?: StringFieldUpdateOperationsInput | string
+    module?: NullableStringFieldUpdateOperationsInput | string | null
+    actionType?: NullableStringFieldUpdateOperationsInput | string | null
+    targetId?: NullableStringFieldUpdateOperationsInput | string | null
+    targetName?: NullableStringFieldUpdateOperationsInput | string | null
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    metadata?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type UserAddressCreateInput = {
@@ -8602,6 +8758,12 @@ export namespace Prisma {
     timestamp?: SortOrder
     user?: SortOrder
     action?: SortOrder
+    module?: SortOrder
+    actionType?: SortOrder
+    targetId?: SortOrder
+    targetName?: SortOrder
+    ipAddress?: SortOrder
+    metadata?: SortOrder
   }
 
   export type AuditLogMaxOrderByAggregateInput = {
@@ -8609,6 +8771,12 @@ export namespace Prisma {
     timestamp?: SortOrder
     user?: SortOrder
     action?: SortOrder
+    module?: SortOrder
+    actionType?: SortOrder
+    targetId?: SortOrder
+    targetName?: SortOrder
+    ipAddress?: SortOrder
+    metadata?: SortOrder
   }
 
   export type AuditLogMinOrderByAggregateInput = {
@@ -8616,6 +8784,12 @@ export namespace Prisma {
     timestamp?: SortOrder
     user?: SortOrder
     action?: SortOrder
+    module?: SortOrder
+    actionType?: SortOrder
+    targetId?: SortOrder
+    targetName?: SortOrder
+    ipAddress?: SortOrder
+    metadata?: SortOrder
   }
 
   export type BoolFilter<$PrismaModel = never> = {

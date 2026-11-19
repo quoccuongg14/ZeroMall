@@ -28,9 +28,69 @@ export class AuthController {
   @Put('shops/:id/approve')
   async approveShop(
     @Param('id') id: string,
-    @Body() body: { status: string; blockedUntil?: string | null; blockReason?: string | null }
+    @Body()
+    body: {
+      status: string;
+      blockedUntil?: string | null;
+      blockReason?: string | null;
+      operatorEmail?: string;
+      operatorRole?: string;
+      ipAddress?: string;
+    },
+    @Request() req,
   ) {
-    return this.authService.approveShop(id, body.status, body.blockedUntil, body.blockReason);
+    const clientIp = body.ipAddress || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    return this.authService.approveShop(
+      id,
+      body.status,
+      body.blockedUntil,
+      body.blockReason,
+      body.operatorEmail,
+      body.operatorRole,
+      clientIp,
+    );
+  }
+
+  @Put('shops/:id/reset-storefront')
+  async resetStorefront(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      operatorEmail?: string;
+      operatorRole?: string;
+      reason?: string;
+      ipAddress?: string;
+    },
+    @Request() req,
+  ) {
+    const clientIp = body.ipAddress || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    return this.authService.resetStorefront(
+      id,
+      body.operatorEmail || 'admin@zeromall.com',
+      body.operatorRole || 'ADMIN',
+      clientIp,
+      body.reason,
+    );
+  }
+
+  @Post('admin/impersonate-shop/:id')
+  async impersonateShop(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      operatorEmail?: string;
+      operatorRole?: string;
+      ipAddress?: string;
+    },
+    @Request() req,
+  ) {
+    const clientIp = body.ipAddress || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    return this.authService.impersonateShop(
+      id,
+      body.operatorEmail || 'admin@zeromall.com',
+      body.operatorRole || 'ADMIN',
+      clientIp,
+    );
   }
 
   @Delete('shops/:id')
