@@ -17,8 +17,8 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 50
   
-  // Filter & Search
-  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'MATCHED'>('ALL')
+  // Filter & Search (Mặc định: Chỉ hiện các sản phẩm Cần Xử Lý / Vi Phạm để CSKH tập trung thao tác)
+  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'MATCHED'>('FLAGGED')
   const [searchQuery, setSearchQuery] = useState('')
   
   // Shops map: id -> { id, name, ownerId, phoneNumber }
@@ -263,20 +263,10 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
           {/* Sub-filters */}
           <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
             <button
-              onClick={() => setFilterIssue('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                filterIssue === 'ALL'
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>Tất cả ({batchAudit?.totalScanned || 0})</span>
-            </button>
-            <button
               onClick={() => setFilterIssue('FLAGGED')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'FLAGGED'
-                  ? 'bg-amber-600 text-white'
+                  ? 'bg-amber-600 text-white shadow-xs'
                   : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
               }`}
             >
@@ -289,7 +279,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               onClick={() => setFilterIssue('WRONG_CATEGORY')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'WRONG_CATEGORY'
-                  ? 'bg-amber-500 text-white'
+                  ? 'bg-amber-500 text-white shadow-xs'
                   : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
               }`}
             >
@@ -302,7 +292,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               onClick={() => setFilterIssue('IMAGE_MISMATCH')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'IMAGE_MISMATCH'
-                  ? 'bg-rose-600 text-white'
+                  ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
               }`}
             >
@@ -315,7 +305,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               onClick={() => setFilterIssue('MATCHED')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'MATCHED'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
               }`}
             >
@@ -323,6 +313,16 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               <span className="px-1.5 py-0.2 bg-emerald-600/30 rounded-full text-[10px]">
                 {batchAudit?.matchedCount || 0}
               </span>
+            </button>
+            <button
+              onClick={() => setFilterIssue('ALL')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                filterIssue === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <span>Tất cả ({batchAudit?.totalScanned || 0})</span>
             </button>
           </div>
 

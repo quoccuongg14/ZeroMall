@@ -4,7 +4,7 @@ import json
 import base64
 import io
 import urllib.request
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 
@@ -15,19 +15,33 @@ print(f"[+] Model loaded!")
 
 # Ngành hàng & vật thể chuẩn để phân loại hình ảnh (Zero-shot Multimodal Vision)
 CANONICAL_CATEGORIES = {
-    "Áo khoác / Áo thời trang": {
+    "Áo khoác / Outerwear": {
         "prompt": "leather jacket coat outerwear jacket bomber blazer hoodie windbreaker top",
-        "label": "Áo khoác / Áo thời trang",
+        "label": "Áo khoác / Outerwear",
         "suggestedTitle": "Áo Khoác Phong Cách Thời Trang Nam Nữ Cao Cấp",
         "zero_category": "Thời Trang Nam",
-        "domain": "TOPS"
+        "domain": "OUTERWEAR"
     },
-    "Áo thun / Áo sơ mi": {
-        "prompt": "t-shirt shirt polo sweater top apparel men women",
-        "label": "Áo thun / Áo sơ mi thời trang",
-        "suggestedTitle": "Áo Thời Trang Phong Cách Trẻ Trung",
+    "Áo thun / Áo phông": {
+        "prompt": "graphic t-shirt casual tee cotton t-shirt streetwear tee shirt ao thun ao phong",
+        "label": "Áo thun / Áo phông",
+        "suggestedTitle": "Áo Thun Cổ Tròn Thời Trang Năng Động",
         "zero_category": "Thời Trang Nam",
-        "domain": "TOPS"
+        "domain": "TSHIRT"
+    },
+    "Áo Cardigan / Áo len dệt kim": {
+        "prompt": "knit cardigan wool knitwear buttoned sweater knitted cardigan wool jacket ao len det kim ao cardigan len",
+        "label": "Áo Cardigan / Áo len dệt kim",
+        "suggestedTitle": "Áo Cardigan Len Dệt Kim Nhẹ Nhàng Thanh Lịch",
+        "zero_category": "Thời Trang Nữ",
+        "domain": "CARDIGAN_KNIT"
+    },
+    "Áo sơ mi công sở": {
+        "prompt": "button down dress shirt collared shirt formal shirt ao so mi cong so",
+        "label": "Áo sơ mi công sở",
+        "suggestedTitle": "Áo Sơ Mi Nam Nữ Chuẩn Dáng Công Sở",
+        "zero_category": "Thời Trang Nam",
+        "domain": "SHIRT"
     },
     "Quần / Quần dài / Quần thể thao": {
         "prompt": "pants trousers jeans shorts sweatpants joggers bottom clothing",
@@ -50,19 +64,26 @@ CANONICAL_CATEGORIES = {
         "zero_category": "Thể Thao",
         "domain": "SPORTS"
     },
-    "Giày Dép Nam": {
-        "prompt": "men sneakers shoes boots sandals athletic footwear",
-        "label": "Giày thể thao / Sneaker nam",
-        "suggestedTitle": "Giày Sneaker Thể Thao Nam Năng Động",
+    "Giày thể thao / Sneaker": {
+        "prompt": "sneakers running shoes tennis shoes athletic shoes sport sneakers walking shoes giay the thao giay sneaker",
+        "label": "Giày thể thao / Sneaker",
+        "suggestedTitle": "Giày Sneaker Thể Thao Năng Động Chính Hãng",
         "zero_category": "Giày Dép Nam",
-        "domain": "FOOTWEAR"
+        "domain": "SNEAKERS"
     },
-    "Giày Dép Nữ": {
-        "prompt": "women high heels shoes boots sandals footwear",
-        "label": "Giày dép nữ / Giày cao gót",
-        "suggestedTitle": "Giày Cao Gót Nữ Thanh Lịch",
+    "Dép bánh mì / Dép quai ngang / Sandal": {
+        "prompt": "slides foam slides slippers flip flops pool slides sandals eva foam clogs dep banh mi dep quai ngang dep le",
+        "label": "Dép bánh mì / Dép quai ngang / Sandal",
+        "suggestedTitle": "Dép Quai Ngang EVA Êm Chân Phong Cách",
         "zero_category": "Giày Dép Nữ",
-        "domain": "FOOTWEAR"
+        "domain": "SLIDES_SANDALS"
+    },
+    "Giày cao gót / Giày búp bê nữ": {
+        "prompt": "women high heels stiletto pumps ballet flats dress shoes giay cao got giay bup be",
+        "label": "Giày cao gót / Giày búp bê nữ",
+        "suggestedTitle": "Giày Cao Gót Nữ Thời Trang Quý Phái",
+        "zero_category": "Giày Dép Nữ",
+        "domain": "HEELS"
     },
     "Gia Dụng": {
         "prompt": "kitchen appliance air fryer cooker pot pan blender microwave",
@@ -298,19 +319,64 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             name_emb = model.encode([name])[0]
         title_sim = float(util.cos_sim(img_emb, name_emb)[0].item())
 
-        # 1. TOPS vs BOTTOMS
-        if domain == "TOPS":
+        # Danh sách các nhóm Domain chi tiết
+        TOPS_DOMAINS = ["TSHIRT", "CARDIGAN_KNIT", "OUTERWEAR", "SHIRT"]
+        FOOTWEAR_DOMAINS = ["SNEAKERS", "SLIDES_SANDALS", "HEELS"]
+
+        # 1. TOPS vs BOTTOMS & Chi tiết nhóm TOPS
+        if domain in TOPS_DOMAINS:
             is_bottom = any(k in cleaned_name for k in ["quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"])
             is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
             if is_bottom and not is_suit:
                 is_mismatch = True
-                reason = f"Ảnh hiển thị áo/áo khoác, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
+                reason = f"Ảnh hiển thị áo/áo khoác thời trang, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
             elif any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
                 is_mismatch = True
-                reason = f"Ảnh là áo/áo khoác thời trang, không khớp với tên sản phẩm \"{name}\"."
+                reason = f"Ảnh là áo thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+            # 1.1 Kiểm tra phân loại con: Áo thun vs Áo cardigan / Áo len dệt kim
+            if not is_mismatch and domain == "TSHIRT":
+                is_cardigan_knit = any(k in cleaned_name for k in ["cardigan", "áo len", "ao len", "dệt kim", "det kim", "len mỏng", "len dệt kim", "knitwear"])
+                if is_cardigan_knit:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị áo thun / áo phông năng động, không khớp với sản phẩm là áo cardigan / áo len dệt kim (\"{name}\")."
+
+            if not is_mismatch and domain == "CARDIGAN_KNIT":
+                is_tshirt_only = any(k in cleaned_name for k in ["áo thun", "ao thun", "áo phông", "t-shirt", "tee"]) and not any(k in cleaned_name for k in ["cardigan", "len", "dệt kim"])
+                if is_tshirt_only:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị áo cardigan / áo len dệt kim, không khớp với sản phẩm là áo thun / áo phông (\"{name}\")."
+
+        # 2. FOOTWEAR: Giày Sneaker vs Dép bánh mì / Sandal
+        elif domain in FOOTWEAR_DOMAINS:
+            # 2.1 Sneaker thể thao vs Dép bánh mì / Sandal quai ngang
+            if domain == "SNEAKERS":
+                is_dep_sandal = any(k in cleaned_name for k in [
+                    "dép bánh mì", "dep banh mi", "dép", "dep", "dép quai ngang", "dép lê", "dép kẹp",
+                    "dép xỏ ngón", "dép sục", "sandal", "xăng đan", "quai ngang", "eva nguyên khối"
+                ])
+                if is_dep_sandal:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị giày thể thao / sneaker buộc dây, không khớp với sản phẩm là dép / dép bánh mì (\"{name}\")."
+
+            # 2.2 Dép / Sandal vs Giày Sneaker thể thao
+            elif domain == "SLIDES_SANDALS":
+                is_sneaker_shoes = any(k in cleaned_name for k in [
+                    "sneaker", "giày thể thao", "giay the thao", "giày chạy bộ", "giay chay bo",
+                    "giày bóng đá", "giày đá bóng", "giày tây", "boots", "giày da"
+                ]) and not any(k in cleaned_name for k in ["dép", "sandal", "xăng đan"])
+                if is_sneaker_shoes:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị dép / dép bánh mì / quai ngang, không khớp với sản phẩm là giày thể thao / sneaker (\"{name}\")."
+
+            # 2.3 Giày dép vs Quần áo / Gia dụng / Điện tử
+            disallowed_themes = ["áo", "quần", "váy", "đầm", "nồi chiên", "điện thoại", "laptop", "máy tính"]
+            if any(k in cleaned_name for k in disallowed_themes):
+                is_mismatch = True
+                reason = f"Ảnh là giày dép ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "BOTTOMS":
-            is_top = any(k in cleaned_name for k in ["áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "thun", "blazer", "vest"])
+            is_top = any(k in cleaned_name for k in ["áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan"])
             is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
             if is_top and not is_suit:
                 is_mismatch = True
@@ -333,12 +399,6 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             if any(k in cleaned_name for k in disallowed_themes):
                 is_mismatch = True
                 reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "FOOTWEAR":
-            disallowed_themes = ["áo", "quần", "váy", "đầm", "nồi chiên", "điện thoại", "laptop", "máy tính"]
-            if any(k in cleaned_name for k in disallowed_themes):
-                is_mismatch = True
-                reason = f"Ảnh là giày dép, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "KITCHEN":
             if not any(k in cleaned_name for k in ["nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia dụng"]):
@@ -550,8 +610,8 @@ class ClipHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), ClipHandler)
-    print(f"[*] ZeroMall Local CLIP Multi-Image Audit Agent is listening on 0.0.0.0:{PORT}")
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), ClipHandler)
+    print(f"[*] ZeroMall Local CLIP Multi-Image Audit Agent (Multi-Threaded) is listening on 0.0.0.0:{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -104,8 +104,8 @@ export class AiCategoryAuditorService {
     AiCategoryAuditorService.clipLastCheckTime = now;
     const endpoints = [
       process.env.CLIP_SERVICE_URL,
-      'http://clip-service:5005/audit',
       'http://zeromall-clip-service:5005/audit',
+      'http://clip-service:5005/audit',
       'http://127.0.0.1:5005/audit',
       'http://localhost:5005/audit',
     ].filter(Boolean) as string[];
@@ -113,7 +113,7 @@ export class AiCategoryAuditorService {
     for (const url of endpoints) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 400); // 400ms quick probe
+        const timeout = setTimeout(() => controller.abort(), 2000); // 2000ms probe
         const probeUrl = url.replace('/audit', '/health');
         const res = await fetch(probeUrl, { signal: controller.signal });
         clearTimeout(timeout);
@@ -689,7 +689,7 @@ export class AiCategoryAuditorService {
     // Phân loại chi tiết Áo (Tops) vs Quần (Bottoms) vs Bộ (Suit/Set)
     const hasTop = this.hasKeyword(text, [
       'áo', 'ao', 'khoác', 'jacket', 'hoodie', 'sweater', 'cardigan',
-      'polo', 'sơ mi', 'thun', 'blazer', 'vest', 'croptop', 'gile',
+      'polo', 'sơ mi', 'áo thun', 'blazer', 'vest', 'croptop', 'gile',
     ]);
     const hasBottom = this.hasKeyword(text, [
       'quần', 'quan', 'jean', 'short', 'quần âu', 'quần đùi', 'quần bò',
@@ -715,6 +715,24 @@ export class AiCategoryAuditorService {
       ])
     ) {
       domains.push('FOOTWEAR');
+    }
+    // Phân loại chi tiết Footwear (Sneaker vs Dép bánh mì / Sandal vs Cao gót)
+    if (this.hasKeyword(text, ['dép bánh mì', 'dép quai ngang', 'dép lê', 'dép kẹp', 'dép xỏ ngón', 'dép sục', 'sandal', 'xăng đan', 'dép', 'dep'])) {
+      domains.push('FOOTWEAR_SLIDES');
+    }
+    if (this.hasKeyword(text, ['sneaker', 'giày thể thao', 'giày chạy bộ', 'giày bóng đá', 'giày đá bóng', 'running shoes', 'giày sneaker'])) {
+      domains.push('FOOTWEAR_SNEAKERS');
+    }
+    if (this.hasKeyword(text, ['giày cao gót', 'guốc', 'stiletto', 'giày búp bê'])) {
+      domains.push('FOOTWEAR_HEELS');
+    }
+
+    // Phân loại chi tiết Tops (Áo thun vs Cardigan / Áo len dệt kim)
+    if (this.hasKeyword(text, ['cardigan', 'áo len', 'ao len', 'len dệt kim', 'dệt kim', 'knitwear'])) {
+      domains.push('TOPS_CARDIGAN');
+    }
+    if (this.hasKeyword(text, ['áo thun', 'áo phông', 't-shirt', 'tee']) && !this.hasKeyword(text, ['cardigan', 'áo len', 'dệt kim'])) {
+      domains.push('TOPS_TSHIRT');
     }
     if (
       this.hasKeyword(text, [
@@ -798,6 +816,46 @@ export class AiCategoryAuditorService {
       return {
         isMismatch: true,
         reason: `Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo ("${rawName}").`,
+      };
+    }
+
+    // Xung đột phân loại con trong Giày dép: Sneaker vs Dép bánh mì / Sandal
+    if (
+      (visualDomains.includes('FOOTWEAR_SNEAKERS') || /giày thể thao|sneaker/i.test(visualText)) &&
+      titleDomains.includes('FOOTWEAR_SLIDES')
+    ) {
+      return {
+        isMismatch: true,
+        reason: `Ảnh hiển thị giày thể thao / sneaker, không khớp với tên sản phẩm bạn nhập là dép / dép bánh mì ("${rawName}").`,
+      };
+    }
+    if (
+      (visualDomains.includes('FOOTWEAR_SLIDES') || /dép|sandal/i.test(visualText)) &&
+      titleDomains.includes('FOOTWEAR_SNEAKERS')
+    ) {
+      return {
+        isMismatch: true,
+        reason: `Ảnh hiển thị dép / sandal, không khớp với tên sản phẩm bạn nhập là giày thể thao / sneaker ("${rawName}").`,
+      };
+    }
+
+    // Xung đột phân loại con trong Áo: Áo thun vs Cardigan / Áo len dệt kim
+    if (
+      (visualDomains.includes('TOPS_TSHIRT') || /áo thun|áo phông/i.test(visualText)) &&
+      titleDomains.includes('TOPS_CARDIGAN')
+    ) {
+      return {
+        isMismatch: true,
+        reason: `Ảnh hiển thị áo thun / áo phông năng động, không khớp với sản phẩm là áo cardigan / áo len dệt kim ("${rawName}").`,
+      };
+    }
+    if (
+      (visualDomains.includes('TOPS_CARDIGAN') || /cardigan|áo len/i.test(visualText)) &&
+      titleDomains.includes('TOPS_TSHIRT')
+    ) {
+      return {
+        isMismatch: true,
+        reason: `Ảnh hiển thị áo cardigan / áo len dệt kim, không khớp với sản phẩm là áo thun / áo phông ("${rawName}").`,
       };
     }
 
@@ -908,7 +966,7 @@ export class AiCategoryAuditorService {
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
+      const timeout = setTimeout(() => controller.abort(), 6000);
 
       const res = await fetch(activeUrl, {
         method: 'POST',
@@ -934,8 +992,8 @@ export class AiCategoryAuditorService {
           source: 'local-clip-engine',
         };
       }
-    } catch {
-      AiCategoryAuditorService.isClipAvailable = false;
+    } catch (err: any) {
+      this.logger.warn(`Local CLIP multi-audit warning: ${err.message}`);
     }
     return null;
   }
@@ -956,6 +1014,11 @@ export class AiCategoryAuditorService {
     confidence?: number;
     source?: 'local-clip-engine';
   } | null> {
+    const cacheKey = `${imageUrl}__${rawName}`;
+    if (this.visualPerceptionCache.has(cacheKey)) {
+      return this.visualPerceptionCache.get(cacheKey) as any;
+    }
+
     const activeUrl = await this.getActiveClipUrl();
     if (!activeUrl) {
       return null;
@@ -978,7 +1041,7 @@ export class AiCategoryAuditorService {
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
+      const timeout = setTimeout(() => controller.abort(), 6000);
 
       const res = await fetch(activeUrl, {
         method: 'POST',
@@ -990,7 +1053,7 @@ export class AiCategoryAuditorService {
 
       if (res.ok) {
         const data: any = await res.json();
-        return {
+        const result = {
           isMismatch: !!data.isMismatch,
           isProhibited: !!data.isProhibited,
           prohibitedLabel: data.prohibitedLabel,
@@ -999,11 +1062,13 @@ export class AiCategoryAuditorService {
           suggestedCategory: data.suggestedCategory,
           reason: data.reason,
           confidence: Math.max(92, Math.round(data.visualConfidence || 95)),
-          source: 'local-clip-engine',
+          source: 'local-clip-engine' as const,
         };
+        this.visualPerceptionCache.set(cacheKey, result as any);
+        return result;
       }
-    } catch {
-      AiCategoryAuditorService.isClipAvailable = false;
+    } catch (err: any) {
+      this.logger.warn(`Local CLIP vision query warning: ${err.message}`);
     }
     return null;
   }
