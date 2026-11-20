@@ -170,8 +170,11 @@ export class AuthController {
   }
 
   @Get('users')
-  async getAllUsers() {
-    return this.authService.getAllUsers();
+  async getAllUsers(
+    @Query('scope') scope?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.authService.getAllUsers(scope, role);
   }
 
   @Put('users/:id/status')

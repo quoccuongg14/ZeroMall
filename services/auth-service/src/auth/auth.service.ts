@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -611,8 +611,18 @@ export class AuthService {
     return { message: 'Đổi mật khẩu thành công' };
   }
 
-  async getAllUsers() {
+  async getAllUsers(scope?: string, role?: string) {
+    const where: any = {};
+    if (scope === 'marketplace') {
+      where.role = { in: ['BUYER', 'SHOP_OWNER', 'SELLER'] };
+    } else if (scope === 'logistics') {
+      where.role = { in: ['DRIVER', 'HUB_OPERATOR', 'LOGISTICS_OPERATOR'] };
+    } else if (role) {
+      where.role = role;
+    }
+
     return this.prisma.user.findMany({
+      where,
       orderBy: { createdAt: 'desc' }
     });
   }
@@ -627,6 +637,10 @@ export class AuthService {
 
     if (user.role === 'ADMIN' && status === 'BLOCKED') {
       throw new BadRequestException('Không thể khóa tài khoản Quản trị viên (ADMIN)');
+    }
+
+    if (['DRIVER', 'HUB_OPERATOR', 'LOGISTICS_OPERATOR'].includes(user.role) && status === 'BLOCKED') {
+      throw new ForbiddenException('Tài khoản Vận chuyển/Bưu cục không thuộc thẩm quyền xử lý của CSKH Sàn. Vui lòng xử lý tại Cổng Điều Hành Logistics.');
     }
 
     const dataToUpdate: any = { status };

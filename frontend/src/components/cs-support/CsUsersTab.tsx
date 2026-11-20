@@ -13,7 +13,9 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState<number>(Date.now())
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [roleFilter, setRoleFilter] = useState<string>('ALL')
+  
+  // Mặc định: Tập trung hiển thị Khách Hàng (Buyers) để CSKH xử lý bom hàng / gian lận
+  const [roleFilter, setRoleFilter] = useState<string>('BUYER')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
 
   // Cập nhật bộ đếm thời gian thực mỗi giây để đếm ngược hạn khóa chính xác
@@ -24,16 +26,17 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
     return () => clearInterval(timer)
   }, [])
 
+  // Chỉ lấy người dùng thuộc phạm vi sàn thương mại điện tử (scope=marketplace)
   const fetchUsers = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/users`)
+      const res = await fetch(`${API_BASE_URL}/auth/users?scope=marketplace`)
       if (res.ok) {
         const data = await res.json()
         setUsers(data)
       }
     } catch (err) {
-      console.error('Error fetching users:', err)
+      console.error('Error fetching marketplace users for CSKH:', err)
     } finally {
       setLoading(false)
     }
@@ -130,8 +133,19 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
     }
   }
 
+  // Bộ lọc bảo vệ kép (Safeguard): Tuyệt đối không hiển thị tài khoản Logistics hay Admin nội bộ
+  const marketplaceUsers = users.filter((u) => {
+    return u.role === 'BUYER' || u.role === 'SHOP_OWNER' || u.role === 'SELLER'
+  })
+
+  // Đếm theo từng vai trò sàn
+  const countBuyers = marketplaceUsers.filter((u) => u.role === 'BUYER').length
+  const countSellers = marketplaceUsers.filter((u) => u.role === 'SHOP_OWNER' || u.role === 'SELLER').length
+  const countAll = marketplaceUsers.length
+  const countBlocked = marketplaceUsers.filter((u) => u.status === 'BLOCKED').length
+
   // Lọc danh sách theo từ khóa tìm kiếm, vai trò và trạng thái
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = marketplaceUsers.filter((u) => {
     const q = searchQuery.toLowerCase().trim()
     const matchQuery =
       !q ||
@@ -140,61 +154,70 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
       u.phoneNumber?.includes(q) ||
       u.id?.toLowerCase().includes(q)
 
-    const matchRole = roleFilter === 'ALL' || u.role === roleFilter
+    let matchRole = true
+    if (roleFilter === 'BUYER') {
+      matchRole = u.role === 'BUYER'
+    } else if (roleFilter === 'SELLER') {
+      matchRole = u.role === 'SHOP_OWNER' || u.role === 'SELLER'
+    }
+
     const matchStatus = statusFilter === 'ALL' || u.status === statusFilter
 
     return matchQuery && matchRole && matchStatus
   })
 
-  const countAll = users.length
-  const countBlocked = users.filter((u) => u.status === 'BLOCKED').length
-  const countBuyers = users.filter((u) => u.role === 'BUYER').length
-  const countSellers = users.filter((u) => u.role === 'SELLER').length
-
   return (
     <div className="space-y-5 text-left">
-      {/* 1. Statistics Cards */}
+      {/* 1. Statistics Cards (Chỉ thống kê người dùng thuộc Sàn ZeroMall) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div
-          onClick={() => { setStatusFilter('ALL'); setRoleFilter('ALL') }}
-          className="bg-white border border-slate-200/70 rounded-xl p-4 shadow-2xs cursor-pointer hover:border-slate-400 transition"
-        >
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tổng Người Dùng</p>
-          <p className="text-2xl font-black text-slate-800 mt-1">{countAll}</p>
-          <p className="text-[9px] text-slate-400 font-semibold mt-1">Toàn bộ tài khoản</p>
-        </div>
-
-        <div
-          onClick={() => { setStatusFilter('ALL'); setRoleFilter('BUYER') }}
-          className="bg-white border border-slate-200/70 rounded-xl p-4 shadow-2xs cursor-pointer hover:border-emerald-400 transition"
+          onClick={() => { setRoleFilter('BUYER'); setStatusFilter('ALL') }}
+          className={`bg-white border rounded-xl p-4 shadow-2xs cursor-pointer transition ${
+            roleFilter === 'BUYER' && statusFilter === 'ALL' ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200/70 hover:border-emerald-400'
+          }`}
         >
           <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider flex items-center gap-1">
             <span>👤</span> Khách Hàng (Buyers)
           </p>
           <p className="text-2xl font-black text-emerald-600 mt-1">{countBuyers}</p>
-          <p className="text-[9px] text-emerald-700/70 font-semibold mt-1">Người mua trên sàn</p>
+          <p className="text-[9px] text-emerald-700/70 font-semibold mt-1">Người mua hàng trên sàn</p>
         </div>
 
         <div
-          onClick={() => { setStatusFilter('ALL'); setRoleFilter('SELLER') }}
-          className="bg-white border border-slate-200/70 rounded-xl p-4 shadow-2xs cursor-pointer hover:border-indigo-400 transition"
+          onClick={() => { setRoleFilter('SELLER'); setStatusFilter('ALL') }}
+          className={`bg-white border rounded-xl p-4 shadow-2xs cursor-pointer transition ${
+            roleFilter === 'SELLER' && statusFilter === 'ALL' ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200/70 hover:border-indigo-400'
+          }`}
         >
           <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider flex items-center gap-1">
             <span>🏪</span> Chủ Gian Hàng (Sellers)
           </p>
           <p className="text-2xl font-black text-indigo-600 mt-1">{countSellers}</p>
-          <p className="text-[9px] text-indigo-700/70 font-semibold mt-1">Người bán kinh doanh</p>
+          <p className="text-[9px] text-indigo-700/70 font-semibold mt-1">Chủ shop kinh doanh</p>
         </div>
 
         <div
           onClick={() => { setStatusFilter('BLOCKED'); setRoleFilter('ALL') }}
-          className="bg-white border border-slate-200/70 rounded-xl p-4 shadow-2xs cursor-pointer hover:border-rose-400 transition"
+          className={`bg-white border rounded-xl p-4 shadow-2xs cursor-pointer transition ${
+            statusFilter === 'BLOCKED' ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-slate-200/70 hover:border-rose-400'
+          }`}
         >
           <p className="text-[10px] text-rose-600 font-bold uppercase tracking-wider flex items-center gap-1">
-            <span>🔒</span> Tài Khoản Bị Khóa
+            <span>🔒</span> Tài Khoản Đang Bị Khóa
           </p>
           <p className="text-2xl font-black text-rose-600 mt-1">{countBlocked}</p>
-          <p className="text-[9px] text-rose-700/70 font-semibold mt-1">Gian lận / Bom hàng / Vi phạm</p>
+          <p className="text-[9px] text-rose-700/70 font-semibold mt-1">Gian lận / Bom hàng / Kỷ luật</p>
+        </div>
+
+        <div
+          onClick={() => { setStatusFilter('ALL'); setRoleFilter('ALL') }}
+          className={`bg-white border rounded-xl p-4 shadow-2xs cursor-pointer transition ${
+            roleFilter === 'ALL' && statusFilter === 'ALL' ? 'border-slate-800 ring-2 ring-slate-800/20' : 'border-slate-200/70 hover:border-slate-400'
+          }`}
+        >
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tổng Người Dùng Sàn</p>
+          <p className="text-2xl font-black text-slate-800 mt-1">{countAll}</p>
+          <p className="text-[9px] text-slate-400 font-semibold mt-1">Người mua & Người bán</p>
         </div>
       </div>
 
@@ -202,24 +225,30 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
       <div className="bg-white border border-slate-200/70 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-1.5 w-full sm:w-auto">
           {[
-            { id: 'ALL', label: `🌐 Tất cả (${countAll})`, type: 'status' },
-            { id: 'BLOCKED', label: `🔒 Đang bị khóa (${countBlocked})`, type: 'status' },
             { id: 'BUYER', label: `👤 Người mua (${countBuyers})`, type: 'role' },
-            { id: 'SELLER', label: `🏪 Người bán (${countSellers})`, type: 'role' },
+            { id: 'SELLER', label: `🏪 Chủ gian hàng (${countSellers})`, type: 'role' },
+            { id: 'BLOCKED', label: `🔒 Đang bị khóa (${countBlocked})`, type: 'status' },
+            { id: 'ALL', label: `🌐 Toàn bộ người dùng sàn (${countAll})`, type: 'all' },
           ].map((item) => {
-            const isActive = item.type === 'status' 
-              ? (statusFilter === item.id && (item.id !== 'ALL' || roleFilter === 'ALL'))
-              : (roleFilter === item.id)
+            const isActive =
+              item.type === 'role'
+                ? roleFilter === item.id && statusFilter === 'ALL'
+                : item.type === 'status'
+                ? statusFilter === item.id
+                : roleFilter === 'ALL' && statusFilter === 'ALL'
 
             return (
               <button
                 key={item.id}
                 onClick={() => {
-                  if (item.type === 'status') {
+                  if (item.type === 'role') {
+                    setRoleFilter(item.id)
+                    setStatusFilter('ALL')
+                  } else if (item.type === 'status') {
                     setStatusFilter(item.id)
                     setRoleFilter('ALL')
                   } else {
-                    setRoleFilter(item.id)
+                    setRoleFilter('ALL')
                     setStatusFilter('ALL')
                   }
                 }}
@@ -255,17 +284,17 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
         </div>
       </div>
 
-      {/* 3. Table of Users */}
+      {/* 3. Table of Marketplace Users */}
       <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
         {loading ? (
           <div className="py-16 text-center text-xs text-slate-400 space-y-2">
             <div className="w-6 h-6 border-2 border-slate-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="font-bold">Đang tải danh sách người dùng...</p>
+            <p className="font-bold">Đang tải danh sách người dùng sàn...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="py-16 text-center text-slate-400 space-y-2">
             <span className="text-3xl">📭</span>
-            <p className="text-sm font-extrabold text-slate-500">Không tìm thấy tài khoản người dùng phù hợp</p>
+            <p className="text-sm font-extrabold text-slate-500">Không tìm thấy tài khoản người dùng sàn phù hợp</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -274,7 +303,7 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
                 <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
                   <th className="py-3.5 px-4">Tài Khoản & Mã ID</th>
                   <th className="py-3.5 px-3">Email & SĐT</th>
-                  <th className="py-3.5 px-3 text-center">Vai Trò</th>
+                  <th className="py-3.5 px-3 text-center">Vai Trò Sàn</th>
                   <th className="py-3.5 px-3 text-center">Trạng Thái & Hạn Khóa</th>
                   <th className="py-3.5 px-4 text-center">Nghiệp Vụ CSKH</th>
                 </tr>
@@ -283,13 +312,16 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
                 {filteredUsers.map((u) => {
                   const isBlocked = u.status === 'BLOCKED'
                   const countdown = isBlocked ? getBanCountdown(u.blockedUntil) : null
+                  const isSeller = u.role === 'SHOP_OWNER' || u.role === 'SELLER'
 
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/50 transition">
                       {/* Cột 1: Thông tin User */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 font-black text-slate-700 text-xs flex items-center justify-center shrink-0">
+                          <div className={`w-8 h-8 rounded-full border font-black text-xs flex items-center justify-center shrink-0 ${
+                            isSeller ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                          }`}>
                             {(u.name || u.email || 'U')[0].toUpperCase()}
                           </div>
                           <div className="space-y-0.5 min-w-0">
@@ -307,18 +339,14 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
                         </div>
                       </td>
 
-                      {/* Cột 3: Vai trò */}
+                      {/* Cột 3: Vai trò sàn */}
                       <td className="py-3.5 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${
-                          u.role === 'ADMIN' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                          u.role === 'SELLER' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                          u.role === 'CS_STAFF' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase border ${
+                          isSeller 
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         }`}>
-                          {u.role === 'BUYER' ? 'Người Mua' :
-                           u.role === 'SELLER' ? 'Người Bán' :
-                           u.role === 'CS_STAFF' ? 'Nhân Viên CS' :
-                           u.role === 'ADMIN' ? 'Quản Trị Viên' : u.role}
+                          {isSeller ? '🏪 Chủ Gian Hàng' : '👤 Khách Hàng (Buyer)'}
                         </span>
                       </td>
 
