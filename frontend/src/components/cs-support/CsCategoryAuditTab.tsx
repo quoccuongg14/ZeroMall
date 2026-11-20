@@ -152,24 +152,6 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Tạm ẩn toàn bộ sản phẩm vi phạm trên trang hiện tại
-  const handleHideAllFlaggedOnPage = async () => {
-    const unhiddenFlaggedIds = filteredProducts
-      .filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden')
-      .map((p) => p.id)
-
-    if (unhiddenFlaggedIds.length === 0) {
-      alert('Tất cả sản phẩm vi phạm trên trang này đều đã ở trạng thái Tạm Ẩn!')
-      return
-    }
-
-    await handleBulkUpdateStatus(
-      unhiddenFlaggedIds,
-      'hidden',
-      `Tạm ẩn toàn bộ ${unhiddenFlaggedIds.length} sản phẩm vi phạm trên Trang ${currentPage}`
-    )
-  }
-
   // Open Warning Notification Modal
   const openWarningModal = (item: any) => {
     const shop = shopsMap[item.shopId]
@@ -272,6 +254,14 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
+  // Tích nhanh tất cả các sản phẩm vi phạm chưa bị ẩn
+  const handleSelectAllFlagged = () => {
+    const unhiddenFlaggedIds = filteredProducts
+      .filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden')
+      .map((p) => p.id)
+    setSelectedIds(unhiddenFlaggedIds)
+  }
+
   const handleToggleSelectOne = (id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -298,33 +288,15 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* NÚT TẠM ẨN TOÀN BỘ SẢN PHẨM VI PHẠM TRÊN TRANG */}
-            {unhiddenFlaggedCount > 0 && (
-              <button
-                type="button"
-                onClick={handleHideAllFlaggedOnPage}
-                disabled={isBulkProcessing || isAuditing}
-                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-md disabled:opacity-50 animate-pulse hover:animate-none"
-                title="Tạm ẩn toàn bộ sản phẩm vi phạm trên trang này khỏi sàn"
-              >
-                <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
-                <span>
-                  {isBulkProcessing ? 'Đang Xử Lý...' : `Tạm Ẩn Toàn Bộ (${unhiddenFlaggedCount} Vi Phạm)`}
-                </span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => runAiAuditScan(currentPage)}
-              disabled={isAuditing}
-              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
-            >
-              <span>{isAuditing ? '⏳' : '⚡'}</span>
-              <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => runAiAuditScan(currentPage)}
+            disabled={isAuditing}
+            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
+          >
+            <span>{isAuditing ? '⏳' : '⚡'}</span>
+            <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
+          </button>
         </div>
 
         {/* 5 Stats Chips */}
@@ -452,41 +424,80 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
         </div>
       </div>
 
-      {/* 2.5 Bulk Action Bar when items are selected */}
-      {selectedIds.length > 0 && (
-        <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg border border-slate-800">
-          <div className="flex items-center gap-2.5 text-xs font-bold">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>
-              Đang chọn <strong className="text-emerald-300 font-black text-sm">{selectedIds.length}</strong> sản phẩm trên trang
-            </span>
+      {/* 2.5 Batch Action & Selection Toolbar */}
+      {filteredProducts.length > 0 && (
+        <div className={`p-3.5 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+          selectedIds.length > 0
+            ? 'bg-amber-500/10 border-amber-300'
+            : 'bg-white border-slate-200/80'
+        }`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isAllSelected}
+                onChange={handleToggleSelectAll}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <span>Tích chọn toàn bộ ({filteredProducts.length} sản phẩm trên trang)</span>
+            </label>
+
+            {unhiddenFlaggedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleSelectAllFlagged}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+              >
+                <span>⚡ Tích nhanh {unhiddenFlaggedCount} vi phạm</span>
+              </button>
+            )}
+
+            {selectedIds.length > 0 && (
+              <span className="text-xs font-extrabold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md">
+                Đã tích: {selectedIds.length} sản phẩm
+              </span>
+            )}
           </div>
+
+          {/* Action buttons when items are selected */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleBulkUpdateStatus(selectedIds, 'hidden', `Tạm ẩn ${selectedIds.length} sản phẩm đã chọn`)}
-              disabled={isBulkProcessing}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-            >
-              <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
-              <span>Tạm Ẩn Đã Chọn ({selectedIds.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBulkUpdateStatus(selectedIds, 'active', `Mở khóa ${selectedIds.length} sản phẩm đã chọn`)}
-              disabled={isBulkProcessing}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-            >
-              <span>{isBulkProcessing ? '⏳' : '👁️'}</span>
-              <span>Mở Khóa Đã Chọn ({selectedIds.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl cursor-pointer transition"
-            >
-              Bỏ chọn
-            </button>
+            {selectedIds.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateStatus(selectedIds, 'hidden', `Tạm ẩn ${selectedIds.length} sản phẩm đã chọn`)}
+                  disabled={isBulkProcessing}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-black rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
+                  <span>
+                    {selectedIds.length === filteredProducts.length
+                      ? 'Tạm Ẩn Toàn Bộ'
+                      : `Tạm Ẩn (${selectedIds.length} Đã Chọn)`}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkUpdateStatus(selectedIds, 'active', `Mở khóa ${selectedIds.length} sản phẩm đã chọn`)}
+                  disabled={isBulkProcessing}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  <span>{isBulkProcessing ? '⏳' : '👁️'}</span>
+                  <span>Mở Khóa ({selectedIds.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-medium rounded-xl cursor-pointer transition"
+                >
+                  Bỏ tích
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-400 italic">
+                (Tích chọn sản phẩm để thực hiện Tạm ẩn hoặc Mở khóa)
+              </span>
+            )}
           </div>
         </div>
       )}
