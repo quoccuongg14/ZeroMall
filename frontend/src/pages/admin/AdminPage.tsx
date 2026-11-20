@@ -246,31 +246,52 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setSearchParams({ tab: getParamFromTab(activePortalTab) }, { replace: true })
   }, [activePortalTab, setSearchParams])
 
-  const menuItems = [
-    { id: 'USERS', label: 'Quản lý User', icon: '👥' },
-    { id: 'MANAGE_SHOPS', label: 'Quản lý & Khóa Shop', icon: '🏪' },
-    { id: 'CATEGORIES', label: 'Quản lý danh mục', icon: '🗂️' },
-    { id: 'VIOLATIONS', label: 'Quản lý & Kiểm duyệt SP', icon: '📦' },
-    { id: 'AI_EVALUATION', label: '🔬 Đánh giá AI NCKH (Likert)', icon: '🔬' },
-    { id: 'PLATFORM_VOUCHERS', label: 'Voucher toàn sàn', icon: '🎟️' },
-    { id: 'FLASH_SALE', label: 'Quản lý Flash Sale', icon: '⚡' },
-    { id: 'MANAGE_CS_STAFF', label: 'Nhân viên Platform CS', icon: '🎧' },
-    { id: 'LIVE_CHAT', label: 'Live Chat CSKH Sàn', icon: '💬' },
-    { id: 'SYSTEM_REPORTS', label: 'Báo cáo hệ thống', icon: '📊' },
-    { id: 'PRICE_ANALYTICS', label: 'Biến động & Giá vốn', icon: '📈' },
-    { id: 'COMMISSION_SETTING', label: 'Chiết khấu sàn', icon: '⚙️' },
-    { id: 'BANNERS', label: 'Quản Lý Banner Sàn', icon: '🖼️' },
-    { id: 'AUDIT_LOGS', label: 'Lịch sử thao tác', icon: '📜' },
+  const menuGroups = [
+    {
+      groupTitle: '🛡️ Bảo Mật & Phân Quyền',
+      items: [
+        { id: 'MANAGE_CS_STAFF', label: 'Nhân viên Platform CS', icon: '🎧' },
+        { id: 'AUDIT_LOGS', label: 'Lịch sử thao tác (Audit)', icon: '📜' },
+      ],
+    },
+    {
+      groupTitle: '💰 Tài Chính & Doanh Thu Sàn',
+      items: [
+        { id: 'SYSTEM_REPORTS', label: 'Báo cáo hệ thống & GMV', icon: '📊' },
+        { id: 'PRICE_ANALYTICS', label: 'Biến động & Giá vốn', icon: '📈' },
+        { id: 'COMMISSION_SETTING', label: 'Cài đặt chiết khấu sàn', icon: '⚙️' },
+      ],
+    },
+    {
+      groupTitle: '⚙️ Thiết Lập Nền Tảng',
+      items: [
+        { id: 'CATEGORIES', label: 'Cây danh mục sàn', icon: '🗂️' },
+        { id: 'PLATFORM_VOUCHERS', label: 'Voucher toàn sàn', icon: '🎟️' },
+        { id: 'FLASH_SALE', label: 'Cấu hình giờ vàng Flash Sale', icon: '⚡' },
+        { id: 'BANNERS', label: 'Quản Lý Banner Sàn', icon: '🖼️' },
+        { id: 'MANAGE_SHOPS', label: 'Giám sát Shop cấp cao', icon: '🏪' },
+        { id: 'USERS', label: 'Giám sát User cấp cao', icon: '👥' },
+        { id: 'VIOLATIONS', label: 'Kiểm duyệt SP (Tổng quan)', icon: '📦' },
+      ],
+    },
+    {
+      groupTitle: '🔬 Phòng Thí Nghiệm AI',
+      items: [
+        { id: 'AI_EVALUATION', label: 'Đánh giá AI NCKH (Likert)', icon: '🔬' },
+      ],
+    },
   ]
+
+  const menuItems = menuGroups.flatMap((g) => g.items)
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-slate-800 font-sans text-left selection:bg-emerald-600 selection:text-white">
       
       {/* LEFT SIDEBAR */}
       <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 sticky top-0 h-screen z-20">
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1 overflow-hidden">
           {/* Logo Header */}
-          <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3 bg-white">
+          <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3 bg-white shrink-0">
             <span className="text-2xl">🛡️</span>
             <div className="flex flex-col">
               <span className="text-sm font-black tracking-tight text-slate-800">
@@ -282,25 +303,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <div className="p-3 space-y-1">
-            <div className="px-3 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-              Quản trị Portal
-            </div>
-
-            {menuItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActivePortalTab(item.id as any)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-extrabold transition cursor-pointer select-none ${
-                  activePortalTab === item.id 
-                    ? 'bg-emerald-50 text-emerald-650' 
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-                }`}
-              >
-                <span className="text-sm">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
+          {/* Navigation Links Grouped */}
+          <div className="p-3 space-y-3 overflow-y-auto flex-1">
+            {menuGroups.map((group, gIdx) => (
+              <div key={gIdx} className="space-y-0.5">
+                <div className="px-3 py-1 text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                  {group.groupTitle}
+                </div>
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActivePortalTab(item.id as any)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer select-none ${
+                      activePortalTab === item.id 
+                        ? 'bg-emerald-50 text-emerald-700 font-black' 
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
+                    }`}
+                  >
+                    <span className="text-sm shrink-0">{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>
