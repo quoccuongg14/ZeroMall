@@ -482,11 +482,22 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                             <p className="text-[11px] text-slate-700 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">
                               {res?.imageFeedback || res?.recommendation}
                             </p>
-                            {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                            {/* Đề xuất chuyển ngành CHỈ hiển thị khi SAI NGÀNH HÀNG */}
+                            {!isImageMismatch && res?.suggestedCategory && res?.suggestedCategory !== item.category && (
                               <p className="text-[11px] text-indigo-700 font-bold flex items-center gap-1.5">
                                 <span>👉 Đề xuất chuyển sang:</span>
                                 <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-md font-extrabold text-indigo-800">
                                   {res.suggestedCategory}
+                                </span>
+                              </p>
+                            )}
+
+                            {/* Khi LỆCH ẢNH & TIÊU ĐỀ: Khuyến nghị yêu cầu Shop đổi ảnh thực tế */}
+                            {isImageMismatch && (
+                              <p className="text-[11px] text-rose-700 font-bold flex items-center gap-1.5">
+                                <span>👉 Biện pháp:</span>
+                                <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 rounded-md font-medium text-rose-800">
+                                  Yêu cầu Shop tải ảnh đúng thực tế hoặc Tạm ẩn
                                 </span>
                               </p>
                             )}
@@ -504,8 +515,8 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                             </span>
                           ) : (
                             <>
-                              {/* 1-Click Fix Category */}
-                              {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                              {/* 1-Click Fix Category: CHỈ HIỂN THỊ KHI SAI NGÀNH HÀNG (WRONG_CATEGORY) */}
+                              {!isImageMismatch && res?.suggestedCategory && res?.suggestedCategory !== item.category && (
                                 <button
                                   type="button"
                                   onClick={() => handleAutoFixCategory(item.id, res.suggestedCategory, item.name)}
@@ -518,14 +529,18 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                                 </button>
                               )}
 
-                              {/* Gửi cảnh báo nhắc nhở Shop */}
+                              {/* Gửi cảnh báo nhắc nhở Shop (Nổi bật hơn khi LỆCH ẢNH) */}
                               <button
                                 type="button"
                                 onClick={() => openWarningModal(item)}
-                                className="px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs ${
+                                  isImageMismatch
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                    : 'bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800'
+                                }`}
                               >
                                 <span>🔔</span>
-                                <span>Nhắc Nhở Shop</span>
+                                <span>{isImageMismatch ? 'Cảnh Báo Đổi Ảnh' : 'Nhắc Nhở Shop'}</span>
                               </button>
                             </>
                           )}

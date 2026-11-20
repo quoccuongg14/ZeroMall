@@ -15,8 +15,22 @@ print(f"[+] Model loaded!")
 
 # Ngành hàng & vật thể chuẩn để phân loại hình ảnh (Zero-shot Multimodal Vision)
 CANONICAL_CATEGORIES = {
+    "Đồng Hồ": {
+        "prompt": "wrist watch analog watch digital watch luxury timepiece strap smartwatch chronometer dong ho đeo tay",
+        "label": "Đồng hồ đeo tay / Smartwatch",
+        "suggestedTitle": "Đồng Hồ Thời Trang Nam Nữ Chính Hãng",
+        "zero_category": "Đồng Hồ",
+        "domain": "WATCH"
+    },
+    "Áo Blazer / Áo Vest": {
+        "prompt": "formal suit jacket blazer suit business gentleman tailored jacket ao vest nam ao blazer",
+        "label": "Áo Blazer / Áo Vest",
+        "suggestedTitle": "Áo Blazer Nam Nữ Phong Cách Lịch Lãm",
+        "zero_category": "Thời Trang Nam",
+        "domain": "OUTERWEAR"
+    },
     "Áo khoác / Outerwear": {
-        "prompt": "leather jacket coat outerwear jacket bomber blazer hoodie windbreaker top",
+        "prompt": "leather jacket coat outerwear jacket bomber hoodie windbreaker jacket top",
         "label": "Áo khoác / Outerwear",
         "suggestedTitle": "Áo Khoác Phong Cách Thời Trang Nam Nữ Cao Cấp",
         "zero_category": "Thời Trang Nam",
@@ -85,6 +99,41 @@ CANONICAL_CATEGORIES = {
         "zero_category": "Giày Dép Nữ",
         "domain": "HEELS"
     },
+    "Mẹ & Bé": {
+        "prompt": "baby supplies baby bib baby bottle infant clothing baby stroller pacifier do so sinh yem an dam em be me va be",
+        "label": "Đồ dùng Mẹ & Bé / Yếm ăn dặm",
+        "suggestedTitle": "Đồ Dùng Tiện Ích Mẹ & Bé An Toàn",
+        "zero_category": "Mẹ & Bé",
+        "domain": "MOM_BABY"
+    },
+    "Sắc Đẹp": {
+        "prompt": "cosmetics skincare serum lipstick moisturizer facial cream beauty makeup perfume sua rua mat kem duong son moi",
+        "label": "Mỹ phẩm / Chăm sóc da / Sắc đẹp",
+        "suggestedTitle": "Mỹ Phẩm Chăm Sóc Sắc Đẹp Chính Hãng",
+        "zero_category": "Sắc Đẹp",
+        "domain": "BEAUTY"
+    },
+    "Sức Khỏe": {
+        "prompt": "health vitamins dietary supplements nutritional capsules medicine thuoc bo vien uong vitamin thuc pham chuc nang",
+        "label": "Thực phẩm chức năng / Vitamin sức khỏe",
+        "suggestedTitle": "Thực Phẩm Bổ Sung Chăm Sóc Sức Khỏe",
+        "zero_category": "Sức Khỏe",
+        "domain": "HEALTH"
+    },
+    "Nhà Cửa": {
+        "prompt": "bedsheet blanket pillow quilt home living storage rack organizer gia dung nha cua chan ga goi dem",
+        "label": "Nhà cửa & Đời sống / Chăn ga gối",
+        "suggestedTitle": "Đồ Dùng Nhà Cửa & Đời Sống Tiện Lợi",
+        "zero_category": "Nhà Cửa",
+        "domain": "HOME"
+    },
+    "Phụ Kiện Nữ": {
+        "prompt": "hair clip earrings necklace jewelry sunglasses hair accessories phu kien nu kep toc vong co khuyen tai mat kinh",
+        "label": "Phụ kiện thời trang nữ / Kẹp tóc / Trang sức",
+        "suggestedTitle": "Phụ Kiện Thời Trang Nữ Xinh Xắn",
+        "zero_category": "Phụ Kiện Nữ",
+        "domain": "ACCESSORIES"
+    },
     "Gia Dụng": {
         "prompt": "kitchen appliance air fryer cooker pot pan blender microwave",
         "label": "Đồ gia dụng / Thiết bị nhà bếp",
@@ -104,6 +153,13 @@ CANONICAL_CATEGORIES = {
         "label": "Điện thoại & Phụ kiện",
         "suggestedTitle": "Điện Thoại Thông Minh Phụ Kiện Cao Cấp",
         "zero_category": "Điện Thoại & Phụ Kiện",
+        "domain": "ELECTRONICS"
+    },
+    "Thiết Bị Điện Tử": {
+        "prompt": "bluetooth speaker headphones mechanical keyboard power bank electronic gadget tai nghe loa bluetooth ban phim",
+        "label": "Thiết bị điện tử / Loa / Tai nghe",
+        "suggestedTitle": "Thiết Bị Điện Tử & Phụ Kiện Công Nghệ",
+        "zero_category": "Thiết Bị Điện Tử",
         "domain": "ELECTRONICS"
     },
     "Máy Tính & Laptop": {
@@ -133,13 +189,6 @@ CANONICAL_CATEGORIES = {
         "suggestedTitle": "Tài Liệu Hướng Dẫn Hệ Thống ZeroMall",
         "zero_category": "Sách & VPP",
         "domain": "DIAGRAM"
-    },
-    "Cảnh ngoài trời / Xe cộ": {
-        "prompt": "person riding bicycle outdoors street cyclist delivery delivery person",
-        "label": "Người đi xe đạp / Cảnh ngoài trời",
-        "suggestedTitle": "Sản Phẩm Thể Thao Xe Đạp Ngoài Trời",
-        "zero_category": "Thể Thao",
-        "domain": "OUTDOOR"
     }
 }
 
@@ -199,13 +248,18 @@ COMPATIBLE_CATEGORIES = {
     "Thể Thao": ["Thể Thao", "Thời Trang Nam", "Thời Trang Nữ"],
     "Giày Dép Nam": ["Giày Dép Nam", "Giày Dép Nữ", "Thể Thao"],
     "Giày Dép Nữ": ["Giày Dép Nữ", "Giày Dép Nam", "Thời Trang Nữ"],
-    "Gia Dụng": ["Gia Dụng", "Nhà Cửa"],
+    "Đồng Hồ": ["Đồng Hồ", "Phụ Kiện Nữ"],
+    "Mẹ & Bé": ["Mẹ & Bé", "Thời Trang Nữ", "Nhà Cửa"],
+    "Sắc Đẹp": ["Sắc Đẹp", "Sức Khỏe"],
+    "Sức Khỏe": ["Sức Khỏe", "Sắc Đẹp"],
     "Nhà Cửa": ["Nhà Cửa", "Gia Dụng"],
-    "Máy Ảnh": ["Máy Ảnh", "Thiết Bị Điện Tử"],
+    "Gia Dụng": ["Gia Dụng", "Nhà Cửa"],
+    "Phụ Kiện Nữ": ["Phụ Kiện Nữ", "Thời Trang Nữ", "Đồng Hồ"],
+    "Túi Ví Nữ": ["Túi Ví Nữ", "Thời Trang Nữ", "Phụ Kiện Nữ"],
     "Điện Thoại & Phụ Kiện": ["Điện Thoại & Phụ Kiện", "Thiết Bị Điện Tử", "Máy Tính & Laptop"],
     "Máy Tính & Laptop": ["Máy Tính & Laptop", "Thiết Bị Điện Tử", "Điện Thoại & Phụ Kiện"],
     "Thiết Bị Điện Tử": ["Thiết Bị Điện Tử", "Điện Thoại & Phụ Kiện", "Máy Tính & Laptop", "Máy Ảnh"],
-    "Túi Ví Nữ": ["Túi Ví Nữ", "Thời Trang Nữ", "Phụ Kiện Nữ"],
+    "Máy Ảnh": ["Máy Ảnh", "Thiết Bị Điện Tử"],
     "Sách & VPP": ["Sách & VPP"],
 }
 
@@ -308,10 +362,6 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     elif best_cat == "Sơ đồ / Tài liệu":
         is_mismatch = True
         reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
-    elif best_cat == "Cảnh ngoài trời / Xe cộ":
-        if not any(k in cleaned_name for k in ["xe đạp", "bicycle", "cyclist"]):
-            is_mismatch = True
-            reason = f"Ảnh chụp người đi xe đạp/giao hàng ngoài trời, không khớp với sản phẩm \"{name}\"."
 
     # A. KIỂM TRA CHÉO HÌNH ẢNH VS TIÊU ĐỀ SẢN PHẨM (Tier 1: Visual-to-Text Consistency)
     if not is_mismatch and name:
@@ -419,13 +469,44 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 is_compatible = True
                 break
 
+        # Kiểm tra xem tiêu đề sản phẩm có đang chứa từ khóa đại diện đúng cho ngành hàng hiện tại không
+        # Nếu tiêu đề ĐÃ rõ ràng là ngành hàng đó (ví dụ chứa "đồng hồ", "blazer", "yếm", "ăn dặm", "áo", "quần", "váy"),
+        # thì tuyệt đối không để kết quả zero-shot có điểm số thấp lấn át tiêu đề chuẩn!
+        title_matches_current_cat = any(
+            w in cleaned_name for w in [
+                "đồng hồ", "dong ho", "watch", "smartwatch",
+                "blazer", "vest", "khoác", "jacket", "áo", "quần", "váy", "đầm",
+                "yếm", "ăn dặm", "bé", "sữa", "tã", "bỉm", "bình sữa",
+                "son", "serum", "kem", "mỹ phẩm", "nước hoa", "sữa rửa mặt",
+                "vitamin", "viên uống", "thực phẩm chức năng", "thuốc bổ",
+                "nồi", "chảo", "bếp", "ấm", "bình giữ nhiệt", "bát", "đĩa", "kệ",
+                "balo", "túi", "ví", "bóp", "giày", "dép", "sandal", "sneaker",
+                "điện thoại", "iphone", "samsung", "laptop", "máy tính", "tai nghe", "chuột", "bàn phím"
+            ]
+            if (
+                ("đồng hồ" in w and "đồng hồ" in cat_lower) or
+                ("bé" in w or "yếm" in w or "sữa" in w or "tã" in w or "bỉm" in w) and "mẹ & bé" in cat_lower or
+                ("son" in w or "serum" in w or "kem" in w or "mỹ phẩm" in w) and "sắc đẹp" in cat_lower or
+                ("vitamin" in w or "viên uống" in w or "thuốc bổ" in w) and "sức khỏe" in cat_lower or
+                ("nồi" in w or "chảo" in w or "bếp" in w or "ấm" in w) and ("gia dụng" in cat_lower or "nhà cửa" in cat_lower) or
+                ("bình giữ nhiệt" in w or "bát" in w or "đĩa" in w or "kệ" in w) and ("nhà cửa" in cat_lower or "gia dụng" in cat_lower) or
+                ("balo" in w or "túi" in w or "ví" in w) and "túi ví" in cat_lower or
+                ("áo" in w or "blazer" in w or "vest" in w or "khoác" in w or "quần" in w) and "thời trang" in cat_lower or
+                ("giày" in w or "dép" in w or "sandal" in w or "sneaker" in w) and "giày dép" in cat_lower or
+                ("điện thoại" in w or "tai nghe" in w) and "điện thoại" in cat_lower or
+                ("laptop" in w or "máy tính" in w or "chuột" in w or "bàn phím" in w) and ("máy tính" in cat_lower or "thiết bị điện tử" in cat_lower)
+            )
+        )
+
         if not is_compatible:
-            is_mismatch = True
-            reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
+            # Chỉ báo lệch ngành nếu tiêu đề không hề khớp ngành và độ tự tin thị giác cao
+            if not title_matches_current_cat and visual_confidence >= 24.5:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
 
     # Ngưỡng tương đồng Cosine cấu hình động (Chỉ áp dụng khi title_sim quá thấp < 0.12 và không có ngành hàng tương thích)
     cosine_threshold = float(os.environ.get("CLIP_SIMILARITY_THRESHOLD", "0.14"))
-    if not is_mismatch and title_sim > 0 and title_sim < cosine_threshold and not is_compatible:
+    if not is_mismatch and title_sim > 0 and title_sim < cosine_threshold and not is_compatible and not title_matches_current_cat:
         if not reason:
             is_mismatch = True
             reason = f"Độ tương quan giữa ảnh ({cat_info['label']}) và tiêu đề đạt {round(title_sim, 2)}, thấp hơn ngưỡng an toàn {cosine_threshold}."

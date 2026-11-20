@@ -195,7 +195,7 @@ export class AiCategoryAuditorService {
         currentCategory: currentCat,
         suggestedTitle: visualCheck.suggestedTitle,
         detectedVisual: visualCheck.detectedVisual,
-        suggestedCategory: visualCheck.suggestedCategory || currentCat,
+        suggestedCategory: currentCat, // Lỗi do ảnh sai lệch: Giữ nguyên ngành hàng chuẩn của sản phẩm, không đổi ngành theo ảnh sai!
         titleFeedback: `Tiêu đề sản phẩm là "${rawName}".`,
         imageFeedback: visualCheck.reason || `Hình ảnh nhận diện là "${visualCheck.detectedVisual}", không đồng nhất với tiêu đề.`,
         actionRequired: 'REPLACE_IMAGE',
