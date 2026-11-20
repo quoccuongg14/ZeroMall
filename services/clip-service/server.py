@@ -121,8 +121,8 @@ CANONICAL_CATEGORIES = {
         "domain": "HEALTH"
     },
     "Nhà Cửa": {
-        "prompt": "bedsheet blanket pillow quilt home living storage rack organizer gia dung nha cua chan ga goi dem",
-        "label": "Nhà cửa & Đời sống / Chăn ga gối",
+        "prompt": "kitchen spice rack shelf organizer storage holder stainless steel bedsheet blanket pillow quilt home living organizer gia dung nha cua chan ga goi dem ke bep ke gia vi gia de dao thot",
+        "label": "Nhà cửa & Đời sống / Kệ đồ & Chăn ga",
         "suggestedTitle": "Đồ Dùng Nhà Cửa & Đời Sống Tiện Lợi",
         "zero_category": "Nhà Cửa",
         "domain": "HOME"
@@ -135,7 +135,7 @@ CANONICAL_CATEGORIES = {
         "domain": "ACCESSORIES"
     },
     "Gia Dụng": {
-        "prompt": "kitchen appliance air fryer cooker pot pan blender microwave",
+        "prompt": "kitchen appliance air fryer cooker pot pan blender microwave ke de gia vi ke bep do gia dung nha bep",
         "label": "Đồ gia dụng / Thiết bị nhà bếp",
         "suggestedTitle": "Thiết Bị Gia Dụng Nhà Bếp Đa Năng Cao Cấp",
         "zero_category": "Gia Dụng",
@@ -184,7 +184,7 @@ CANONICAL_CATEGORIES = {
         "domain": "BOOKS"
     },
     "Sơ đồ / Tài liệu": {
-        "prompt": "software architecture flowchart code terminal diagram system text",
+        "prompt": "software flowchart source code IDE terminal text screenshot technical diagram report whitepaper document",
         "label": "Sơ đồ luồng mã nguồn / text hệ thống",
         "suggestedTitle": "Tài Liệu Hướng Dẫn Hệ Thống ZeroMall",
         "zero_category": "Sách & VPP",
@@ -311,8 +311,9 @@ import re
 def clean_title_for_entity_check(text):
     if not text:
         return ""
-    # Loại bỏ các cụm từ ngữ cảnh mô tả công dụng/tương thích để không gây sai lệch thực thể chính
     t = text.lower()
+    # Loại bỏ các cụm từ mô tả phối đồ, ngữ cảnh mix & match trong tiêu đề TMĐT
+    t = re.sub(r'(dễ mix đồ|dễ phối đồ|mix đồ|phối đồ|mix cùng|phối cùng|mặc cùng|kết hợp cùng|diện cùng|phù hợp mix)\s+[\w\s]+', ' ', t)
     t = re.sub(r'(bỏ túi quần|túi quần|bỏ túi|nhét túi|nhét vừa|bỏ vừa)', ' ', t)
     t = re.sub(r'(đựng vừa điện thoại|đựng điện thoại|bỏ vừa điện thoại|chứa điện thoại)', ' ', t)
     t = re.sub(r'(dành cho|dùng cho|thích hợp cho|tương thích với|phù hợp cho)\s+[\w\s]+', ' ', t)
@@ -361,12 +362,30 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     domain = cat_info.get("domain", "")
     pred_cat = cat_info.get("zero_category", "Thời Trang Nam")
 
+    # Phân tích thực thể chính trong tiêu đề (Primary Entity Recognition)
+    has_footwear_title = any(k in cleaned_name for k in [
+        "giày", "giay", "dép", "dep", "sneaker", "sandal", "xăng đan", "boots", "guốc", "cao gót", "slip-on", "suc"
+    ])
+    has_top_title = any(k in cleaned_name for k in [
+        "áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan"
+    ])
+    has_bottom_title = any(k in cleaned_name for k in [
+        "quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"
+    ])
+    has_dress_title = any(k in cleaned_name for k in ["váy", "đầm", "vay", "dam", "chân váy", "chan vay"])
+    has_kitchen_title = any(k in cleaned_name for k in [
+        "kệ", "ke", "nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia vị", "đũa", "thớt", "dao", "bát", "đĩa", "hộp đựng", "bình giữ nhiệt", "gia dụng", "giá để"
+    ])
+
     if is_prohibited:
         is_mismatch = True
         reason = f"[Visual Safety Guard] Hình ảnh nhận diện là {prohibited_label} (độ tin cậy: {round(max_proh_sim*100, 1)}%) - thuộc danh mục hàng cấm kinh doanh tuyệt đối trên sàn ZeroMall!"
     elif best_cat == "Sơ đồ / Tài liệu":
-        is_mismatch = True
-        reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
+        # Chỉ coi là sơ đồ / tài liệu khi độ tin cậy thực sự cao (>= 0.30)
+        # VÀ tên sản phẩm không phải là sản phẩm gia dụng/vật lý rõ ràng
+        if max_cat_sim >= 0.30 and not (has_kitchen_title or has_footwear_title or has_top_title or has_bottom_title):
+            is_mismatch = True
+            reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
 
     # A. KIỂM TRA CHÉO HÌNH ẢNH VS TIÊU ĐỀ SẢN PHẨM (Tier 1: Visual-to-Text Consistency)
     if not is_mismatch and name:
@@ -380,19 +399,19 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
         # 1. TOPS vs BOTTOMS & Chi tiết nhóm TOPS
         if domain in TOPS_DOMAINS:
-            is_bottom = any(k in cleaned_name for k in ["quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"])
             is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
-            if is_bottom and not is_suit:
+            # Nếu tiêu đề ĐÃ CÓ ÁO (has_top_title) thì dù có nhắc đến quần phối cùng cũng KHÔNG tính là lệch!
+            if has_bottom_title and not has_top_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị áo/áo khoác thời trang, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
-            elif any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+            elif not has_top_title and not is_suit and any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
                 is_mismatch = True
                 reason = f"Ảnh là áo thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
             # 1.1 Kiểm tra phân loại con: Áo thun vs Áo cardigan / Áo len dệt kim
             if not is_mismatch and domain == "TSHIRT":
                 is_cardigan_knit = any(k in cleaned_name for k in ["cardigan", "áo len", "ao len", "dệt kim", "det kim", "len mỏng", "len dệt kim", "knitwear"])
-                if is_cardigan_knit:
+                if is_cardigan_knit and not any(k in cleaned_name for k in ["áo thun", "ao thun", "áo phông"]):
                     is_mismatch = True
                     reason = f"Ảnh hiển thị áo thun / áo phông năng động, không khớp với sản phẩm là áo cardigan / áo len dệt kim (\"{name}\")."
 
@@ -409,7 +428,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 is_dep_sandal = any(k in cleaned_name for k in [
                     "dép bánh mì", "dep banh mi", "dép", "dep", "dép quai ngang", "dép lê", "dép kẹp",
                     "dép xỏ ngón", "dép sục", "sandal", "xăng đan", "quai ngang", "eva nguyên khối"
-                ])
+                ]) and not any(k in cleaned_name for k in ["sneaker", "giày thể thao", "giay the thao"])
                 if is_dep_sandal:
                     is_mismatch = True
                     reason = f"Ảnh hiển thị giày thể thao / sneaker buộc dây, không khớp với sản phẩm là dép / dép bánh mì (\"{name}\")."
@@ -425,18 +444,19 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                     reason = f"Ảnh hiển thị dép / dép bánh mì / quai ngang, không khớp với sản phẩm là giày thể thao / sneaker (\"{name}\")."
 
             # 2.3 Giày dép vs Quần áo / Gia dụng / Điện tử
-            disallowed_themes = ["áo", "quần", "váy", "đầm", "nồi chiên", "điện thoại", "laptop", "máy tính"]
-            if any(k in cleaned_name for k in disallowed_themes):
-                is_mismatch = True
-                reason = f"Ảnh là giày dép ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+            # Nếu tiêu đề đã có từ khóa Giày Dép (has_footwear_title) thì KHÔNG BAO GIỜ báo lệch!
+            if not has_footwear_title:
+                disallowed_themes = ["nồi chiên", "điện thoại", "laptop", "máy tính"]
+                if has_top_title or has_bottom_title or has_dress_title or any(k in cleaned_name for k in disallowed_themes):
+                    is_mismatch = True
+                    reason = f"Ảnh là giày dép ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "BOTTOMS":
-            is_top = any(k in cleaned_name for k in ["áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan"])
             is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
-            if is_top and not is_suit:
+            if has_top_title and not has_bottom_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
-            elif any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+            elif not has_bottom_title and not is_suit and any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
                 is_mismatch = True
                 reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
 
@@ -456,7 +476,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "KITCHEN":
-            if not any(k in cleaned_name for k in ["nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia dụng"]):
+            if not has_kitchen_title:
                 is_mismatch = True
                 reason = f"Ảnh là đồ gia dụng nhà bếp, không khớp với tên sản phẩm \"{name}\"."
 
