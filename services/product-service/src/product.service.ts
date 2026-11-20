@@ -685,6 +685,27 @@ export class ProductService {
     return updated;
   }
 
+  async bulkUpdateStatus(productIds: string[], status: 'active' | 'hidden') {
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return { count: 0, updatedIds: [] };
+    }
+
+    const updated = await this.prisma.product.updateMany({
+      where: {
+        id: { in: productIds },
+      },
+      data: { status },
+    });
+
+    for (const id of productIds) {
+      await this.redis.del(`product:detail:${id}`);
+    }
+    await this.redis.delByPattern('products:*');
+    await this.redis.delByPattern('categories:*');
+
+    return { count: updated.count, updatedIds: productIds, status };
+  }
+
   async delete(id: string) {
     await this.findOne(id); // Ensure product exists
     const deleted = await this.prisma.product.delete({

@@ -20,6 +20,10 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   // Filter & Search (Mặc định: Chỉ hiện các sản phẩm Cần Xử Lý / Vi Phạm để CSKH tập trung thao tác)
   const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'PROHIBITED' | 'MATCHED'>('FLAGGED')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Bulk Selection & Actions
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
   
   // Shops map: id -> { id, name, ownerId, phoneNumber }
   const [shopsMap, setShopsMap] = useState<Record<string, any>>({})
@@ -115,6 +119,57 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
+  // Handle Bulk Status Update (Tạm ẩn hoặc mở khóa hàng loạt)
+  const handleBulkUpdateStatus = async (productIds: string[], targetStatus: 'hidden' | 'active', actionLabel: string) => {
+    if (!productIds || productIds.length === 0) return
+
+    const confirmMsg = targetStatus === 'hidden'
+      ? `CSKH xác nhận TẠM ẨN ${productIds.length} sản phẩm khỏi sàn để yêu cầu Shop kiểm tra & sửa đổi?`
+      : `CSKH xác nhận MỞ KHÓA HIỂN THỊ lại ${productIds.length} sản phẩm trên sàn?`
+
+    if (!window.confirm(confirmMsg)) return
+
+    setIsBulkProcessing(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/products/bulk-status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds, status: targetStatus })
+      })
+
+      if (res.ok) {
+        await triggerAuditLog(`[CSKH AI-AUDIT] ${actionLabel} ${productIds.length} sản phẩm (Trạng thái: ${targetStatus})`)
+        alert(`✅ Đã ${targetStatus === 'hidden' ? 'tạm ẩn' : 'mở khóa'} thành công ${productIds.length} sản phẩm!`)
+        setSelectedIds([])
+        runAiAuditScan(currentPage)
+      } else {
+        alert('Không thể cập nhật trạng thái hàng loạt. Vui lòng thử lại.')
+      }
+    } catch (e: any) {
+      alert('Lỗi cập nhật hàng loạt: ' + e.message)
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  // Tạm ẩn toàn bộ sản phẩm vi phạm trên trang hiện tại
+  const handleHideAllFlaggedOnPage = async () => {
+    const unhiddenFlaggedIds = filteredProducts
+      .filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden')
+      .map((p) => p.id)
+
+    if (unhiddenFlaggedIds.length === 0) {
+      alert('Tất cả sản phẩm vi phạm trên trang này đều đã ở trạng thái Tạm Ẩn!')
+      return
+    }
+
+    await handleBulkUpdateStatus(
+      unhiddenFlaggedIds,
+      'hidden',
+      `Tạm ẩn toàn bộ ${unhiddenFlaggedIds.length} sản phẩm vi phạm trên Trang ${currentPage}`
+    )
+  }
+
   // Open Warning Notification Modal
   const openWarningModal = (item: any) => {
     const shop = shopsMap[item.shopId]
@@ -200,6 +255,29 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     return true
   })
 
+  // Đếm số sản phẩm vi phạm chưa bị ẩn trên trang hiện tại
+  const unhiddenFlaggedCount = filteredProducts.filter(
+    (p) => !p.auditResult?.isMatched && p.status !== 'hidden'
+  ).length
+
+  // Danh sách ID đang hiển thị trên bảng
+  const allVisibleIds = filteredProducts.map((p) => p.id)
+  const isAllSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.includes(id))
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(allVisibleIds)
+    }
+  }
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* 1. Header Banner */}
@@ -220,15 +298,33 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => runAiAuditScan(currentPage)}
-            disabled={isAuditing}
-            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
-          >
-            <span>{isAuditing ? '⏳' : '⚡'}</span>
-            <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* NÚT TẠM ẨN TOÀN BỘ SẢN PHẨM VI PHẠM TRÊN TRANG */}
+            {unhiddenFlaggedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleHideAllFlaggedOnPage}
+                disabled={isBulkProcessing || isAuditing}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-md disabled:opacity-50 animate-pulse hover:animate-none"
+                title="Tạm ẩn toàn bộ sản phẩm vi phạm trên trang này khỏi sàn"
+              >
+                <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
+                <span>
+                  {isBulkProcessing ? 'Đang Xử Lý...' : `Tạm Ẩn Toàn Bộ (${unhiddenFlaggedCount} Vi Phạm)`}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => runAiAuditScan(currentPage)}
+              disabled={isAuditing}
+              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
+            >
+              <span>{isAuditing ? '⏳' : '⚡'}</span>
+              <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
+            </button>
+          </div>
         </div>
 
         {/* 5 Stats Chips */}
@@ -356,6 +452,45 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
         </div>
       </div>
 
+      {/* 2.5 Bulk Action Bar when items are selected */}
+      {selectedIds.length > 0 && (
+        <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg border border-slate-800">
+          <div className="flex items-center gap-2.5 text-xs font-bold">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>
+              Đang chọn <strong className="text-emerald-300 font-black text-sm">{selectedIds.length}</strong> sản phẩm trên trang
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleBulkUpdateStatus(selectedIds, 'hidden', `Tạm ẩn ${selectedIds.length} sản phẩm đã chọn`)}
+              disabled={isBulkProcessing}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            >
+              <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
+              <span>Tạm Ẩn Đã Chọn ({selectedIds.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBulkUpdateStatus(selectedIds, 'active', `Mở khóa ${selectedIds.length} sản phẩm đã chọn`)}
+              disabled={isBulkProcessing}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            >
+              <span>{isBulkProcessing ? '⏳' : '👁️'}</span>
+              <span>Mở Khóa Đã Chọn ({selectedIds.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl cursor-pointer transition"
+            >
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 3. Main Audit Results Table */}
       <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs relative">
         {isAuditing && (
@@ -385,6 +520,15 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             <table className="w-full text-xs text-left text-slate-700">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                  <th className="py-3.5 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={handleToggleSelectAll}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      title={isAllSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả sản phẩm trên trang'}
+                    />
+                  </th>
                   <th className="py-3.5 px-4 min-w-[240px]">Sản Phẩm & Ảnh Bìa</th>
                   <th className="py-3.5 px-3 min-w-[160px]">Gian Hàng (Shop)</th>
                   <th className="py-3.5 px-3">Ngành Hàng Hiện Tại</th>
@@ -403,7 +547,17 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                   const isHidden = item.status === 'hidden'
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/70 transition">
+                    <tr key={item.id} className={`hover:bg-slate-50/70 transition ${selectedIds.includes(item.id) ? 'bg-emerald-50/40' : ''}`}>
+                      {/* Cột 0: Checkbox chọn */}
+                      <td className="py-3.5 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => handleToggleSelectOne(item.id)}
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                      </td>
+
                       {/* Cột 1: Sản phẩm & Ảnh */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">

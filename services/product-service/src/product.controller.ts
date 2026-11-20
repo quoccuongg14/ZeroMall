@@ -213,6 +213,11 @@ export class ProductController {
     return this.productService.create(dto);
   }
 
+  @Put('bulk-status')
+  async bulkUpdateStatus(@Body() body: { productIds: string[]; status: 'active' | 'hidden' }) {
+    return this.productService.bulkUpdateStatus(body.productIds, body.status);
+  }
+
   @Put(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productService.update(id, dto);
