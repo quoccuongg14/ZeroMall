@@ -18,7 +18,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   const pageSize = 50
   
   // Filter & Search
-  const [filterIssue, setFilterIssue] = useState<'ALL' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH'>('ALL')
+  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'MATCHED'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   
   // Shops map: id -> { id, name, ownerId, phoneNumber }
@@ -174,12 +174,17 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Filtered flagged products
-  const flaggedProducts = batchAudit?.flaggedProducts || []
-  const filteredProducts = flaggedProducts.filter((item) => {
+  // Base products list: use allProducts (50 items) if available, fallback to flaggedProducts
+  const baseProducts = (batchAudit?.allProducts && batchAudit.allProducts.length > 0)
+    ? batchAudit.allProducts
+    : (batchAudit?.flaggedProducts || [])
+
+  const filteredProducts = baseProducts.filter((item) => {
     // 1. Issue type filter
+    if (filterIssue === 'FLAGGED' && item.auditResult?.isMatched) return false
     if (filterIssue === 'WRONG_CATEGORY' && item.auditResult?.issueType !== 'WRONG_CATEGORY') return false
     if (filterIssue === 'IMAGE_MISMATCH' && item.auditResult?.issueType !== 'IMAGE_MISMATCH') return false
+    if (filterIssue === 'MATCHED' && !item.auditResult?.isMatched) return false
 
     // 2. Search query
     if (searchQuery.trim()) {
@@ -265,7 +270,17 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <span>Tất cả phát hiện</span>
+              <span>Tất cả ({batchAudit?.totalScanned || 0})</span>
+            </button>
+            <button
+              onClick={() => setFilterIssue('FLAGGED')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                filterIssue === 'FLAGGED'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+              }`}
+            >
+              <span>⚡ Cần xử lý</span>
               <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-[10px]">
                 {batchAudit?.flaggedProducts?.length || 0}
               </span>
@@ -294,6 +309,19 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               <span>🚨 Lệch ảnh & tiêu đề</span>
               <span className="px-1.5 py-0.2 bg-rose-700/30 rounded-full text-[10px]">
                 {batchAudit?.imageMismatchCount || 0}
+              </span>
+            </button>
+            <button
+              onClick={() => setFilterIssue('MATCHED')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                filterIssue === 'MATCHED'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              <span>✅ Đạt chuẩn</span>
+              <span className="px-1.5 py-0.2 bg-emerald-600/30 rounded-full text-[10px]">
+                {batchAudit?.matchedCount || 0}
               </span>
             </button>
           </div>
@@ -410,66 +438,97 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
 
                       {/* Cột 3: Ngành hàng hiện tại */}
                       <td className="py-3.5 px-3">
-                        <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
-                          ❌ {item.category}
-                        </span>
+                        {item.auditResult?.isMatched ? (
+                          <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                            ✅ {item.category}
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
+                            ❌ {item.category}
+                          </span>
+                        )}
                       </td>
 
                       {/* Cột 4: AI Chẩn đoán */}
                       <td className="py-3.5 px-3">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                              isImageMismatch 
-                                ? 'bg-rose-600 text-white' 
-                                : 'bg-amber-500 text-white'
-                            }`}>
-                              {isImageMismatch ? '🚨 LỆCH ẢNH & TIÊU ĐỀ' : '⚠️ SAI NGÀNH HÀNG'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              Độ tin cậy: {res?.confidence || 90}%
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-700 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            {res?.imageFeedback || res?.recommendation}
-                          </p>
-                          {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
-                            <p className="text-[11px] text-indigo-700 font-bold flex items-center gap-1.5">
-                              <span>👉 Đề xuất chuyển sang:</span>
-                              <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-md font-extrabold text-indigo-800">
-                                {res.suggestedCategory}
+                        {item.auditResult?.isMatched ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white">
+                                ✅ CHUẨN NGÀNH HÀNG
                               </span>
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                Độ tin cậy: {res?.confidence || 98}%
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-800 font-medium leading-relaxed bg-emerald-50/70 p-2 rounded-lg border border-emerald-100">
+                              {res?.recommendation || 'Hình ảnh và tiêu đề hoàn toàn đồng nhất với phân loại ngành hàng.'}
                             </p>
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                isImageMismatch 
+                                  ? 'bg-rose-600 text-white' 
+                                  : 'bg-amber-500 text-white'
+                              }`}>
+                                {isImageMismatch ? '🚨 LỆCH ẢNH & TIÊU ĐỀ' : '⚠️ SAI NGÀNH HÀNG'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                Độ tin cậy: {res?.confidence || 90}%
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-700 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">
+                              {res?.imageFeedback || res?.recommendation}
+                            </p>
+                            {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                              <p className="text-[11px] text-indigo-700 font-bold flex items-center gap-1.5">
+                                <span>👉 Đề xuất chuyển sang:</span>
+                                <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-md font-extrabold text-indigo-800">
+                                  {res.suggestedCategory}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Cột 5: Nghiệp vụ CSKH */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col gap-1.5 items-stretch justify-center max-w-[180px] mx-auto">
-                          {/* 1-Click Fix Category */}
-                          {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
-                            <button
-                              type="button"
-                              onClick={() => handleAutoFixCategory(item.id, res.suggestedCategory, item.name)}
-                              disabled={fixingId === item.id}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50"
-                              title={`Duyệt sửa sang ngành hàng ${res.suggestedCategory}`}
-                            >
-                              <span>{fixingId === item.id ? '⏳' : '⚡'}</span>
-                              <span className="truncate">1-Click: Đổi sang {res.suggestedCategory}</span>
-                            </button>
-                          )}
+                          {item.auditResult?.isMatched ? (
+                            <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-bold border border-emerald-200 flex items-center justify-center gap-1 shadow-2xs">
+                              <span>🛡️</span>
+                              <span>Đã Duyệt Đạt Chuẩn</span>
+                            </span>
+                          ) : (
+                            <>
+                              {/* 1-Click Fix Category */}
+                              {res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAutoFixCategory(item.id, res.suggestedCategory, item.name)}
+                                  disabled={fixingId === item.id}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs disabled:opacity-50"
+                                  title={`Duyệt sửa sang ngành hàng ${res.suggestedCategory}`}
+                                >
+                                  <span>{fixingId === item.id ? '⏳' : '⚡'}</span>
+                                  <span className="truncate">1-Click: Đổi sang {res.suggestedCategory}</span>
+                                </button>
+                              )}
 
-                          {/* Gửi cảnh báo nhắc nhở Shop */}
-                          <button
-                            type="button"
-                            onClick={() => openWarningModal(item)}
-                            className="px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <span>🔔</span>
-                            <span>Nhắc Nhở Shop</span>
-                          </button>
+                              {/* Gửi cảnh báo nhắc nhở Shop */}
+                              <button
+                                type="button"
+                                onClick={() => openWarningModal(item)}
+                                className="px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <span>🔔</span>
+                                <span>Nhắc Nhở Shop</span>
+                              </button>
+                            </>
+                          )}
 
                           {/* Tạm ẩn / Mở khóa sản phẩm */}
                           <button

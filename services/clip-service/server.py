@@ -231,6 +231,19 @@ def parse_pil_image(payload):
     return None
 
 
+import re
+
+def clean_title_for_entity_check(text):
+    if not text:
+        return ""
+    # Loại bỏ các cụm từ ngữ cảnh mô tả công dụng/tương thích để không gây sai lệch thực thể chính
+    t = text.lower()
+    t = re.sub(r'(bỏ túi quần|túi quần|bỏ túi|nhét túi|nhét vừa|bỏ vừa)', ' ', t)
+    t = re.sub(r'(đựng vừa điện thoại|đựng điện thoại|bỏ vừa điện thoại|chứa điện thoại)', ' ', t)
+    t = re.sub(r'(dành cho|dùng cho|thích hợp cho|tương thích với|phù hợp cho)\s+[\w\s]+', ' ', t)
+    t = re.sub(r'(in hình|họa tiết|tặng kèm|kèm theo)\s+[\w\s]+', ' ', t)
+    return " ".join(t.split())
+
 def audit_single_image_logic(pil_img, name, category, name_emb=None):
     """
     AGENT: MultiImageVisualAgent
@@ -262,6 +275,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     reason = ""
 
     lower_name = name.lower()
+    cleaned_name = clean_title_for_entity_check(lower_name)
     category_clean = (category or "").strip()
     cat_lower = category_clean.lower()
     domain = cat_info.get("domain", "")
@@ -274,11 +288,69 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         is_mismatch = True
         reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
     elif best_cat == "Cảnh ngoài trời / Xe cộ":
-        if not any(k in lower_name for k in ["xe đạp", "bicycle", "cyclist"]):
+        if not any(k in cleaned_name for k in ["xe đạp", "bicycle", "cyclist"]):
             is_mismatch = True
             reason = f"Ảnh chụp người đi xe đạp/giao hàng ngoài trời, không khớp với sản phẩm \"{name}\"."
 
-    # A. KIỂM TRA CHÉO HÌNH ẢNH VS NGÀNH HÀNG (Category Cross-Audit Toàn diện)
+    # A. KIỂM TRA CHÉO HÌNH ẢNH VS TIÊU ĐỀ SẢN PHẨM (Tier 1: Visual-to-Text Consistency)
+    if not is_mismatch and name:
+        if name_emb is None:
+            name_emb = model.encode([name])[0]
+        title_sim = float(util.cos_sim(img_emb, name_emb)[0].item())
+
+        # 1. TOPS vs BOTTOMS
+        if domain == "TOPS":
+            is_bottom = any(k in cleaned_name for k in ["quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"])
+            is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
+            if is_bottom and not is_suit:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị áo/áo khoác, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
+            elif any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+                is_mismatch = True
+                reason = f"Ảnh là áo/áo khoác thời trang, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "BOTTOMS":
+            is_top = any(k in cleaned_name for k in ["áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "thun", "blazer", "vest"])
+            is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
+            if is_top and not is_suit:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
+            elif any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+                is_mismatch = True
+                reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "DRESS":
+            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam"]):
+                is_mismatch = True
+                reason = f"Ảnh là váy đầm thời trang nữ, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "SPORTS":
+            disallowed_themes = [
+                "siêu nhân", "gao", "công chúa", "bà ba", "áo dài", "đồ ngủ",
+                "pijama", "anime", "cosplay", "giày", "dép", "sneaker", "sandal",
+                "laptop", "máy tính", "điện thoại", "tai nghe", "bàn phím", "nồi chiên", "bếp"
+            ]
+            if any(k in cleaned_name for k in disallowed_themes):
+                is_mismatch = True
+                reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "FOOTWEAR":
+            disallowed_themes = ["áo", "quần", "váy", "đầm", "nồi chiên", "điện thoại", "laptop", "máy tính"]
+            if any(k in cleaned_name for k in disallowed_themes):
+                is_mismatch = True
+                reason = f"Ảnh là giày dép, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "KITCHEN":
+            if not any(k in cleaned_name for k in ["nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia dụng"]):
+                is_mismatch = True
+                reason = f"Ảnh là đồ gia dụng nhà bếp, không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "ELECTRONICS":
+            if any(k in cleaned_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi chiên"]):
+                is_mismatch = True
+                reason = f"Ảnh là thiết bị công nghệ điện tử, không khớp với tên sản phẩm \"{name}\"."
+
+    # B. KIỂM TRA CHÉO HÌNH ẢNH VS NGÀNH HÀNG (Category Cross-Audit Toàn diện)
     if not is_mismatch and category_clean and pred_cat:
         is_compatible = False
         allowed = COMPATIBLE_CATEGORIES.get(pred_cat, [pred_cat])
@@ -291,67 +363,9 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             is_mismatch = True
             reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
 
-    # B. KIỂM TRA CHÉO HÌNH ẢNH VS TIÊU ĐỀ SẢN PHẨM (Title Cross-Audit)
-    if not is_mismatch and name:
-        if name_emb is None:
-            name_emb = model.encode([name])[0]
-        title_sim = float(util.cos_sim(img_emb, name_emb)[0].item())
-
-        # 1. TOPS vs BOTTOMS
-        if domain == "TOPS":
-            is_bottom = any(k in lower_name for k in ["quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"])
-            is_suit = any(k in lower_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
-            if is_bottom and not is_suit:
-                is_mismatch = True
-                reason = f"Ảnh hiển thị áo/áo khoác, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
-            elif any(k in lower_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
-                is_mismatch = True
-                reason = f"Ảnh là áo/áo khoác thời trang, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "BOTTOMS":
-            is_top = any(k in lower_name for k in ["áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "thun", "blazer", "vest"])
-            is_suit = any(k in lower_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
-            if is_top and not is_suit:
-                is_mismatch = True
-                reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
-            elif any(k in lower_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
-                is_mismatch = True
-                reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "DRESS":
-            if any(k in lower_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam"]):
-                is_mismatch = True
-                reason = f"Ảnh là váy đầm thời trang nữ, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "SPORTS":
-            disallowed_themes = [
-                "siêu nhân", "gao", "công chúa", "bà ba", "áo dài", "đồ ngủ",
-                "pijama", "anime", "cosplay", "giày", "dép", "sneaker", "sandal",
-                "laptop", "máy tính", "điện thoại", "tai nghe", "bàn phím", "nồi chiên", "bếp"
-            ]
-            if any(k in lower_name for k in disallowed_themes):
-                is_mismatch = True
-                reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "FOOTWEAR":
-            disallowed_themes = ["áo", "quần", "váy", "đầm", "nồi chiên", "điện thoại", "laptop", "máy tính"]
-            if any(k in lower_name for k in disallowed_themes):
-                is_mismatch = True
-                reason = f"Ảnh là giày dép, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "KITCHEN":
-            if not any(k in lower_name for k in ["nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia dụng"]):
-                is_mismatch = True
-                reason = f"Ảnh là đồ gia dụng nhà bếp, không khớp với tên sản phẩm \"{name}\"."
-
-        elif domain == "ELECTRONICS":
-            if any(k in lower_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi chiên"]):
-                is_mismatch = True
-                reason = f"Ảnh là thiết bị công nghệ điện tử, không khớp với tên sản phẩm \"{name}\"."
-
-    # Ngưỡng tương đồng Cosine cấu hình động
-    cosine_threshold = float(os.environ.get("CLIP_SIMILARITY_THRESHOLD", "0.45"))
-    if not is_mismatch and title_sim > 0 and title_sim < cosine_threshold:
+    # Ngưỡng tương đồng Cosine cấu hình động (Chỉ áp dụng khi title_sim quá thấp < 0.12 và không có ngành hàng tương thích)
+    cosine_threshold = float(os.environ.get("CLIP_SIMILARITY_THRESHOLD", "0.14"))
+    if not is_mismatch and title_sim > 0 and title_sim < cosine_threshold and not is_compatible:
         if not reason:
             is_mismatch = True
             reason = f"Độ tương quan giữa ảnh ({cat_info['label']}) và tiêu đề đạt {round(title_sim, 2)}, thấp hơn ngưỡng an toàn {cosine_threshold}."

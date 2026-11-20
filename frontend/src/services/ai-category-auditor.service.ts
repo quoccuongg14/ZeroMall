@@ -26,6 +26,16 @@ export interface AuditCategoryResult {
   source: string;
 }
 
+export interface ScannedProductItem {
+  id: string;
+  name: string;
+  image: string;
+  category: string;
+  shopId: string;
+  status?: string;
+  auditResult: AuditCategoryResult;
+}
+
 export interface BatchAuditStats {
   totalScanned: number;
   totalProducts?: number;
@@ -35,15 +45,8 @@ export interface BatchAuditStats {
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
-  flaggedProducts: Array<{
-    id: string;
-    name: string;
-    image: string;
-    category: string;
-    shopId: string;
-    status?: string;
-    auditResult: AuditCategoryResult;
-  }>;
+  flaggedProducts: ScannedProductItem[];
+  allProducts: ScannedProductItem[];
 }
 
 /**

@@ -31,6 +31,16 @@ export interface AuditCategoryResult {
   source: 'ai-multimodal-engine' | 'gemini-vision' | 'catalog-rules' | 'local-clip-engine' | 'local-ai-engine';
 }
 
+export interface ScannedProductItem {
+  id: string;
+  name: string;
+  image: string;
+  category: string;
+  shopId: string;
+  status?: string;
+  auditResult: AuditCategoryResult;
+}
+
 export interface BatchAuditStats {
   totalScanned: number;
   totalProducts?: number;
@@ -40,15 +50,8 @@ export interface BatchAuditStats {
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
-  flaggedProducts: Array<{
-    id: string;
-    name: string;
-    image: string;
-    category: string;
-    shopId: string;
-    status?: string;
-    auditResult: AuditCategoryResult;
-  }>;
+  flaggedProducts: ScannedProductItem[];
+  allProducts: ScannedProductItem[];
 }
 
 const CANONICAL_CATEGORIES = [
@@ -130,13 +133,18 @@ export class AiCategoryAuditorService {
   }
 
   /**
-   * Thẩm định 1 sản phẩm: Kiểm tra độ khớp giữa Tên, Hình ảnh và Ngành hàng
+   * Thẩm định 1 sản phẩm theo KIẾN TRÚC 2 BƯỚC:
+   * BƯỚC 1: Kiểm tra Hình ảnh vs Tiêu đề (Visual-to-Text Consistency)
+   *   -> Nếu ảnh không khớp tiêu đề -> Báo [IMAGE_MISMATCH] và DỪNG LẠI NGAY!
+   * BƯỚC 2: Kiểm tra Tiêu đề/Thực thể chính vs Ngành hàng (Head-Noun Category Validation)
+   *   -> Bóc tách danh từ chính, loại bỏ ngữ cảnh phụ ("dễ bỏ túi quần", "đựng vừa điện thoại"...)
+   *   -> So sánh với ngành hàng đăng bán -> [WRONG_CATEGORY] hoặc [MATCHED].
    */
   async auditProduct(input: AuditProductDto): Promise<AuditCategoryResult> {
     const rawName = (input.name || '').trim();
     const lowerName = rawName.toLowerCase();
     const currentCat = (input.category || '').trim();
-    // 1. Phân tích Thị giác & Hàng cấm đa hình ảnh (MultiImageVisualAgent: CLIP ViT-B-32 Worst-case Pooling)
+
     const allImages: string[] = [];
     if (input.image) allImages.push(input.image);
     if (Array.isArray(input.images)) {
@@ -144,21 +152,19 @@ export class AiCategoryAuditorService {
         if (img && !allImages.includes(img)) allImages.push(img);
       }
     }
-
     const coverImage = allImages[0] || '';
-    let visualCheck: any = null;
 
-    // Trong batch scan hàng nghìn sản phẩm, chỉ gọi thị giác nặng khi có service CLIP active
-    if (!input.isBatchScan) {
-      if (allImages.length >= 1) {
-        visualCheck = await this.queryLocalClipVisionMulti(allImages, rawName, currentCat);
-      }
-      if (!visualCheck && coverImage) {
-        visualCheck = await this.analyzeVisualClue(coverImage, rawName, currentCat);
-      }
+    // =========================================================================
+    // BƯỚC 1: KIỂM TRA HÌNH ẢNH VS TIÊU ĐỀ (Tier 1: Visual-to-Text Consistency)
+    // "Kiểm tra ảnh với tên sản phẩm xem có trùng không đã..."
+    // =========================================================================
+    let visualCheck: any = null;
+    const activeClip = await this.getActiveClipUrl();
+    if (activeClip && coverImage) {
+      visualCheck = await this.queryLocalClipVision(coverImage, rawName, currentCat);
     }
 
-    // NẾU HÌNH ẢNH CHỨA HÀNG CẤM -> LẬP TỨC CHẶN NGAY VỚI MỨC ƯU TIÊN CAO NHẤT
+    // 1.1 Kiểm tra hàng cấm / vũ khí tuyệt đối
     if (visualCheck && visualCheck.isProhibited) {
       return {
         isMatched: false,
@@ -174,11 +180,31 @@ export class AiCategoryAuditorService {
         imageFeedback: visualCheck.reason || `Ảnh là "${visualCheck.detectedVisual}".`,
         actionRequired: 'REPLACE_IMAGE',
         recommendation: `🚫 CẢNH BÁO HÀNG CẤM: Hình ảnh chứa ${visualCheck.prohibitedLabel || 'vật phẩm cấm kinh doanh'}. Sàn ZeroMall nghiêm cấm tuyệt đối đăng tải!`,
-        source: (visualCheck.source as any) || 'local-clip-engine',
+        source: 'local-clip-engine',
       };
     }
 
-    // 2. AGENT: TextSanitizerAgent (Quét từ cấm & lách từ đối kháng bằng Qwen 2.5 / Gemini)
+    // 1.2 ĐÁNH GIÁ LỆCH ẢNH & TIÊU ĐỀ (Ảnh một đằng, Tiêu đề một nẻo)
+    // NẾU ẢNH KHÔNG TRÙNG TIÊU ĐỀ -> LẬP TỨC CHẶN NGAY, DỪNG LẠI KHÔNG KIỂM TRA TIẾP!
+    if (visualCheck && visualCheck.isMismatch) {
+      return {
+        isMatched: false,
+        isProhibited: false,
+        issueType: 'IMAGE_MISMATCH',
+        confidence: visualCheck.confidence || 95,
+        currentCategory: currentCat,
+        suggestedTitle: visualCheck.suggestedTitle,
+        detectedVisual: visualCheck.detectedVisual,
+        suggestedCategory: visualCheck.suggestedCategory || currentCat,
+        titleFeedback: `Tiêu đề sản phẩm là "${rawName}".`,
+        imageFeedback: visualCheck.reason || `Hình ảnh nhận diện là "${visualCheck.detectedVisual}", không đồng nhất với tiêu đề.`,
+        actionRequired: 'REPLACE_IMAGE',
+        recommendation: visualCheck.reason || `Hình ảnh hiển thị là "${visualCheck.detectedVisual}", nhưng tiêu đề lại ghi "${rawName}". Đề nghị Shop cập nhật ảnh bìa đúng thực tế hoặc sửa tiêu đề.`,
+        source: 'local-clip-engine',
+      };
+    }
+
+    // 1.3 Quét từ cấm nâng cao nếu có service AI Moderation (TextSanitizerAgent)
     if (this.aiModeration && !input.isBatchScan) {
       try {
         const textCheck = await this.aiModeration.moderateContent({
@@ -205,49 +231,15 @@ export class AiCategoryAuditorService {
       }
     }
 
-    // 3. Phân tích Ngành hàng chuẩn dựa trên Tên sản phẩm (Title NLP Category Inference)
+    // =========================================================================
+    // BƯỚC 2: KIỂM TRA TÊN/CHỦ THỂ CHÍNH VS NGÀNH HÀNG (Tier 2: Category Validation)
+    // "Sau khi trùng thì mới kiểm tra tên sản phẩm đó có trùng với ngành hàng không"
+    // =========================================================================
+    // Bóc tách Thực thể chính (Head Noun), loại bỏ ngữ cảnh phụ
     const inferredCategoryFromTitle = this.inferCategoryFromTitle(lowerName);
-
-    // 4. Đánh giá Mâu thuẫn Hình ảnh (Visual-Text Mismatch)
-    if (visualCheck && visualCheck.isMismatch) {
-      return {
-        isMatched: false,
-        isProhibited: false,
-        prohibitedLabel: undefined,
-        issueType: 'IMAGE_MISMATCH',
-        confidence: visualCheck.confidence || 98,
-        currentCategory: currentCat,
-        suggestedTitle: visualCheck.suggestedTitle,
-        detectedVisual: visualCheck.detectedVisual,
-        suggestedCategory: visualCheck.suggestedCategory || inferredCategoryFromTitle || currentCat,
-        titleFeedback: rawName ? `Tiêu đề bạn nhập là "${rawName}".` : `Chưa nhập tiêu đề sản phẩm.`,
-        imageFeedback: visualCheck.reason || `Ảnh là "${visualCheck.detectedVisual}".`,
-        actionRequired: 'UPDATE_TITLE',
-        recommendation: `Ảnh là "${visualCheck.detectedVisual}". ZeroAI đề xuất chuyển ngành sang "${visualCheck.suggestedCategory || 'Thời Trang Nam'}" hoặc chọn ảnh phù hợp.`,
-        source: (visualCheck.source as any) || 'local-clip-engine',
-      };
-    }
-
-    // 4. Đánh giá Sai Ngành Hàng (Wrong Category)
     const effectiveSuggestedCat = inferredCategoryFromTitle || visualCheck?.suggestedCategory;
-    if (effectiveSuggestedCat && currentCat && !this.isCategoryCompatible(currentCat, effectiveSuggestedCat)) {
-      return {
-        isMatched: false,
-        issueType: 'WRONG_CATEGORY',
-        confidence: 93,
-        currentCategory: currentCat,
-        suggestedCategory: effectiveSuggestedCat,
-        suggestedTitle: visualCheck?.suggestedTitle,
-        detectedVisual: visualCheck?.detectedVisual,
-        titleFeedback: rawName ? `Sản phẩm "${rawName}" thuộc ngành "${effectiveSuggestedCat}".` : `Hình ảnh sản phẩm thuộc ngành "${effectiveSuggestedCat}".`,
-        imageFeedback: visualCheck?.detectedVisual ? `Ảnh hiển thị: ${visualCheck.detectedVisual}.` : undefined,
-        actionRequired: 'CHANGE_CATEGORY',
-        recommendation: `ZeroAI đề xuất chuyển sang ngành "${effectiveSuggestedCat}" để tối ưu tìm kiếm và đúng chuẩn danh mục.`,
-        source: visualCheck?.source || 'local-ai-engine',
-      };
-    }
 
-    // 5. Kiểm tra trường hợp đặc biệt: Merchandise / Fanmeeting / Esports
+    // 2.1 Trường hợp đặc biệt: Merchandise / Fanmeeting / Esports
     if (/hle|gumayusi|t1|faker|chovy|fanmeeting|áo đấu|esports/i.test(lowerName)) {
       const esportsCat = 'Thời Trang Nam';
       if (!['Thời Trang Nam', 'Thể Thao', 'Sách & VPP'].includes(currentCat)) {
@@ -266,7 +258,25 @@ export class AiCategoryAuditorService {
       }
     }
 
-    // 6. Trường hợp Hợp lệ
+    // 2.2 Kiểm tra tương thích ngành hàng
+    if (effectiveSuggestedCat && currentCat && !this.isCategoryCompatible(currentCat, effectiveSuggestedCat)) {
+      return {
+        isMatched: false,
+        issueType: 'WRONG_CATEGORY',
+        confidence: 93,
+        currentCategory: currentCat,
+        suggestedCategory: effectiveSuggestedCat,
+        suggestedTitle: visualCheck?.suggestedTitle,
+        detectedVisual: visualCheck?.detectedVisual,
+        titleFeedback: rawName ? `Sản phẩm "${rawName}" có thực thể chính thuộc ngành "${effectiveSuggestedCat}".` : `Hình ảnh sản phẩm thuộc ngành "${effectiveSuggestedCat}".`,
+        imageFeedback: visualCheck?.detectedVisual ? `Ảnh hiển thị: ${visualCheck.detectedVisual}.` : undefined,
+        actionRequired: 'CHANGE_CATEGORY',
+        recommendation: `ZeroAI đề xuất chuyển sang ngành "${effectiveSuggestedCat}" để tối ưu tìm kiếm và đúng chuẩn danh mục sàn.`,
+        source: visualCheck?.source || 'local-ai-engine',
+      };
+    }
+
+    // 2.3 Hợp lệ: Cả Ảnh = Tên = Ngành Hàng đều đồng nhất chuẩn xác!
     return {
       isMatched: true,
       issueType: 'MATCHED',
@@ -274,10 +284,10 @@ export class AiCategoryAuditorService {
       currentCategory: currentCat,
       suggestedCategory: currentCat,
       titleFeedback: `Tiêu đề "${rawName}" chuẩn xác.`,
-      imageFeedback: 'Hình ảnh và tiêu đề đồng nhất với ngành hàng.',
+      imageFeedback: 'Hình ảnh, tiêu đề và phân loại ngành hàng hoàn toàn đồng nhất.',
       actionRequired: 'NONE',
       recommendation: `Sản phẩm đã được phân loại đúng ngành "${currentCat}". Đủ điều kiện hiển thị ưu tiên trên sàn ZeroMall.`,
-      source: 'local-ai-engine',
+      source: visualCheck?.source || 'local-ai-engine',
     };
   }
 
@@ -316,6 +326,7 @@ export class AiCategoryAuditorService {
     let matchedCount = 0;
     let wrongCategoryCount = 0;
     let imageMismatchCount = 0;
+    const allProducts: BatchAuditStats['allProducts'] = [];
     const flaggedProducts: BatchAuditStats['flaggedProducts'] = [];
 
     // Chạy song song theo từng mẻ (chunks 10 sản phẩm)
@@ -337,19 +348,23 @@ export class AiCategoryAuditorService {
       );
 
       for (const res of chunkResults) {
+        const item: ScannedProductItem = {
+          id: res.p.id,
+          name: res.p.name,
+          image: res.cover,
+          category: res.p.category,
+          shopId: res.p.shopId,
+          status: res.p.status,
+          auditResult: res.audit,
+        };
+
+        allProducts.push(item);
+
         if (!res.audit.isMatched) {
           if (res.audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
           else if (res.audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
 
-          flaggedProducts.push({
-            id: res.p.id,
-            name: res.p.name,
-            image: res.cover,
-            category: res.p.category,
-            shopId: res.p.shopId,
-            status: res.p.status,
-            auditResult: res.audit,
-          });
+          flaggedProducts.push(item);
         } else {
           matchedCount++;
         }
@@ -368,6 +383,7 @@ export class AiCategoryAuditorService {
       wrongCategoryCount,
       imageMismatchCount,
       flaggedProducts,
+      allProducts,
     };
   }
 
@@ -406,12 +422,101 @@ export class AiCategoryAuditorService {
   }
 
   /**
+   * Loại bỏ các cụm từ ngữ cảnh phụ (mô tả tính năng bỏ túi, kích thước đựng vừa, mục đích sử dụng...)
+   * để không làm sai lệch Danh từ Thực thể chính của sản phẩm
+   */
+  private cleanContextualModifiers(text: string): string {
+    if (!text) return '';
+    let t = text.toLowerCase();
+    t = t.replace(/(dễ\s+bỏ\s+túi\s+quần|bỏ\s+túi\s+quần|túi\s+quần|nhét\s+túi|bỏ\s+túi|bỏ\s+vừa\s+túi|bỏ\s+vừa)/gu, ' ');
+    t = t.replace(/(đựng\s+vừa\s+điện\s+thoại|đựng\s+điện\s+thoại|bỏ\s+vừa\s+điện\s+thoại|chứa\s+điện\s+thoại)/gu, ' ');
+    t = t.replace(/(dành\s+cho|dùng\s+cho|thích\s+hợp\s+cho|tương\s+thích\s+với|phù\s+hợp\s+cho)\s+[\p{L}\p{N}\s]+/gu, ' ');
+    t = t.replace(/(in\s+hình|họa\s+tiết|tặng\s+kèm|kèm\s+theo)\s+[\p{L}\p{N}\s]+/gu, ' ');
+    return t.replace(/\s+/g, ' ').trim();
+  }
+
+  /**
    * Suy luận ngành hàng chuẩn dựa trên Tên sản phẩm
+   * Sử dụng nguyên lý Ngôn ngữ học Tiếng Việt: Danh từ thực thể chính (Head Noun) luôn đứng đầu tiêu đề
    */
   private inferCategoryFromTitle(lowerName: string): string | null {
-    // 1. Thể thao
+    const cleaned = this.cleanContextualModifiers(lowerName);
+
+    // =========================================================================
+    // BƯỚC 1: ƯU TIÊN HEAD NOUN Ở ĐẦU TIÊU ĐỀ (Prefix Match)
+    // Giúp nhận diện chính xác "Đồng hồ nam thể thao" là Đồng Hồ (không phải Thể Thao)
+    // "Chân máy ảnh tripod điện thoại" là Máy Ảnh (không phải Điện Thoại)
+    // =========================================================================
+    if (/^\s*(đồng hồ|dong ho|smartwatch|apple watch)/i.test(cleaned)) {
+      return 'Đồng Hồ';
+    }
+    if (/^\s*(máy ảnh|may anh|chân máy|tripod|ống kính|lens|flycam|gopro|gimbal|camera)/i.test(cleaned)) {
+      return 'Máy Ảnh';
+    }
+    if (/^\s*(pin sạc|sạc dự phòng|pin dự phòng|cáp sạc|củ sạc|dây sạc|cốc sạc|sạc không dây|tai nghe|airpods|headphone|ốp lưng|kính cường lực|dán màn hình|giá đỡ điện thoại|gậy chụp|điện thoại|smartphone|iphone|samsung|xiaomi|oppo|vivo)/i.test(cleaned)) {
+      return 'Điện Thoại & Phụ Kiện';
+    }
+    if (/^\s*(ví|vi|bóp|túi xách|túi đeo|túi tote|túi bao tử|clutch|balo|ba lô|cặp sách|túi canvas)/i.test(cleaned)) {
+      return 'Túi Ví Nữ';
+    }
+    if (/^\s*(laptop|macbook|bàn phím|chuột|màn hình máy tính|pc|tai nghe gaming|ổ cứng|ram|cpu|vga)/i.test(cleaned)) {
+      return 'Máy Tính & Laptop';
+    }
+    if (/^\s*(sneaker|giày|giay|sandal|dép|dep|boots|guốc|cao gót)/i.test(cleaned)) {
+      if (this.hasKeyword(cleaned, ['nữ', 'cao gót', 'guốc'])) return 'Giày Dép Nữ';
+      return 'Giày Dép Nam';
+    }
+    if (/^\s*(nồi|noi|lò vi sóng|máy xay|ấm siêu tốc|bếp|chảo|máy hút bụi|quạt điện)/i.test(cleaned)) {
+      return 'Gia Dụng';
+    }
+    if (/^\s*(sách|truyện|tiểu thuyết|giáo khoa|giáo trình|vở|bút)/i.test(cleaned)) {
+      return 'Sách & VPP';
+    }
+    if (/^\s*(son|kem|serum|toner|nước hoa|sữa rửa mặt|mặt nạ|phấn)/i.test(cleaned)) {
+      return 'Sắc Đẹp';
+    }
+    if (/^\s*(tã|bỉm|sữa bột|bình sữa|xe đẩy|nôi em bé)/i.test(cleaned)) {
+      return 'Mẹ & Bé';
+    }
+    if (/^\s*(áo|quần|đầm|váy|chân váy|set đồ|bộ đồ|đồ bộ|khoác|jacket|blazer|hoodie|sweater|polo|sơ mi)/i.test(cleaned)) {
+      if (this.hasKeyword(cleaned, ['nữ', 'váy', 'đầm', 'croptop', 'chân váy', 'hai dây'])) return 'Thời Trang Nữ';
+      if (this.hasKeyword(cleaned, ['bé', 'trẻ em', 'sơ sinh'])) return 'Mẹ & Bé';
+      return 'Thời Trang Nam';
+    }
+
+    // =========================================================================
+    // BƯỚC 2: QUÉT TỪ KHÓA TOÀN VĂN (Fallback cho tiêu đề đảo ngữ)
+    // =========================================================================
+    // 1. Đồng hồ
+    if (this.hasKeyword(cleaned, ['đồng hồ', 'dong ho', 'smartwatch', 'apple watch'])) {
+      return 'Đồng Hồ';
+    }
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
+        'pin sạc dự phòng', 'sạc dự phòng', 'pin dự phòng', 'pin sac', 'sac du phong',
+        'cáp sạc', 'củ sạc', 'dây sạc', 'cốc sạc', 'sạc không dây', 'đế sạc',
+        'tai nghe bluetooth', 'tai nghe', 'airpods', 'headphone', 'earphone',
+        'ốp lưng', 'kính cường lực', 'dán màn hình', 'gậy chụp ảnh', 'giá đỡ điện thoại',
+        'điện thoại', 'dien thoai', 'smartphone', 'iphone', 'samsung', 'xiaomi', 'oppo', 'vivo',
+        'thẻ nhớ', 'sim'
+      ])
+    ) {
+      return 'Điện Thoại & Phụ Kiện';
+    }
+
+    // 2. Balo & Túi ví (Ví nữ cầm tay, ví nam, bóp da, túi xách, balo...)
+    if (
+      this.hasKeyword(cleaned, [
+        'ví', 'vi', 'ví nữ', 'ví nam', 'ví cầm tay', 'ví dài', 'bóp', 'bóp ví', 'bóp da',
+        'túi xách', 'túi đeo chéo', 'túi đeo', 'túi tote', 'túi bao tử', 'clutch', 'balo', 'ba lô', 'cặp sách', 'túi canvas'
+      ])
+    ) {
+      return 'Túi Ví Nữ';
+    }
+
+    // 3. Thể thao
+    if (
+      this.hasKeyword(cleaned, [
         'bóng đá', 'đá bóng', 'áo đấu', 'quần áo bóng đá', 'cầu lông',
         'bóng rổ', 'bóng chuyền', 'tennis', 'vợt', 'gym', 'thể thao',
         'bơi lội', 'yoga', 'chạy bộ', 'wika', 'đồ thể thao',
@@ -420,20 +525,20 @@ export class AiCategoryAuditorService {
       return 'Thể Thao';
     }
 
-    // 2. Giày dép
+    // 4. Giày dép
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'sneaker', 'giày', 'giay', 'sandal', 'dép', 'dep', 'boots',
         'slip-on', 'giày thể thao', 'cao gót', 'guốc',
       ])
     ) {
-      if (this.hasKeyword(lowerName, ['nữ', 'cao gót', 'guốc'])) return 'Giày Dép Nữ';
+      if (this.hasKeyword(cleaned, ['nữ', 'cao gót', 'guốc'])) return 'Giày Dép Nữ';
       return 'Giày Dép Nam';
     }
 
-    // 3. Gia dụng / Bếp núc
+    // 5. Gia dụng / Bếp núc
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'nồi chiên', 'noi chien', 'nồi cơm', 'noi com', 'lò vi sóng',
         'máy xay', 'ấm siêu tốc', 'nồi áp suất', 'bếp từ', 'bếp điện',
         'chảo chống dính', 'máy hút bụi', 'quạt điện',
@@ -442,9 +547,9 @@ export class AiCategoryAuditorService {
       return 'Gia Dụng';
     }
 
-    // 4. Máy ảnh & Thiết bị quang học
+    // 6. Máy ảnh & Thiết bị quang học
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'máy ảnh', 'may anh', 'camera', 'ống kính', 'lens', 'tripod',
         'flycam', 'gopro', 'gimbal', 'máy quay',
       ])
@@ -452,31 +557,11 @@ export class AiCategoryAuditorService {
       return 'Máy Ảnh';
     }
 
-    // 5. Balo & Túi ví
-    if (
-      this.hasKeyword(lowerName, [
-        'balo', 'ba lô', 'cặp sách', 'túi xách', 'túi đeo chéo', 'ví tiền',
-        'clutch', 'bóp da', 'túi tote',
-      ])
-    ) {
-      return 'Túi Ví Nữ';
-    }
-
-    // 6. Điện thoại & Phụ kiện
-    if (
-      this.hasKeyword(lowerName, [
-        'iphone', 'samsung', 'điện thoại', 'ốp lưng', 'kính cường lực',
-        'cáp sạc', 'củ sạc', 'pin dự phòng', 'tai nghe bluetooth', 'airpods',
-      ])
-    ) {
-      return 'Điện Thoại & Phụ Kiện';
-    }
-
     // 7. Máy tính & Laptop
     if (
-      this.hasKeyword(lowerName, [
-        'laptop', 'macbook', 'bàn phím', 'chuột gaming', 'màn hình máy tính',
-        'pc', 'tai nghe gaming',
+      this.hasKeyword(cleaned, [
+        'laptop', 'macbook', 'bàn phím', 'chuột gaming', 'chuột máy tính', 'màn hình máy tính',
+        'pc', 'tai nghe gaming', 'ổ cứng', 'ram', 'cpu', 'vga'
       ])
     ) {
       return 'Máy Tính & Laptop';
@@ -484,7 +569,7 @@ export class AiCategoryAuditorService {
 
     // 8. Sách & Văn phòng phẩm
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'sách', 'truyện', 'tiểu thuyết', 'giáo khoa', 'giáo trình', 'vở viết',
         'bút bi', 'bút mực', 'văn phòng phẩm',
       ])
@@ -494,7 +579,7 @@ export class AiCategoryAuditorService {
 
     // 9. Sắc đẹp & Mỹ phẩm
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'son môi', 'kem chống nắng', 'serum', 'toner', 'nước hoa', 'sữa rửa mặt',
         'mặt nạ', 'dưỡng ẩm', 'phấn',
       ])
@@ -504,7 +589,7 @@ export class AiCategoryAuditorService {
 
     // 10. Mẹ & Bé
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'tã', 'bỉm', 'sữa bột', 'bình sữa', 'xe đẩy', 'đồ chơi trẻ em', 'nôi em bé',
       ])
     ) {
@@ -513,24 +598,24 @@ export class AiCategoryAuditorService {
 
     // 11. Đồng hồ
     if (
-      this.hasKeyword(lowerName, ['đồng hồ', 'dong ho', 'smartwatch', 'apple watch'])
+      this.hasKeyword(cleaned, ['đồng hồ', 'dong ho', 'smartwatch', 'apple watch'])
     ) {
       return 'Đồng Hồ';
     }
 
     // 12. Thời trang chung / Nam / Nữ
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'áo', 'quần', 'đồ bộ', 'bộ đồ', 'set đồ', 'trang phục', 'khoác',
         'jacket', 'blazer', 'hoodie', 'sweater', 'cardigan', 'polo', 'sơ mi',
         'so mi', 'short', 'jean', 'quần âu', 'quần đùi', 'quần bò', 'kaki',
         'quần lót', 'boxer', 'váy', 'đầm', 'chân váy', 'croptop', 'siêu nhân',
       ])
     ) {
-      if (this.hasKeyword(lowerName, ['nữ', 'váy', 'đầm', 'croptop', 'chân váy', 'hai dây'])) {
+      if (this.hasKeyword(cleaned, ['nữ', 'váy', 'đầm', 'croptop', 'chân váy', 'hai dây'])) {
         return 'Thời Trang Nữ';
       }
-      if (this.hasKeyword(lowerName, ['bé', 'trẻ em', 'sơ sinh'])) {
+      if (this.hasKeyword(cleaned, ['bé', 'trẻ em', 'sơ sinh'])) {
         return 'Mẹ & Bé';
       }
       return 'Thời Trang Nam';
@@ -538,7 +623,7 @@ export class AiCategoryAuditorService {
 
     // 13. Nhà cửa & Đời sống
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'kệ đồ', 'kệ bếp', 'bát đĩa', 'bộ bát', 'bình giữ nhiệt',
         'hộp đựng thực phẩm', 'ly giữ nhiệt', 'chăn ga', 'gối nệm',
       ])
@@ -548,7 +633,7 @@ export class AiCategoryAuditorService {
 
     // 14. Phụ kiện thời trang
     if (
-      this.hasKeyword(lowerName, [
+      this.hasKeyword(cleaned, [
         'nón lưỡi trai', 'mũ lưỡi trai', 'mũ len', 'vòng tay', 'dây chuyền',
         'khuyên tai', 'mắt kính',
       ])
