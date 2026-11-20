@@ -28,6 +28,10 @@ export interface AuditCategoryResult {
 
 export interface BatchAuditStats {
   totalScanned: number;
+  totalProducts?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
@@ -61,14 +65,20 @@ export async function auditProductCategory(input: AuditProductInput): Promise<Au
 }
 
 /**
- * Quét toàn bộ sản phẩm phát hiện sai ngành hàng (Dành cho Admin / Shop)
+ * Quét theo phân trang phát hiện sai ngành hàng (Dành cho Admin / Shop / CSKH)
  */
-export async function fetchBatchAuditScan(shopId?: string): Promise<BatchAuditStats | null> {
+export async function fetchBatchAuditScan(
+  shopId?: string,
+  page = 1,
+  limit = 50,
+): Promise<BatchAuditStats | null> {
   try {
-    const url = shopId
-      ? `${API_BASE_URL}/products/ai/audit-scan?shopId=${encodeURIComponent(shopId)}`
-      : `${API_BASE_URL}/products/ai/audit-scan`;
-    const res = await fetch(url);
+    const params = new URLSearchParams();
+    if (shopId) params.append('shopId', shopId);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+
+    const res = await fetch(`${API_BASE_URL}/products/ai/audit-scan?${params.toString()}`);
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {

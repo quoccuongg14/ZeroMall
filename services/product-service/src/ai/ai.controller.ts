@@ -73,8 +73,14 @@ export class AiController {
   }
 
   @Get('ai/audit-scan')
-  async auditScan(@Query('shopId') shopId?: string) {
-    return this.aiCategoryAuditorService.scanProducts(shopId);
+  async auditScan(
+    @Query('shopId') shopId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = Math.max(1, parseInt(page || '1', 10) || 1);
+    const limitNum = Math.min(100, Math.max(10, parseInt(limit || '50', 10) || 50));
+    return this.aiCategoryAuditorService.scanProducts(shopId, pageNum, limitNum);
   }
 
   @Post('ai/fix-category/:id')

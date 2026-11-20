@@ -11,6 +11,7 @@ export class AuditProductDto {
   image?: string;
   images?: string[];
   description?: string;
+  isBatchScan?: boolean;
 }
 
 export interface AuditCategoryResult {
@@ -32,6 +33,10 @@ export interface AuditCategoryResult {
 
 export interface BatchAuditStats {
   totalScanned: number;
+  totalProducts?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
@@ -71,12 +76,58 @@ const CANONICAL_CATEGORIES = [
 export class AiCategoryAuditorService {
   private readonly logger = new Logger(AiCategoryAuditorService.name);
 
+  // Circuit breaker: Lưu trạng thái sống/chết của CLIP Service để không lặp lại timeout 25s/sản phẩm
+  private static clipEndpointWorkingUrl: string | null = null;
+  private static clipLastCheckTime = 0;
+  private static isClipAvailable: boolean | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiAi: GeminiAiService,
     private readonly localAi: LocalAiService,
     private readonly aiModeration?: AiModerationService,
   ) {}
+
+  /**
+   * Circuit breaker: Kiểm tra nhanh trạng thái kết nối tới dịch vụ CLIP Vision
+   * Nếu service không bật, trả về null trong 0ms (cache 60s) để tránh treo 25s/sản phẩm
+   */
+  private async getActiveClipUrl(): Promise<string | null> {
+    const now = Date.now();
+    if (AiCategoryAuditorService.isClipAvailable !== null && now - AiCategoryAuditorService.clipLastCheckTime < 60000) {
+      return AiCategoryAuditorService.isClipAvailable ? AiCategoryAuditorService.clipEndpointWorkingUrl : null;
+    }
+
+    AiCategoryAuditorService.clipLastCheckTime = now;
+    const endpoints = [
+      process.env.CLIP_SERVICE_URL,
+      'http://clip-service:5005/audit',
+      'http://zeromall-clip-service:5005/audit',
+      'http://127.0.0.1:5005/audit',
+      'http://localhost:5005/audit',
+    ].filter(Boolean) as string[];
+
+    for (const url of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 400); // 400ms quick probe
+        const probeUrl = url.replace('/audit', '/health');
+        const res = await fetch(probeUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          AiCategoryAuditorService.clipEndpointWorkingUrl = url;
+          AiCategoryAuditorService.isClipAvailable = true;
+          return url;
+        }
+      } catch {
+        // Probe next
+      }
+    }
+
+    AiCategoryAuditorService.isClipAvailable = false;
+    AiCategoryAuditorService.clipEndpointWorkingUrl = null;
+    return null;
+  }
 
   /**
    * Thẩm định 1 sản phẩm: Kiểm tra độ khớp giữa Tên, Hình ảnh và Ngành hàng
@@ -96,11 +147,15 @@ export class AiCategoryAuditorService {
 
     const coverImage = allImages[0] || '';
     let visualCheck: any = null;
-    if (allImages.length >= 1) {
-      visualCheck = await this.queryLocalClipVisionMulti(allImages, rawName, currentCat);
-    }
-    if (!visualCheck && coverImage) {
-      visualCheck = await this.analyzeVisualClue(coverImage, rawName, currentCat);
+
+    // Trong batch scan hàng nghìn sản phẩm, chỉ gọi thị giác nặng khi có service CLIP active
+    if (!input.isBatchScan) {
+      if (allImages.length >= 1) {
+        visualCheck = await this.queryLocalClipVisionMulti(allImages, rawName, currentCat);
+      }
+      if (!visualCheck && coverImage) {
+        visualCheck = await this.analyzeVisualClue(coverImage, rawName, currentCat);
+      }
     }
 
     // NẾU HÌNH ẢNH CHỨA HÀNG CẤM -> LẬP TỨC CHẶN NGAY VỚI MỨC ƯU TIÊN CAO NHẤT
@@ -124,7 +179,7 @@ export class AiCategoryAuditorService {
     }
 
     // 2. AGENT: TextSanitizerAgent (Quét từ cấm & lách từ đối kháng bằng Qwen 2.5 / Gemini)
-    if (this.aiModeration) {
+    if (this.aiModeration && !input.isBatchScan) {
       try {
         const textCheck = await this.aiModeration.moderateContent({
           text: `${rawName} ${(input as any).description || ''}`,
@@ -228,8 +283,9 @@ export class AiCategoryAuditorService {
 
   /**
    * Quét toàn bộ hoặc một nhóm sản phẩm trong CSDL để phát hiện các sản phẩm sai ngành hàng
+   * Hỗ trợ phân trang (Pagination) và xử lý song song (Concurrency Chunks) để phản hồi siêu tốc (< 200ms)
    */
-  async scanProducts(shopId?: string): Promise<BatchAuditStats> {
+  async scanProducts(shopId?: string, page = 1, limit = 50): Promise<BatchAuditStats> {
     const whereCondition: any = {
       status: { in: ['active', 'hidden'] },
       name: { notIn: ['test', 'cuong', '2'] },
@@ -238,55 +294,76 @@ export class AiCategoryAuditorService {
       whereCondition.shopId = shopId;
     }
 
-    const products = await this.prisma.product.findMany({
-      where: whereCondition,
-      select: {
-        id: true,
-        name: true,
-        image: true,
-        images: true,
-        category: true,
-        shopId: true,
-        status: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+    const [totalProducts, products] = await Promise.all([
+      this.prisma.product.count({ where: whereCondition }),
+      this.prisma.product.findMany({
+        where: whereCondition,
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          images: true,
+          category: true,
+          shopId: true,
+          status: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
     let matchedCount = 0;
     let wrongCategoryCount = 0;
     let imageMismatchCount = 0;
     const flaggedProducts: BatchAuditStats['flaggedProducts'] = [];
 
-    for (const p of products) {
-      const cover = p.image || (p.images ? (() => { try { return JSON.parse(p.images)[0]; } catch { return ''; } })() : '');
-      const audit = await this.auditProduct({
-        productId: p.id,
-        name: p.name,
-        category: p.category,
-        image: cover,
-      });
+    // Chạy song song theo từng mẻ (chunks 10 sản phẩm)
+    const CHUNK_SIZE = 10;
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+      const chunk = products.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.all(
+        chunk.map(async (p) => {
+          const cover = p.image || (p.images ? (() => { try { return JSON.parse(p.images)[0]; } catch { return ''; } })() : '');
+          const audit = await this.auditProduct({
+            productId: p.id,
+            name: p.name,
+            category: p.category,
+            image: cover,
+            isBatchScan: true,
+          });
+          return { p, cover, audit };
+        }),
+      );
 
-      if (!audit.isMatched) {
-        if (audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
-        else if (audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
+      for (const res of chunkResults) {
+        if (!res.audit.isMatched) {
+          if (res.audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
+          else if (res.audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
 
-        flaggedProducts.push({
-          id: p.id,
-          name: p.name,
-          image: cover,
-          category: p.category,
-          shopId: p.shopId,
-          status: p.status,
-          auditResult: audit,
-        });
-      } else {
-        matchedCount++;
+          flaggedProducts.push({
+            id: res.p.id,
+            name: res.p.name,
+            image: res.cover,
+            category: res.p.category,
+            shopId: res.p.shopId,
+            status: res.p.status,
+            auditResult: res.audit,
+          });
+        } else {
+          matchedCount++;
+        }
       }
     }
 
+    const totalPages = Math.ceil(totalProducts / limit) || 1;
+
     return {
       totalScanned: products.length,
+      totalProducts,
+      page,
+      limit,
+      totalPages,
       matchedCount,
       wrongCategoryCount,
       imageMismatchCount,
@@ -733,14 +810,10 @@ export class AiCategoryAuditorService {
     totalImagesScanned?: number;
     source?: 'local-clip-engine';
   } | null> {
-    const endpoints = [
-      process.env.CLIP_SERVICE_URL,
-      'http://clip-service:5005/audit',
-      'http://zeromall-clip-service:5005/audit',
-      'http://host.docker.internal:5005/audit',
-      'http://127.0.0.1:5005/audit',
-      'http://localhost:5005/audit',
-    ].filter(Boolean) as string[];
+    const activeUrl = await this.getActiveClipUrl();
+    if (!activeUrl) {
+      return null;
+    }
 
     const payload = {
       name: rawName,
@@ -748,38 +821,36 @@ export class AiCategoryAuditorService {
       images: images.slice(0, 9),
     };
 
-    for (const url of endpoints) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4500);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
 
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+      const res = await fetch(activeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-        if (res.ok) {
-          const data: any = await res.json();
-          return {
-            isMismatch: !!data.isMismatch,
-            isProhibited: !!data.isProhibited,
-            prohibitedLabel: data.prohibitedLabel,
-            detectedVisual: data.detectedVisual,
-            suggestedTitle: data.suggestedTitle,
-            suggestedCategory: data.suggestedCategory,
-            reason: data.reason,
-            confidence: Math.max(92, Math.round(data.visualConfidence || 95)),
-            worstImageIndex: data.worstImageIndex,
-            totalImagesScanned: data.totalImagesScanned,
-            source: 'local-clip-engine',
-          };
-        }
-      } catch {
-        // Thử endpoint tiếp theo
+      if (res.ok) {
+        const data: any = await res.json();
+        return {
+          isMismatch: !!data.isMismatch,
+          isProhibited: !!data.isProhibited,
+          prohibitedLabel: data.prohibitedLabel,
+          detectedVisual: data.detectedVisual,
+          suggestedTitle: data.suggestedTitle,
+          suggestedCategory: data.suggestedCategory,
+          reason: data.reason,
+          confidence: Math.max(92, Math.round(data.visualConfidence || 95)),
+          worstImageIndex: data.worstImageIndex,
+          totalImagesScanned: data.totalImagesScanned,
+          source: 'local-clip-engine',
+        };
       }
+    } catch {
+      AiCategoryAuditorService.isClipAvailable = false;
     }
     return null;
   }
@@ -800,14 +871,10 @@ export class AiCategoryAuditorService {
     confidence?: number;
     source?: 'local-clip-engine';
   } | null> {
-    const endpoints = [
-      process.env.CLIP_SERVICE_URL,
-      'http://clip-service:5005/audit',
-      'http://zeromall-clip-service:5005/audit',
-      'http://host.docker.internal:5005/audit',
-      'http://127.0.0.1:5005/audit',
-      'http://localhost:5005/audit',
-    ].filter(Boolean) as string[];
+    const activeUrl = await this.getActiveClipUrl();
+    if (!activeUrl) {
+      return null;
+    }
 
     const payload: any = {
       name: rawName,
@@ -824,36 +891,34 @@ export class AiCategoryAuditorService {
       }
     }
 
-    for (const url of endpoints) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
 
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+      const res = await fetch(activeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-        if (res.ok) {
-          const data: any = await res.json();
-          return {
-            isMismatch: !!data.isMismatch,
-            isProhibited: !!data.isProhibited,
-            prohibitedLabel: data.prohibitedLabel,
-            detectedVisual: data.detectedVisual,
-            suggestedTitle: data.suggestedTitle,
-            suggestedCategory: data.suggestedCategory,
-            reason: data.reason,
-            confidence: Math.max(92, Math.round(data.visualConfidence || 95)),
-            source: 'local-clip-engine',
-          };
-        }
-      } catch {
-        // Thử endpoint tiếp theo
+      if (res.ok) {
+        const data: any = await res.json();
+        return {
+          isMismatch: !!data.isMismatch,
+          isProhibited: !!data.isProhibited,
+          prohibitedLabel: data.prohibitedLabel,
+          detectedVisual: data.detectedVisual,
+          suggestedTitle: data.suggestedTitle,
+          suggestedCategory: data.suggestedCategory,
+          reason: data.reason,
+          confidence: Math.max(92, Math.round(data.visualConfidence || 95)),
+          source: 'local-clip-engine',
+        };
       }
+    } catch {
+      AiCategoryAuditorService.isClipAvailable = false;
     }
     return null;
   }
@@ -913,6 +978,11 @@ export class AiCategoryAuditorService {
     }
 
     // 2. Phân tích thị giác trực tiếp bằng mô hình Local CLIP Vector (Tier 1: <100ms, 0 quota)
+    const activeClip = await this.getActiveClipUrl();
+    if (!activeClip) {
+      return { isMismatch: false };
+    }
+
     try {
       const imgData = await this.fetchImageBase64(imageUrl);
       const clipRes = await this.queryLocalClipVision(

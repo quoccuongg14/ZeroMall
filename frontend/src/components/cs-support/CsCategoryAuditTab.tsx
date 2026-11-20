@@ -13,6 +13,10 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [hidingId, setHidingId] = useState<string | null>(null)
   
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 50
+  
   // Filter & Search
   const [filterIssue, setFilterIssue] = useState<'ALL' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -42,13 +46,14 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Run or refresh AI Audit Scan
-  const runAiAuditScan = async () => {
+  // Run or refresh AI Audit Scan with target page
+  const runAiAuditScan = async (targetPage = currentPage) => {
     setIsAuditing(true)
     try {
-      const data = await fetchBatchAuditScan()
+      const data = await fetchBatchAuditScan(undefined, targetPage, pageSize)
       if (data) {
         setBatchAudit(data)
+        setCurrentPage(targetPage)
       }
     } catch (e) {
       console.error('Error in batch category audit:', e)
@@ -59,7 +64,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
 
   useEffect(() => {
     fetchShops()
-    runAiAuditScan()
+    runAiAuditScan(1)
   }, [])
 
   // Handle 1-Click Category Fix by CSKH
@@ -70,7 +75,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       if (ok) {
         await triggerAuditLog(`[CSKH AI-AUDIT] Cập nhật ngành hàng sản phẩm "${productName}" (ID: ${productId}) sang "${newCategory}"`)
         alert(`✅ CSKH đã chuyển sản phẩm "${productName}" sang đúng ngành hàng "${newCategory}" thành công!`)
-        runAiAuditScan()
+        runAiAuditScan(currentPage)
       } else {
         alert('Không thể cập nhật ngành hàng. Vui lòng thử lại.')
       }
@@ -99,7 +104,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       if (res.ok) {
         await triggerAuditLog(`[CSKH AI-AUDIT] Đổi trạng thái sản phẩm "${item.name}" (ID: ${item.id}) sang ${nextStatus}`)
         alert(`✅ Đã ${isCurrentlyHidden ? 'mở khóa hiển thị' : 'tạm ẩn'} sản phẩm thành công!`)
-        runAiAuditScan()
+        runAiAuditScan(currentPage)
       } else {
         alert('Không thể cập nhật trạng thái sản phẩm.')
       }
@@ -211,20 +216,26 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
 
           <button
             type="button"
-            onClick={runAiAuditScan}
+            onClick={() => runAiAuditScan(currentPage)}
             disabled={isAuditing}
             className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
           >
             <span>{isAuditing ? '⏳' : '⚡'}</span>
-            <span>{isAuditing ? 'Đang Chạy AI Quét Toàn Sàn...' : 'Quét Lại Bằng AI'}</span>
+            <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
           </button>
         </div>
 
-        {/* 4 Stats Chips */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-emerald-700/50">
+        {/* 5 Stats Chips */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-emerald-700/50">
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10">
-            <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Tổng Đã Quét</p>
-            <p className="text-xl font-black text-white mt-0.5">{batchAudit?.totalScanned || 0}</p>
+            <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Tổng Sản Phẩm Sàn</p>
+            <p className="text-xl font-black text-white mt-0.5">{(batchAudit?.totalProducts || 0).toLocaleString('vi-VN')}</p>
+          </div>
+          <div className="bg-cyan-500/20 backdrop-blur-md rounded-xl p-3 border border-cyan-400/30">
+            <p className="text-[10px] text-cyan-200 font-bold uppercase tracking-wider">Trang Hiện Tại</p>
+            <p className="text-xl font-black text-cyan-100 mt-0.5">
+              {currentPage} <span className="text-xs font-medium text-cyan-300">/ {batchAudit?.totalPages || 1}</span>
+            </p>
           </div>
           <div className="bg-emerald-500/20 backdrop-blur-md rounded-xl p-3 border border-emerald-400/30">
             <p className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">Khớp Chuẩn Xác</p>
@@ -302,8 +313,13 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       </div>
 
       {/* 3. Main Audit Results Table */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
-        {isAuditing ? (
+      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs relative">
+        {isAuditing && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-100 overflow-hidden z-10">
+            <div className="h-full bg-emerald-600 animate-pulse w-full"></div>
+          </div>
+        )}
+        {isAuditing && !batchAudit ? (
           <div className="py-20 text-center space-y-3">
             <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p className="text-xs text-slate-500 font-bold">
@@ -311,17 +327,17 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             </p>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="py-20 text-center space-y-2">
-            <span className="text-5xl">🎉</span>
+          <div className="py-16 text-center space-y-2">
+            <span className="text-4xl">🎉</span>
             <p className="text-sm font-black text-slate-800">
-              {searchQuery ? 'Không tìm thấy sản phẩm vi phạm phù hợp với từ khóa' : 'Không có sản phẩm nào vi phạm phân loại ngành hàng!'}
+              {searchQuery ? 'Không tìm thấy sản phẩm vi phạm phù hợp với từ khóa' : `Không có sản phẩm nào sai ngành hàng trong Trang ${currentPage}!`}
             </p>
             <p className="text-xs text-slate-400 font-medium max-w-md mx-auto">
-              Tất cả sản phẩm đã được rà soát đều có hình ảnh và tiêu đề đồng nhất với danh mục ngành hàng đã chọn.
+              Tất cả {batchAudit?.totalScanned || 0} sản phẩm đã rà soát trong trang này đều chuẩn xác. Bạn có thể chuyển sang các trang tiếp theo để rà soát toàn bộ kho hàng.
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto ${isAuditing ? 'opacity-60 transition' : ''}`}>
             <table className="w-full text-xs text-left text-slate-700">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
@@ -476,6 +492,92 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* 4. Sleek Bottom Pagination Toolbar */}
+        {batchAudit && (batchAudit.totalPages || 1) > 1 && (
+          <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-[11px] text-slate-500 font-medium">
+              Đang xem <span className="font-bold text-slate-800">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-bold text-slate-800">{Math.min(currentPage * pageSize, batchAudit.totalProducts || 0)}</span> trên tổng số <span className="font-bold text-emerald-700">{(batchAudit.totalProducts || 0).toLocaleString('vi-VN')}</span> sản phẩm
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => runAiAuditScan(1)}
+                disabled={currentPage <= 1 || isAuditing}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs cursor-pointer"
+                title="Về trang 1"
+              >
+                « Đầu
+              </button>
+              <button
+                type="button"
+                onClick={() => runAiAuditScan(currentPage - 1)}
+                disabled={currentPage <= 1 || isAuditing}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>‹</span>
+                <span>Trước</span>
+              </button>
+
+              {/* Dynamic Page Buttons */}
+              <div className="flex items-center gap-1 px-1">
+                {(() => {
+                  const totalP = batchAudit.totalPages || 1
+                  const maxButtons = 5
+                  let startP = Math.max(1, currentPage - 2)
+                  let endP = Math.min(totalP, startP + maxButtons - 1)
+                  if (endP - startP < maxButtons - 1) {
+                    startP = Math.max(1, endP - maxButtons + 1)
+                  }
+
+                  const pages = []
+                  for (let p = startP; p <= endP; p++) {
+                    pages.push(p)
+                  }
+
+                  return pages.map((pageNum) => {
+                    const isActive = pageNum === currentPage
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => runAiAuditScan(pageNum)}
+                        disabled={isAuditing}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer ${
+                          isActive
+                            ? 'bg-emerald-600 text-white shadow-2xs font-extrabold ring-2 ring-emerald-400/40'
+                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })
+                })()}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => runAiAuditScan(currentPage + 1)}
+                disabled={currentPage >= (batchAudit.totalPages || 1) || isAuditing}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>Sau</span>
+                <span>›</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => runAiAuditScan(batchAudit.totalPages || 1)}
+                disabled={currentPage >= (batchAudit.totalPages || 1) || isAuditing}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs cursor-pointer"
+                title="Đến trang cuối cùng"
+              >
+                Cuối »
+              </button>
+            </div>
           </div>
         )}
       </div>
