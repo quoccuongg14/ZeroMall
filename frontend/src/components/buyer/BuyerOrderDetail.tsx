@@ -571,16 +571,26 @@ export const BuyerOrderDetail: React.FC<BuyerOrderDetailProps> = ({
                     : ''
                 }`}
               >
-                <img
-                  src={item.image || 'https://placehold.co/100x100?text=No+Image'}
-                  alt={item.name}
-                  className="w-20 h-20 border border-slate-200 rounded-sm object-cover shrink-0"
-                />
+                <a
+                  href={item.productId ? `/product/${item.productId}` : undefined}
+                  className="shrink-0 group"
+                  title="Bấm để xem sản phẩm trên sàn"
+                >
+                  <img
+                    src={item.image || 'https://placehold.co/100x100?text=No+Image'}
+                    alt={item.name}
+                    className="w-20 h-20 border border-slate-200 rounded-sm object-cover group-hover:opacity-90 transition"
+                  />
+                </a>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="font-semibold text-slate-900 text-sm line-clamp-2 leading-snug">
+                    <a
+                      href={item.productId ? `/product/${item.productId}` : undefined}
+                      className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug hover:text-[#ee4d2d] transition hover:underline"
+                      title="Bấm để xem sản phẩm trên sàn"
+                    >
                       {item.name}
-                    </h4>
+                    </a>
                     {isItemReturned ? (
                       <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded text-[11px]">
                         <span>🔄</span> Yêu Cầu Trả Hàng (x{returnItem?.quantity || item.quantity} - Hoàn {formatMoney(returnItem?.refundAmount || item.price * (returnItem?.quantity || item.quantity))})

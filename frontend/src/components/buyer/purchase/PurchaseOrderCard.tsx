@@ -177,16 +177,32 @@ export const PurchaseOrderCard: React.FC<PurchaseOrderCardProps> = ({
                   : ''
               }`}
             >
-              <img
-                src={item.image || item.productImage || 'https://placehold.co/100x100?text=No+Image'}
-                alt={item.name || item.productName}
-                className="w-[70px] h-[70px] border border-slate-200 rounded-sm object-cover shrink-0"
-              />
+              <a
+                href={item.productId ? `/product/${item.productId}` : undefined}
+                onClick={(e) => {
+                  if (item.productId) e.stopPropagation()
+                }}
+                className="shrink-0 group"
+                title="Bấm để xem sản phẩm trên sàn"
+              >
+                <img
+                  src={item.image || item.productImage || 'https://placehold.co/100x100?text=No+Image'}
+                  alt={item.name || item.productName}
+                  className="w-[70px] h-[70px] border border-slate-200 rounded-sm object-cover group-hover:opacity-90 transition"
+                />
+              </a>
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <h4 className="font-semibold text-slate-800 line-clamp-1 hover:text-[#ee4d2d] transition">
+                  <a
+                    href={item.productId ? `/product/${item.productId}` : undefined}
+                    onClick={(e) => {
+                      if (item.productId) e.stopPropagation()
+                    }}
+                    className="font-semibold text-slate-800 line-clamp-1 hover:text-[#ee4d2d] transition hover:underline"
+                    title="Bấm để xem sản phẩm trên sàn"
+                  >
                     {item.name || item.productName}
-                  </h4>
+                  </a>
                   {isItemReturned ? (
                     <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 font-bold px-1.5 py-0.5 rounded text-[10px]">
                       <span>🔄</span> Yêu cầu trả hàng {returnItem?.refundAmount ? `(Hoàn ${formatMoney(returnItem.refundAmount)})` : ''}

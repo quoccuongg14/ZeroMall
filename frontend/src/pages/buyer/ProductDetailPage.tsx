@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import type { Product, VariationGroup, VariationRow } from '../../components/buyer/FlashSale'
 import { ProductGallery } from '../../components/buyer/product-detail/ProductGallery'
 import { ProductPurchasePanel } from '../../components/buyer/product-detail/ProductPurchasePanel'
@@ -15,8 +15,80 @@ import {
   useProductDetailQuery,
   useProductReviewsQuery,
   useShopDetailsQuery,
-  useShopStatsQuery
+  useShopStatsQuery,
+  useProductFeedQuery
 } from '../../queries/productQueries'
+
+/**
+ * Gợi ý các sản phẩm tương tự khi sản phẩm hiện tại đã bị Người bán xóa hoặc tạm ẩn (Shopee Tombstone UX)
+ */
+const SimilarProductsTombstone: React.FC<{
+  category?: string
+  currentId?: string
+  onSelectProduct: (p: any) => void
+}> = ({ category, currentId, onSelectProduct }) => {
+  const { data: feedData, isLoading } = useProductFeedQuery(
+    1,
+    12,
+    category && category !== 'Tổng Hợp' ? category : undefined
+  )
+  const allProds = feedData?.products || []
+  const products = allProds.filter((p) => p.id !== currentId)
+
+  if (isLoading) {
+    return (
+      <div className="py-8 text-center text-xs text-slate-400 animate-pulse">
+        Đang tải gợi ý sản phẩm tương tự...
+      </div>
+    )
+  }
+
+  if (products.length === 0) return null
+
+  return (
+    <div className="mt-8 space-y-4 text-left">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+        <h3 className="text-sm font-extrabold uppercase text-slate-800 tracking-wide flex items-center gap-2">
+          <span>✨</span>
+          <span>Gợi ý các sản phẩm tương tự bạn có thể thích</span>
+        </h3>
+        <span className="text-xs text-slate-400 font-medium">Khám phá các sản phẩm nổi bật cùng danh mục</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {products.map((item) => (
+          <div
+            key={item.id}
+            onClick={() => onSelectProduct(item)}
+            className="bg-white border border-slate-200/80 rounded-2xl p-2.5 hover:shadow-md hover:border-emerald-500 transition-all cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="space-y-2">
+              <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 border border-slate-100">
+                <img
+                  src={item.image || 'https://placehold.co/200x200?text=No+Image'}
+                  alt={item.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                />
+              </div>
+              <h4 className="text-xs font-semibold text-slate-800 line-clamp-2 leading-snug group-hover:text-emerald-700 transition">
+                {item.name}
+              </h4>
+            </div>
+
+            <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-extrabold text-[#ee4d2d]">
+                {item.flashPrice || item.price}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Đã bán {item.sold || 0}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 interface ProductDetailPageProps {
   user: any
@@ -38,6 +110,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   cart
 }) => {
   const { slugWithId } = useParams<{ slugWithId: string }>()
+  const navigate = useNavigate()
   const id = slugWithId?.split('-i.').pop()
   const [product, setProduct] = useState<Product | null>(null)
   const [isTryOnModalOpen, setIsTryOnModalOpen] = useState(false)
@@ -47,7 +120,35 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   useEffect(() => {
     if (!rawProductData) return
-    const p = rawProductData
+    const p = rawProductData as any
+
+    if (p.notFound) {
+      setProduct({
+        id: p.id || id || '',
+        name: 'Sản phẩm không tồn tại hoặc đã ngừng kinh doanh',
+        image: '',
+        status: 'deleted',
+        category: 'Tổng Hợp',
+        price: '0đ',
+        originalPrice: '0đ',
+        flashPrice: '0đ',
+        stock: 0,
+        sold: 0,
+        total: 0,
+        rating: 0,
+        reviewsCount: 0,
+        description: '',
+        hasVariations: false,
+        variationGroups: [],
+        variationRows: [],
+        variants: [],
+        images: [],
+        video: '',
+        brand: '',
+        shopId: '',
+      })
+      return
+    }
     
     const sellingPriceNum = parseFloat(String(p.price || 0).replace(/[^0-9]/g, '')) || 0
     let flashPriceStr = sellingPriceNum.toLocaleString('vi-VN') + 'đ'
@@ -689,21 +790,93 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     )
   }
 
-  const isProductOutOfStock = product ? (product.stock !== undefined ? product.stock <= 0 : (product.total - product.sold <= 0)) || product.status === 'hidden' : false
+  const isTombstone = !product || product.status === 'deleted' || product.status === 'hidden'
 
-  if (!product || isProductOutOfStock) {
+  if (isTombstone) {
+    const isDeleted = !product || product.status === 'deleted'
+    const isHidden = product?.status === 'hidden'
+
     return (
-      <div className="bg-white rounded-2xl border border-slate-200/50 p-20 text-center shadow-3xs flex flex-col items-center gap-4.5">
-        <span className="text-5xl">📦</span>
-        <h4 className="font-extrabold text-slate-800 text-sm">
-          {!product ? 'Không tìm thấy sản phẩm' : 'Sản phẩm này hiện đã hết hàng hoặc tạm ngừng kinh doanh'}
-        </h4>
-        <p className="text-xs text-slate-400 max-w-sm">
-          Sản phẩm bạn đang xem hiện không còn tồn kho trong gian hàng. Vui lòng tham khảo các sản phẩm khác trên sàn.
-        </p>
-        <button onClick={onBackToHome} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition duration-200 cursor-pointer">
-          Trở về Trang chủ
-        </button>
+      <div className="text-slate-800 text-left py-4 space-y-6">
+        {/* Breadcrumbs */}
+        <div className="text-xs text-slate-500 py-2 flex items-center gap-1.5">
+          <button onClick={onBackToHome} className="hover:text-emerald-600 font-medium transition cursor-pointer">
+            Trang chủ
+          </button>
+          <span>&gt;</span>
+          <span className="text-slate-400">Thông báo sản phẩm</span>
+        </div>
+
+        {/* Tombstone Notice Card (Chuẩn Shopee) */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 text-center shadow-xs max-w-3xl mx-auto space-y-5 animate-in fade-in duration-200">
+          <div className="w-18 h-18 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center text-4xl mx-auto border-2 border-rose-200/80 shadow-2xs">
+            <span>{isDeleted ? '🚫' : '🔒'}</span>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+              {isDeleted
+                ? 'Sản phẩm không khả dụng hoặc đã bị Người bán xóa'
+                : isHidden
+                ? 'Sản phẩm này hiện đang tạm ẩn bởi Người bán hoặc Sàn'
+                : 'Sản phẩm không tồn tại trên hệ thống'}
+            </h2>
+            <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed font-medium">
+              Rất tiếc, liên kết sản phẩm bạn vừa truy cập hiện không thể đặt mua. Nếu bạn vừa bấm vào từ <b>Hóa đơn / Lịch sử đơn hàng cũ</b>, mọi thông tin giá cả thanh toán, hình ảnh đối soát và quyền lợi trả hàng/hoàn tiền của bạn vẫn được ZeroMall lưu trữ bất biến.
+            </p>
+          </div>
+
+          {/* Snapshot metadata preview if available */}
+          {product && product.name && product.name !== 'Sản phẩm không tồn tại hoặc đã ngừng kinh doanh' && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5 text-left max-w-md mx-auto shadow-3xs">
+              <img
+                src={product.image || 'https://placehold.co/80x80?text=No+Image'}
+                alt={product.name}
+                className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
+              />
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <span className="px-1.5 py-0.2 bg-rose-100 text-rose-700 text-[9px] font-black rounded uppercase">
+                  {isDeleted ? 'Đã Xóa' : 'Đang Tạm Ẩn'}
+                </span>
+                <p className="text-xs font-bold text-slate-800 line-clamp-1">{product.name}</p>
+                <p className="text-[10px] text-slate-400 font-semibold">{product.category}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Action Navigation Buttons */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+            >
+              ← Quay lại trang trước
+            </button>
+            {product?.shopId && (
+              <a
+                href={`/shop/${product.shopId}`}
+                className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🏪</span> Ghé thăm Shop
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
+            >
+              Khám phá sản phẩm khác
+            </button>
+          </div>
+        </div>
+
+        {/* Similar Products Recommendation Grid */}
+        <SimilarProductsTombstone
+          category={product?.category}
+          currentId={product?.id}
+          onSelectProduct={(p) => navigate(`/product/${encodeURIComponent((p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'))}-i.${p.id}`)}
+        />
       </div>
     )
   }

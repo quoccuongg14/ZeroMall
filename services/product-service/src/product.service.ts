@@ -178,10 +178,15 @@ export class ProductService {
 
     const andConditions: any[] = [];
 
+    // Luôn loại trừ các sản phẩm đã xóa (Soft Delete) khỏi danh sách mua sắm và quản lý thông thường
+    andConditions.push({
+      status: { not: 'deleted' },
+    });
+
     if (inStockOnly === 'true' || (!shopId && inStockOnly !== 'false')) {
       andConditions.push({
         stock: { gt: 0 },
-        status: { not: 'hidden' },
+        status: { notIn: ['hidden', 'deleted'] },
       });
     }
 
@@ -816,8 +821,13 @@ export class ProductService {
 
   async delete(id: string) {
     await this.findOne(id); // Ensure product exists
-    const deleted = await this.prisma.product.delete({
+    // Soft Delete: Chuyển sang status = 'deleted' để bảo toàn dữ liệu hóa đơn/đơn hàng cũ
+    const deleted = await this.prisma.product.update({
       where: { id },
+      data: {
+        status: 'deleted',
+        stock: 0,
+      },
     });
 
     await this.redis.del(`product:detail:${id}`);

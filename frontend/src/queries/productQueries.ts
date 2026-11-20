@@ -198,7 +198,12 @@ export function useProductDetailQuery(productId?: string) {
     queryFn: async () => {
       if (!productId) return null
       const res = await fetch(`${API_BASE_URL}/products/${productId}`)
-      if (!res.ok) throw new Error('Không thể tải chi tiết sản phẩm')
+      if (!res.ok) {
+        if (res.status === 404) {
+          return { notFound: true, id: productId, status: 'deleted' }
+        }
+        throw new Error('Không thể tải chi tiết sản phẩm')
+      }
       return await res.json()
     },
     enabled: Boolean(productId),

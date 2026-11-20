@@ -330,6 +330,41 @@ export const ShopDetailPage: React.FC<ShopDetailPageProps> = ({
     setClaimedVouchers(prev => ({ ...prev, [vId]: true }))
   }
 
+  if (!loading && !shopDetails) {
+    return (
+      <div className="space-y-6 text-left font-sans py-8">
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 text-center shadow-xs max-w-2xl mx-auto space-y-5 animate-in fade-in">
+          <div className="w-18 h-18 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center text-4xl mx-auto border-2 border-rose-200/80 shadow-2xs">
+            <span>🏪</span>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+              Gian hàng này hiện không tồn tại hoặc đã ngừng hoạt động
+            </h2>
+            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+              Tài khoản người bán này có thể đã bị xóa hoặc tạm khóa theo tiêu chuẩn cộng đồng của sàn ZeroMall. Mọi quyền lợi đối soát và bảo vệ khiếu nại hoàn tiền cho đơn hàng cũ của bạn vẫn được đảm bảo 100%.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+            >
+              ← Quay lại
+            </button>
+            <Link
+              to="/"
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs inline-block"
+            >
+              Khám phá gian hàng khác
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 text-left font-sans">
       
