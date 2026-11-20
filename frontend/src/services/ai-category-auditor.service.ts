@@ -39,6 +39,9 @@ export interface ScannedProductItem {
 export interface BatchAuditStats {
   totalScanned: number;
   totalProducts?: number;
+  totalViolations?: number;
+  totalActiveViolations?: number;
+  totalHiddenViolations?: number;
   page?: number;
   limit?: number;
   totalPages?: number;
@@ -105,5 +108,53 @@ export async function fixProductCategory(productId: string, category: string): P
   } catch (err) {
     console.error('Error fixing product category:', err);
     return false;
+  }
+}
+
+/**
+ * Lấy hàng đợi vi phạm tập trung (Centralized Violation Queue) dành riêng cho CSKH
+ * Chỉ hiển thị các sản phẩm có vấn đề (Inbox Zero), hỗ trợ auto-refill
+ */
+export async function fetchViolationQueue(
+  shopId?: string,
+  page = 1,
+  limit = 50,
+  issueType?: string,
+  status = 'active',
+): Promise<BatchAuditStats | null> {
+  try {
+    const params = new URLSearchParams();
+    if (shopId) params.append('shopId', shopId);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (issueType) params.append('issueType', issueType);
+    if (status) params.append('status', status);
+
+    const res = await fetch(`${API_BASE_URL}/products/ai/violation-queue?${params.toString()}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Error fetching violation queue:', err);
+    return null;
+  }
+}
+
+/**
+ * Tạm ẩn 1-Click toàn bộ vi phạm trên toàn sàn và tự động gửi thông báo đến các shop
+ */
+export async function bulkHideAllPlatformViolations(
+  reason?: string,
+): Promise<{ count: number; updatedIds: string[] } | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/products/ai/bulk-hide-all-violations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Error bulk hiding all platform violations:', err);
+    return null;
   }
 }

@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
-import { fetchBatchAuditScan, fixProductCategory, type BatchAuditStats } from '../../services/ai-category-auditor.service'
+import {
+  fetchBatchAuditScan,
+  fetchViolationQueue,
+  bulkHideAllPlatformViolations,
+  fixProductCategory,
+  type BatchAuditStats,
+} from '../../services/ai-category-auditor.service'
 
 interface CsCategoryAuditTabProps {
   user: any
@@ -17,13 +23,14 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 50
   
-  // Filter & Search (Mặc định: Chỉ hiện các sản phẩm Cần Xử Lý / Vi Phạm để CSKH tập trung thao tác)
-  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'PROHIBITED' | 'MATCHED' | 'HIDDEN'>('FLAGGED')
+  // Filter & Search (Mặc định: Chỉ hiển thị Hàng Đợi Vi Phạm để CSKH thao tác theo luồng Inbox Zero)
+  const [filterIssue, setFilterIssue] = useState<'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'PROHIBITED' | 'HIDDEN' | 'ALL'>('FLAGGED')
   const [searchQuery, setSearchQuery] = useState('')
 
   // Bulk Selection & Actions
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+  const [isBulkHidingAll, setIsBulkHidingAll] = useState(false)
   
   // Shops map: id -> { id, name, ownerId, phoneNumber }
   const [shopsMap, setShopsMap] = useState<Record<string, any>>({})
@@ -50,28 +57,49 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Run or refresh AI Audit Scan with target page
-  const runAiAuditScan = async (targetPage = currentPage) => {
+  // Tải dữ liệu theo Hàng Đợi Vi Phạm (Centralized Violation Queue) hoặc Toàn Sàn
+  const loadData = async (targetPage = currentPage, currentFilter = filterIssue) => {
     setIsAuditing(true)
+    setSelectedIds([])
     try {
-      const data = await fetchBatchAuditScan(undefined, targetPage, pageSize)
+      let data: BatchAuditStats | null = null
+      if (currentFilter === 'ALL') {
+        data = await fetchBatchAuditScan(undefined, targetPage, pageSize)
+      } else if (currentFilter === 'HIDDEN') {
+        data = await fetchViolationQueue(undefined, targetPage, pageSize, undefined, 'hidden')
+      } else {
+        const issueType = currentFilter === 'WRONG_CATEGORY' ? 'WRONG_CATEGORY'
+          : currentFilter === 'IMAGE_MISMATCH' ? 'IMAGE_MISMATCH'
+          : currentFilter === 'PROHIBITED' ? 'PROHIBITED'
+          : undefined
+        data = await fetchViolationQueue(undefined, targetPage, pageSize, issueType, 'active')
+      }
+
       if (data) {
         setBatchAudit(data)
-        setCurrentPage(targetPage)
+        const maxPage = Math.max(1, data.totalPages || 1)
+        const safePage = Math.min(targetPage, maxPage)
+        setCurrentPage(safePage)
       }
     } catch (e) {
-      console.error('Error in batch category audit:', e)
+      console.error('Error loading violation queue data:', e)
     } finally {
       setIsAuditing(false)
     }
   }
 
+  const handleFilterChange = (newFilter: typeof filterIssue) => {
+    setFilterIssue(newFilter)
+    setCurrentPage(1)
+    loadData(1, newFilter)
+  }
+
   useEffect(() => {
     fetchShops()
-    runAiAuditScan(1)
+    loadData(1, 'FLAGGED')
   }, [])
 
-  // Handle 1-Click Category Fix by CSKH
+  // Handle 1-Click Category Fix by CSKH (Auto-Refill: tự động kéo sản phẩm vi phạm tiếp theo lên)
   const handleAutoFixCategory = async (productId: string, newCategory: string, productName: string) => {
     setFixingId(productId)
     try {
@@ -79,7 +107,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       if (ok) {
         await triggerAuditLog(`[CSKH AI-AUDIT] Cập nhật ngành hàng sản phẩm "${productName}" (ID: ${productId}) sang "${newCategory}"`)
         alert(`✅ CSKH đã chuyển sản phẩm "${productName}" sang đúng ngành hàng "${newCategory}" thành công!`)
-        runAiAuditScan(currentPage)
+        loadData(currentPage, filterIssue)
       } else {
         alert('Không thể cập nhật ngành hàng. Vui lòng thử lại.')
       }
@@ -90,7 +118,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Handle Toggle Product Hide/Show (Tạm ẩn khỏi sàn & Tự động thông báo Shop)
+  // Handle Toggle Product Hide/Show (Tạm ẩn khỏi sàn & Tự động thông báo Shop & Auto-Refill)
   const handleToggleProductStatus = async (item: any) => {
     const isCurrentlyHidden = item.status === 'hidden'
     const nextStatus = isCurrentlyHidden ? 'active' : 'hidden'
@@ -115,7 +143,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       if (res.ok) {
         await triggerAuditLog(`[CSKH AI-AUDIT] Đổi trạng thái sản phẩm "${item.name}" (ID: ${item.id}) sang ${nextStatus}`)
         alert(`✅ Đã ${isCurrentlyHidden ? 'mở khóa hiển thị' : 'tạm ẩn sản phẩm và tự động gửi thông báo đến Shop'} thành công!`)
-        runAiAuditScan(currentPage)
+        loadData(currentPage, filterIssue)
       } else {
         alert('Không thể cập nhật trạng thái sản phẩm.')
       }
@@ -126,7 +154,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     }
   }
 
-  // Handle Bulk Status Update (Tạm ẩn hoặc mở khóa hàng loạt)
+  // Handle Bulk Status Update (Tạm ẩn hoặc mở khóa hàng loạt & Auto-Refill)
   const handleBulkUpdateStatus = async (productIds: string[], targetStatus: 'hidden' | 'active', actionLabel: string) => {
     if (!productIds || productIds.length === 0) return
 
@@ -152,7 +180,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
         await triggerAuditLog(`[CSKH AI-AUDIT] ${actionLabel} ${productIds.length} sản phẩm (Trạng thái: ${targetStatus})`)
         alert(`✅ Đã ${targetStatus === 'hidden' ? 'tạm ẩn và tự động gửi thông báo đến các chủ Shop' : 'mở khóa'} thành công ${productIds.length} sản phẩm!`)
         setSelectedIds([])
-        runAiAuditScan(currentPage)
+        loadData(currentPage, filterIssue)
       } else {
         alert('Không thể cập nhật trạng thái hàng loạt. Vui lòng thử lại.')
       }
@@ -160,6 +188,37 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       alert('Lỗi cập nhật hàng loạt: ' + e.message)
     } finally {
       setIsBulkProcessing(false)
+    }
+  }
+
+  // 1-Click Tạm Ẩn Toàn Bộ Vi Phạm Trên Sàn (Global Trust & Safety Action)
+  const handleBulkHideAllPlatformViolations = async () => {
+    const totalViolations = batchAudit?.totalActiveViolations ?? (batchAudit?.totalViolations || 0)
+    if (totalViolations === 0) {
+      alert('Hiện không còn sản phẩm vi phạm nào đang hoạt động trên sàn!')
+      return
+    }
+
+    const confirmMsg = `⚡ XÁC NHẬN TẠM ẨN TOÀN BỘ VI PHẠM TRÊN TOÀN SÀN\n\nCSKH có chắc chắn muốn TẠM ẨN TOÀN BỘ ${totalViolations} sản phẩm vi phạm đang hoạt động trên sàn?\n\nHệ thống sẽ:\n1. Tự động tạm ẩn ${totalViolations} sản phẩm vi phạm khỏi sàn.\n2. Tự động gửi thông báo chi tiết đến Kênh Người Bán của tất cả các chủ Shop có sản phẩm vi phạm.`
+
+    if (!window.confirm(confirmMsg)) return
+
+    setIsBulkHidingAll(true)
+    try {
+      const result = await bulkHideAllPlatformViolations('CSKH tạm ẩn hàng loạt do vi phạm quy định hình ảnh hoặc ngành hàng')
+      if (result && result.count > 0) {
+        await triggerAuditLog(`[CSKH AI-AUDIT] Tạm ẩn toàn bộ ${result.count} sản phẩm vi phạm trên toàn sàn`)
+        alert(`✅ ĐÃ TẠM ẨN THÀNH CÔNG ${result.count} SẢN PHẨM VI PHẠM TRÊN TOÀN SÀN!\n\nHệ thống đã gửi thông báo đến các gian hàng liên quan để chủ shop chủ động sửa thông tin.`)
+        setSelectedIds([])
+        loadData(1, filterIssue)
+      } else {
+        alert('Không có sản phẩm vi phạm nào được cập nhật hoặc toàn bộ vi phạm đã được xử lý.')
+        loadData(1, filterIssue)
+      }
+    } catch (e: any) {
+      alert('Lỗi khi tạm ẩn toàn bộ vi phạm: ' + e.message)
+    } finally {
+      setIsBulkHidingAll(false)
     }
   }
 
@@ -227,23 +286,21 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     ? batchAudit.allProducts
     : (batchAudit?.flaggedProducts || [])
 
-  // Thống kê động cho các tab bộ lọc
-  const needActionCount = baseProducts.filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden').length
-  const hiddenCount = baseProducts.filter((p) => p.status === 'hidden').length
-  const wrongCategoryCount = baseProducts.filter((p) => p.auditResult?.issueType === 'WRONG_CATEGORY' && p.status !== 'hidden').length
-  const imageMismatchCount = baseProducts.filter((p) => p.auditResult?.issueType === 'IMAGE_MISMATCH' && p.status !== 'hidden').length
-  const prohibitedCount = baseProducts.filter((p) => (p.auditResult?.issueType === 'PROHIBITED_ITEM' || p.auditResult?.isProhibited) && p.status !== 'hidden').length
-  const matchedCount = baseProducts.filter((p) => p.auditResult?.isMatched).length
+  // Thống kê động trên toàn sàn và trên trang hiện tại
+  const activeViolationsCount = batchAudit?.totalActiveViolations ?? (batchAudit?.totalViolations || 0)
+  const hiddenViolationsCount = batchAudit?.totalHiddenViolations ?? 0
+  const totalPlatformProducts = batchAudit?.totalProducts || 7430
+  const wrongCategoryCount = batchAudit?.wrongCategoryCount || 0
+  const imageMismatchCount = batchAudit?.imageMismatchCount || 0
+  const prohibitedCount = batchAudit?.prohibitedCount || 0
 
   const filteredProducts = baseProducts.filter((item) => {
     // 1. Issue type filter
-    // Khi lọc FLAGGED (Cần xử lý): Chỉ hiển thị các sản phẩm vi phạm CHƯA TẠM ẨN!
     if (filterIssue === 'FLAGGED' && (item.auditResult?.isMatched || item.status === 'hidden')) return false
     if (filterIssue === 'WRONG_CATEGORY' && (item.auditResult?.issueType !== 'WRONG_CATEGORY' || item.status === 'hidden')) return false
     if (filterIssue === 'IMAGE_MISMATCH' && (item.auditResult?.issueType !== 'IMAGE_MISMATCH' || item.status === 'hidden')) return false
     if (filterIssue === 'PROHIBITED' && ((item.auditResult?.issueType !== 'PROHIBITED_ITEM' && !item.auditResult?.isProhibited) || item.status === 'hidden')) return false
     if (filterIssue === 'HIDDEN' && item.status !== 'hidden') return false
-    if (filterIssue === 'MATCHED' && !item.auditResult?.isMatched) return false
 
     // 2. Search query
     if (searchQuery.trim()) {
@@ -259,7 +316,8 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   })
 
   // Đếm số sản phẩm vi phạm chưa bị ẩn trên trang hiện tại
-  const unhiddenFlaggedCount = needActionCount
+  const unhiddenFlaggedCount = filteredProducts.filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden').length
+  const totalInQueue = filterIssue === 'ALL' ? totalPlatformProducts : filterIssue === 'HIDDEN' ? hiddenViolationsCount : activeViolationsCount
 
   // Danh sách ID đang hiển thị trên bảng
   const allVisibleIds = filteredProducts.map((p) => p.id)
@@ -296,51 +354,74 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             <div className="flex items-center gap-2">
               <span className="text-2xl">🤖</span>
               <h2 className="text-base font-black tracking-tight text-white uppercase">
-                AI Category & Image Auditor (Hệ Thống Rà Soát Dành Cho CSKH)
+                AI Category & Image Auditor (Hàng Đợi Vi Phạm CSKH)
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/40 text-emerald-200 border border-emerald-400/30">
                 Multimodal AI QC
               </span>
             </div>
             <p className="text-xs text-emerald-100/90 font-medium max-w-2xl">
-              Tự động đối soát hình ảnh thực tế, tiêu đề và phân loại ngành hàng. Hỗ trợ nhân viên CSKH nhanh chóng phát hiện sản phẩm sai lệch, sửa danh mục bằng 1-Click hoặc gửi nhắc nhở cho Shop.
+              Hàng đợi xử lý vi phạm tập trung (Centralized Violation Queue). Tự động đẩy sản phẩm sai lệch lên đầu ca trực, tự động nạp tiếp khi xử lý (Auto-Refill) và 1-Click Tạm ẩn toàn sàn.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => runAiAuditScan(currentPage)}
-            disabled={isAuditing}
-            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
-          >
-            <span>{isAuditing ? '⏳' : '⚡'}</span>
-            <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Nút Tạm Ẩn Toàn Bộ Vi Phạm Trên Sàn (1-Click Global Take-down) */}
+            {activeViolationsCount > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkHideAllPlatformViolations}
+                disabled={isBulkHidingAll || isAuditing}
+                className="px-4 py-2.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:from-red-900 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-lg border border-red-400/40 disabled:opacity-50"
+                title="Tạm ẩn toàn bộ vi phạm trên toàn sàn và tự động gửi thông báo đến các chủ gian hàng"
+              >
+                <span>{isBulkHidingAll ? '⏳' : '🚫'}</span>
+                <span>
+                  {isBulkHidingAll
+                    ? 'Đang Tạm Ẩn...'
+                    : `Tạm Ẩn Toàn Bộ (${activeViolationsCount.toLocaleString('vi-VN')} Vi Phạm)`}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => loadData(currentPage, filterIssue)}
+              disabled={isAuditing}
+              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
+            >
+              <span>{isAuditing ? '⏳' : '⚡'}</span>
+              <span>{isAuditing ? 'Đang Quét AI...' : 'Quét Lại Bằng AI'}</span>
+            </button>
+          </div>
         </div>
 
         {/* 5 Stats Chips */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-emerald-700/50">
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10">
             <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Tổng Sản Phẩm Sàn</p>
-            <p className="text-xl font-black text-white mt-0.5">{(batchAudit?.totalProducts || 0).toLocaleString('vi-VN')}</p>
+            <p className="text-xl font-black text-white mt-0.5">{totalPlatformProducts.toLocaleString('vi-VN')}</p>
           </div>
-          <div className="bg-cyan-500/20 backdrop-blur-md rounded-xl p-3 border border-cyan-400/30">
-            <p className="text-[10px] text-cyan-200 font-bold uppercase tracking-wider">Trang Hiện Tại</p>
-            <p className="text-xl font-black text-cyan-100 mt-0.5">
-              {currentPage} <span className="text-xs font-medium text-cyan-300">/ {batchAudit?.totalPages || 1}</span>
-            </p>
+          <div className="bg-amber-500/20 backdrop-blur-md rounded-xl p-3 border border-amber-400/40 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-amber-200 font-bold uppercase tracking-wider">Hàng Đợi Vi Phạm</p>
+              <span className="px-1.5 py-0.2 bg-amber-400/30 text-amber-100 rounded text-[9px] font-black uppercase">
+                Auto-Refill
+              </span>
+            </div>
+            <p className="text-xl font-black text-amber-100 mt-0.5">{activeViolationsCount.toLocaleString('vi-VN')}</p>
           </div>
-          <div className="bg-emerald-500/20 backdrop-blur-md rounded-xl p-3 border border-emerald-400/30">
-            <p className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider">Khớp Chuẩn Xác</p>
-            <p className="text-xl font-black text-emerald-200 mt-0.5">{batchAudit?.matchedCount || 0}</p>
+          <div className="bg-slate-700/40 backdrop-blur-md rounded-xl p-3 border border-slate-500/30">
+            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-wider">Đã Tạm Ẩn Trên Sàn</p>
+            <p className="text-xl font-black text-slate-100 mt-0.5">{hiddenViolationsCount.toLocaleString('vi-VN')}</p>
           </div>
-          <div className="bg-amber-500/20 backdrop-blur-md rounded-xl p-3 border border-amber-400/30">
+          <div className="bg-amber-600/20 backdrop-blur-md rounded-xl p-3 border border-amber-500/30">
             <p className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">Sai Ngành Hàng</p>
-            <p className="text-xl font-black text-amber-200 mt-0.5">{batchAudit?.wrongCategoryCount || 0}</p>
+            <p className="text-xl font-black text-amber-200 mt-0.5">{wrongCategoryCount}</p>
           </div>
           <div className="bg-rose-500/20 backdrop-blur-md rounded-xl p-3 border border-rose-400/30">
             <p className="text-[10px] text-rose-300 font-bold uppercase tracking-wider">Lệch Ảnh & Tiêu Đề</p>
-            <p className="text-xl font-black text-rose-200 mt-0.5">{batchAudit?.imageMismatchCount || 0}</p>
+            <p className="text-xl font-black text-rose-200 mt-0.5">{imageMismatchCount}</p>
           </div>
         </div>
       </div>
@@ -351,7 +432,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
           {/* Sub-filters */}
           <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
             <button
-              onClick={() => setFilterIssue('FLAGGED')}
+              onClick={() => handleFilterChange('FLAGGED')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'FLAGGED'
                   ? 'bg-amber-600 text-white shadow-xs'
@@ -359,12 +440,12 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               }`}
             >
               <span>⚡ Cần xử lý</span>
-              <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-[10px]">
-                {needActionCount}
+              <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-[10px] font-black">
+                {activeViolationsCount}
               </span>
             </button>
             <button
-              onClick={() => setFilterIssue('WRONG_CATEGORY')}
+              onClick={() => handleFilterChange('WRONG_CATEGORY')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'WRONG_CATEGORY'
                   ? 'bg-amber-500 text-white shadow-xs'
@@ -377,7 +458,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               </span>
             </button>
             <button
-              onClick={() => setFilterIssue('IMAGE_MISMATCH')}
+              onClick={() => handleFilterChange('IMAGE_MISMATCH')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'IMAGE_MISMATCH'
                   ? 'bg-rose-600 text-white shadow-xs'
@@ -391,7 +472,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             </button>
             {prohibitedCount > 0 && (
               <button
-                onClick={() => setFilterIssue('PROHIBITED')}
+                onClick={() => handleFilterChange('PROHIBITED')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   filterIssue === 'PROHIBITED'
                     ? 'bg-red-700 text-white shadow-xs'
@@ -405,7 +486,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               </button>
             )}
             <button
-              onClick={() => setFilterIssue('HIDDEN')}
+              onClick={() => handleFilterChange('HIDDEN')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'HIDDEN'
                   ? 'bg-slate-800 text-white shadow-xs'
@@ -414,31 +495,18 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
             >
               <span>🚫 Đang tạm ẩn (Chờ Shop sửa)</span>
               <span className="px-1.5 py-0.2 bg-slate-900/20 rounded-full text-[10px] font-black">
-                {hiddenCount}
+                {hiddenViolationsCount}
               </span>
             </button>
             <button
-              onClick={() => setFilterIssue('MATCHED')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                filterIssue === 'MATCHED'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-              }`}
-            >
-              <span>✅ Đạt chuẩn</span>
-              <span className="px-1.5 py-0.2 bg-emerald-600/30 rounded-full text-[10px]">
-                {matchedCount}
-              </span>
-            </button>
-            <button
-              onClick={() => setFilterIssue('ALL')}
+              onClick={() => handleFilterChange('ALL')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                 filterIssue === 'ALL'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <span>Tất cả ({baseProducts.length})</span>
+              <span>Toàn sàn ({totalPlatformProducts.toLocaleString('vi-VN')})</span>
             </button>
           </div>
 
@@ -504,7 +572,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                   <span>{isBulkProcessing ? '⏳' : '🚫'}</span>
                   <span>
                     {selectedIds.length === filteredProducts.length
-                      ? 'Tạm Ẩn Toàn Bộ'
+                      ? `Tạm Ẩn Cả Trang (${selectedIds.length})`
                       : `Tạm Ẩn (${selectedIds.length} Đã Chọn)`}
                   </span>
                 </button>
@@ -525,6 +593,19 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                   Bỏ tích
                 </button>
               </>
+            ) : unhiddenFlaggedCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = filteredProducts.filter((p) => !p.auditResult?.isMatched && p.status !== 'hidden').map((p) => p.id)
+                  handleBulkUpdateStatus(ids, 'hidden', `Tạm ẩn toàn bộ ${ids.length} vi phạm trên trang`)
+                }}
+                disabled={isBulkProcessing}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-bold rounded-xl cursor-pointer transition flex items-center gap-1 shadow-2xs"
+                title="Tạm ẩn toàn bộ vi phạm trên trang hiện tại và tự động nạp vi phạm tiếp theo từ hàng đợi (Auto-Refill)"
+              >
+                <span>⚡ Tạm Ẩn Toàn Trang ({unhiddenFlaggedCount} Vi Phạm)</span>
+              </button>
             ) : (
               <span className="text-[11px] text-slate-400 italic">
                 (Tích chọn sản phẩm để thực hiện Tạm ẩn hoặc Mở khóa)
@@ -545,26 +626,62 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
           <div className="py-20 text-center space-y-3">
             <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p className="text-xs text-slate-500 font-bold">
-              Mô hình AI đang đối chiếu hình ảnh thực tế, văn bản tiêu đề và danh mục đăng bán...
+              Hệ thống AI đang tải hàng đợi vi phạm và đối chiếu hình ảnh thực tế...
             </p>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="py-16 text-center space-y-2">
-            <span className="text-4xl">🎉</span>
-            <p className="text-sm font-black text-slate-800">
-              {searchQuery
-                ? 'Không tìm thấy sản phẩm vi phạm phù hợp với từ khóa'
-                : filterIssue === 'FLAGGED'
-                  ? 'Hoàn thành ca trực! Không còn sản phẩm vi phạm nào cần xử lý trong trang này.'
-                  : filterIssue === 'HIDDEN'
-                    ? 'Chưa có sản phẩm nào đang tạm ẩn trên trang này.'
-                    : `Không có sản phẩm nào trong mục này.`}
-            </p>
-            <p className="text-xs text-slate-400 font-medium max-w-md mx-auto">
-              {filterIssue === 'FLAGGED'
-                ? 'Toàn bộ sản phẩm vi phạm đã được xử lý Tạm Ẩn và hệ thống đã gửi thông báo đến các chủ Shop để chủ động sửa đổi thông tin/hình ảnh.'
-                : 'Bạn có thể chuyển sang các tab bộ lọc hoặc chuyển sang các trang tiếp theo để rà soát toàn bộ kho hàng.'}
-            </p>
+          <div className="py-16 text-center space-y-3">
+            {filterIssue === 'FLAGGED' && activeViolationsCount === 0 ? (
+              <div className="space-y-3 bg-gradient-to-b from-white to-emerald-50/40 p-8 rounded-2xl max-w-xl mx-auto">
+                <span className="text-5xl animate-bounce inline-block">🎉</span>
+                <h3 className="text-base font-black text-slate-900">
+                  Hoàn thành ca trực! Toàn sàn sạch bóng vi phạm!
+                </h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Tất cả các sản phẩm có nghi vấn lệch ảnh bìa hoặc sai ngành hàng trên toàn sàn đã được xử lý Tạm Ẩn hoặc chuẩn hóa danh mục. Hệ thống tự động gửi thông báo đến các chủ Shop để chủ động sửa đổi thông tin.
+                </p>
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  {hiddenViolationsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleFilterChange('HIDDEN')}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
+                    >
+                      Xem {hiddenViolationsCount} sản phẩm đang tạm ẩn »
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => loadData(1, 'FLAGGED')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
+                  >
+                    🔄 Rà soát lại hàng đợi
+                  </button>
+                </div>
+              </div>
+            ) : filterIssue === 'HIDDEN' ? (
+              <div className="space-y-2 py-10">
+                <span className="text-4xl">📦</span>
+                <p className="text-sm font-black text-slate-800">
+                  Không có sản phẩm nào đang trong trạng thái Tạm Ẩn.
+                </p>
+                <p className="text-xs text-slate-400 font-medium">
+                  Tất cả sản phẩm đã được mở khóa hiển thị hoặc chưa có sản phẩm nào bị tạm ẩn.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 py-10">
+                <span className="text-4xl">🔍</span>
+                <p className="text-sm font-black text-slate-800">
+                  {searchQuery
+                    ? 'Không tìm thấy sản phẩm phù hợp với từ khóa tìm kiếm'
+                    : 'Không có sản phẩm nào trong danh sách này.'}
+                </p>
+                <p className="text-xs text-slate-400 font-medium">
+                  Bạn có thể chuyển sang các tab bộ lọc khác để kiểm tra hoặc chọn "Cần xử lý".
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className={`overflow-x-auto ${isAuditing ? 'opacity-60 transition' : ''}`}>
@@ -856,13 +973,13 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
         {batchAudit && (batchAudit.totalPages || 1) > 1 && (
           <div className="bg-slate-50/90 border-t border-slate-200/80 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-[11px] text-slate-500 font-medium">
-              Đang xem <span className="font-bold text-slate-800">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-bold text-slate-800">{Math.min(currentPage * pageSize, batchAudit.totalProducts || 0)}</span> trên tổng số <span className="font-bold text-emerald-700">{(batchAudit.totalProducts || 0).toLocaleString('vi-VN')}</span> sản phẩm
+              Đang xem <span className="font-bold text-slate-800">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-bold text-slate-800">{Math.min(currentPage * pageSize, totalInQueue)}</span> trên tổng số <span className="font-bold text-emerald-700">{totalInQueue.toLocaleString('vi-VN')}</span> {filterIssue === 'ALL' ? 'sản phẩm toàn sàn' : 'vi phạm trong hàng đợi'} (Trang <span className="font-bold text-slate-800">{currentPage}</span> / {batchAudit.totalPages})
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => runAiAuditScan(1)}
+                onClick={() => loadData(1, filterIssue)}
                 disabled={currentPage <= 1 || isAuditing}
                 className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs cursor-pointer"
                 title="Về trang 1"
@@ -871,7 +988,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               </button>
               <button
                 type="button"
-                onClick={() => runAiAuditScan(currentPage - 1)}
+                onClick={() => loadData(currentPage - 1, filterIssue)}
                 disabled={currentPage <= 1 || isAuditing}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs flex items-center gap-1 cursor-pointer"
               >
@@ -901,7 +1018,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                       <button
                         key={pageNum}
                         type="button"
-                        onClick={() => runAiAuditScan(pageNum)}
+                        onClick={() => loadData(pageNum, filterIssue)}
                         disabled={isAuditing}
                         className={`w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer ${
                           isActive
@@ -918,7 +1035,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
 
               <button
                 type="button"
-                onClick={() => runAiAuditScan(currentPage + 1)}
+                onClick={() => loadData(currentPage + 1, filterIssue)}
                 disabled={currentPage >= (batchAudit.totalPages || 1) || isAuditing}
                 className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs flex items-center gap-1 cursor-pointer"
               >
@@ -927,7 +1044,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
               </button>
               <button
                 type="button"
-                onClick={() => runAiAuditScan(batchAudit.totalPages || 1)}
+                onClick={() => loadData(batchAudit.totalPages || 1, filterIssue)}
                 disabled={currentPage >= (batchAudit.totalPages || 1) || isAuditing}
                 className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs cursor-pointer"
                 title="Đến trang cuối cùng"

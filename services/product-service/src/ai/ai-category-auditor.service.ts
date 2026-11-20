@@ -44,6 +44,9 @@ export interface ScannedProductItem {
 export interface BatchAuditStats {
   totalScanned: number;
   totalProducts?: number;
+  totalViolations?: number;
+  totalActiveViolations?: number;
+  totalHiddenViolations?: number;
   page?: number;
   limit?: number;
   totalPages?: number;
@@ -296,7 +299,11 @@ export class AiCategoryAuditorService {
    * Quét toàn bộ hoặc một nhóm sản phẩm trong CSDL để phát hiện các sản phẩm sai ngành hàng
    * Hỗ trợ phân trang (Pagination) và xử lý song song (Concurrency Chunks) để phản hồi siêu tốc (< 200ms)
    */
-  async scanProducts(shopId?: string, page = 1, limit = 50): Promise<BatchAuditStats> {
+  async scanProducts(shopId?: string, page = 1, limit = 50, queueOnly = false): Promise<BatchAuditStats> {
+    if (queueOnly) {
+      return this.getViolationQueue(shopId, page, limit, 'ALL', 'active');
+    }
+
     const whereCondition: any = {
       status: { in: ['active', 'hidden'] },
       name: { notIn: ['test', 'cuong', '2'] },
@@ -368,8 +375,24 @@ export class AiCategoryAuditorService {
           else if (res.audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
 
           flaggedProducts.push(item);
+
+          // Cập nhật trạng thái vi phạm vào CSDL để đưa vào hàng đợi
+          this.prisma.product.update({
+            where: { id: res.p.id },
+            data: {
+              isViolated: true,
+              violationReason: res.audit.imageFeedback || res.audit.recommendation,
+            },
+          }).catch(() => {});
         } else {
           matchedCount++;
+          this.prisma.product.update({
+            where: { id: res.p.id },
+            data: {
+              isViolated: false,
+              violationReason: null,
+            },
+          }).catch(() => {});
         }
       }
     }
@@ -389,6 +412,231 @@ export class AiCategoryAuditorService {
       flaggedProducts,
       allProducts,
     };
+  }
+
+  /**
+   * HÀNG ĐỢI DUYỆT VI PHẠM TẬP TRUNG (Centralized Trust & Safety Violation Queue)
+   * Trả về danh sách CHỈ CÁC SẢN PHẨM CẦN XỬ LÝ (VIOLATIONS ONLY).
+   */
+  async getViolationQueue(
+    shopId?: string,
+    page = 1,
+    limit = 50,
+    issueType = 'ALL',
+    status = 'active',
+  ): Promise<BatchAuditStats> {
+    const isHiddenTab = status === 'hidden';
+    const whereCondition: any = {
+      isViolated: true,
+      status: isHiddenTab ? 'hidden' : 'active',
+      name: { notIn: ['test', 'cuong', '2'] },
+    };
+    if (shopId) {
+      whereCondition.shopId = shopId;
+    }
+
+    // 1. Kiểm tra số lượng sản phẩm vi phạm hiện có trong CSDL
+    let totalViolations = await this.prisma.product.count({ where: whereCondition });
+
+    // Nếu hàng đợi active trong DB còn ít (< 100):
+    // Tự động quét bổ sung từ kho hàng active để nạp đầy hàng đợi vi phạm!
+    if (totalViolations < 100 && !isHiddenTab) {
+      await this.replenishViolationQueue(120);
+      totalViolations = await this.prisma.product.count({ where: whereCondition });
+    }
+
+    const [totalProducts, violatedProducts, totalActiveViolations, totalHiddenViolations] = await Promise.all([
+      this.prisma.product.count({ where: { status: { in: ['active', 'hidden'] } } }),
+      this.prisma.product.findMany({
+        where: whereCondition,
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          images: true,
+          category: true,
+          shopId: true,
+          status: true,
+          violationReason: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.product.count({ where: { isViolated: true, status: 'active', name: { notIn: ['test', 'cuong', '2'] } } }),
+      this.prisma.product.count({ where: { isViolated: true, status: 'hidden', name: { notIn: ['test', 'cuong', '2'] } } }),
+    ]);
+
+    // Chạy audit chi tiết để tạo auditResult đầy đủ cho từng sản phẩm vi phạm
+    const CHUNK_SIZE = 10;
+    const flaggedProducts: ScannedProductItem[] = [];
+    let wrongCategoryCount = 0;
+    let imageMismatchCount = 0;
+    let prohibitedCount = 0;
+
+    for (let i = 0; i < violatedProducts.length; i += CHUNK_SIZE) {
+      const chunk = violatedProducts.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.all(
+        chunk.map(async (p) => {
+          const cover = p.image || (p.images ? (() => { try { return JSON.parse(p.images)[0]; } catch { return ''; } })() : '');
+          const audit = await this.auditProduct({
+            productId: p.id,
+            name: p.name,
+            category: p.category,
+            image: cover,
+            isBatchScan: true,
+          });
+          return { p, cover, audit };
+        }),
+      );
+
+      for (const res of results) {
+        if (res.audit.issueType === 'PROHIBITED_ITEM' || res.audit.isProhibited) prohibitedCount++;
+        else if (res.audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
+        else if (res.audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
+
+        flaggedProducts.push({
+          id: res.p.id,
+          name: res.p.name,
+          image: res.cover,
+          category: res.p.category,
+          shopId: res.p.shopId,
+          status: res.p.status,
+          auditResult: res.audit,
+        });
+      }
+    }
+
+    const totalPages = Math.ceil(totalViolations / limit) || 1;
+
+    return {
+      totalScanned: flaggedProducts.length,
+      totalProducts,
+      totalViolations,
+      totalActiveViolations,
+      totalHiddenViolations,
+      page,
+      limit,
+      totalPages,
+      matchedCount: Math.max(0, totalProducts - totalViolations),
+      wrongCategoryCount,
+      imageMismatchCount,
+      prohibitedCount,
+      flaggedProducts,
+      allProducts: flaggedProducts, // 100% trong danh sách là sản phẩm cần xử lý!
+    };
+  }
+
+  /**
+   * Quét các sản phẩm active để phát hiện và nạp thêm vi phạm vào hàng đợi
+   */
+  async replenishViolationQueue(targetCount = 100): Promise<number> {
+    const unAuditedProducts = await this.prisma.product.findMany({
+      where: {
+        status: 'active',
+        isViolated: false,
+        name: { notIn: ['test', 'cuong', '2'] },
+      },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        images: true,
+        category: true,
+      },
+      take: 250,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (unAuditedProducts.length === 0) return 0;
+
+    let flaggedCount = 0;
+    const CHUNK_SIZE = 10;
+
+    for (let i = 0; i < unAuditedProducts.length; i += CHUNK_SIZE) {
+      if (flaggedCount >= targetCount) break;
+      const chunk = unAuditedProducts.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.all(
+        chunk.map(async (p) => {
+          const cover = p.image || (p.images ? (() => { try { return JSON.parse(p.images)[0]; } catch { return ''; } })() : '');
+          const audit = await this.auditProduct({
+            productId: p.id,
+            name: p.name,
+            category: p.category,
+            image: cover,
+            isBatchScan: true,
+          });
+          return { id: p.id, audit };
+        }),
+      );
+
+      for (const res of results) {
+        if (!res.audit.isMatched) {
+          flaggedCount++;
+          await this.prisma.product.update({
+            where: { id: res.id },
+            data: {
+              isViolated: true,
+              violationReason: res.audit.imageFeedback || res.audit.recommendation,
+            },
+          }).catch(() => {});
+        }
+      }
+    }
+
+    return flaggedCount;
+  }
+
+  /**
+   * 1-Click Tạm Ẩn Toàn Bộ Vi Phạm Đang Hoạt Động Trên Toàn Sàn
+   */
+  async bulkHideAllActiveViolations(reason?: string) {
+    const activeViolations = await this.prisma.product.findMany({
+      where: {
+        isViolated: true,
+        status: 'active',
+      },
+      select: {
+        id: true,
+        shopId: true,
+        name: true,
+        violationReason: true,
+      },
+    });
+
+    if (activeViolations.length === 0) {
+      return { count: 0, updatedIds: [] };
+    }
+
+    const ids = activeViolations.map((p) => p.id);
+    const updated = await this.prisma.product.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        status: 'hidden',
+        isViolated: true,
+        violationReason: reason || 'CSKH tạm ẩn do vi phạm quy định hình ảnh hoặc ngành hàng',
+      },
+    });
+
+    // Gửi thông báo đến các shop
+    try {
+      const shopIds = Array.from(new Set(activeViolations.map((p) => p.shopId)));
+      for (const sId of shopIds) {
+        const count = activeViolations.filter((p) => p.shopId === sId).length;
+        fetch('http://auth-service:3001/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: sId,
+            title: '⚠️ [Sàn ZeroMall] Tạm ẩn sản phẩm vi phạm',
+            message: `Hệ thống CSKH đã tạm ẩn ${count} sản phẩm của Shop do vi phạm quy định hình ảnh hoặc ngành hàng. Vui lòng vào Kênh Người Bán kiểm tra và chỉnh sửa.`,
+            type: 'SYSTEM',
+          }),
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
+    return { count: updated.count, updatedIds: ids };
   }
 
   /**

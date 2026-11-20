@@ -77,10 +77,46 @@ export class AiController {
     @Query('shopId') shopId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('queueOnly') queueOnly?: string,
+    @Query('status') status?: string,
   ) {
     const pageNum = Math.max(1, parseInt(page || '1', 10) || 1);
     const limitNum = Math.min(100, Math.max(10, parseInt(limit || '50', 10) || 50));
+    const isQueue = queueOnly === 'true' || queueOnly === '1';
+    if (isQueue) {
+      return this.aiCategoryAuditorService.getViolationQueue(
+        shopId,
+        pageNum,
+        limitNum,
+        'ALL',
+        status || 'active',
+      );
+    }
     return this.aiCategoryAuditorService.scanProducts(shopId, pageNum, limitNum);
+  }
+
+  @Get('ai/violation-queue')
+  async getViolationQueue(
+    @Query('shopId') shopId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('issueType') issueType?: string,
+    @Query('status') status?: string,
+  ) {
+    const pageNum = Math.max(1, parseInt(page || '1', 10) || 1);
+    const limitNum = Math.min(100, Math.max(10, parseInt(limit || '50', 10) || 50));
+    return this.aiCategoryAuditorService.getViolationQueue(
+      shopId,
+      pageNum,
+      limitNum,
+      issueType || 'ALL',
+      status || 'active',
+    );
+  }
+
+  @Post('ai/bulk-hide-all-violations')
+  async bulkHideAllViolations(@Body('reason') reason?: string) {
+    return this.aiCategoryAuditorService.bulkHideAllActiveViolations(reason);
   }
 
   @Post('ai/fix-category/:id')
