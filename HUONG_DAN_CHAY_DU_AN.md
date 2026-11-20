@@ -144,4 +144,28 @@ Nếu muốn tắt và xóa dữ liệu cache container để chạy lại từ 
 docker compose down -v
 ```
 
+---
+
+## 🔄 9. Cập Nhật Khi Pull Code Mới (Dành Cho Thành Viên Nhóm)
+
+Khi bạn kéo mã nguồn mới nhất về từ Git (`git pull origin main`), hãy thực hiện các bước sau để đảm bảo database và microservices đồng bộ 100%:
+
+### Bước 1: Build lại container với code mới
+```bash
+docker compose up -d --build
+```
+
+### Bước 2: Chạy migration cập nhật bảng mới (Banner Sàn & AuditLog Storefront)
+Nếu máy bạn đang có sẵn dữ liệu và không muốn xóa trắng database, chỉ cần chạy một lệnh migration sau:
+```bash
+docker exec -i zeromall-postgres psql -U postgres -d zeromall < database/migrations/15_add_banners_and_audit_log_fields.sql
+```
+*(Nếu bạn là người mới clone lần đầu hoặc chạy `./restore-db.sh`, tệp `init-zeromall.sql` đã tự động tích hợp sẵn các bảng mới này).*
+
+### Bước 3: Tài khoản Admin & CSKH kiểm thử tính năng mới
+- **Quản trị viên sàn (Admin Portal)**: `admin@zeromall.com` | Mật khẩu: `123456`
+- **Nhân viên CSKH (CS Portal)**: `cskh_1@gmail.com` | Mật khẩu: `123456`
+
+---
+
 Chúc bạn trải nghiệm dự án vui vẻ và thành công! 🚀

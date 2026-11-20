@@ -298,6 +298,20 @@ exports.Prisma.UserActivityScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.BannerScalarFieldEnum = {
+  id: 'id',
+  title: 'title',
+  subTitle: 'subTitle',
+  badge: 'badge',
+  imageUrl: 'imageUrl',
+  linkUrl: 'linkUrl',
+  position: 'position',
+  displayOrder: 'displayOrder',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -326,7 +340,8 @@ exports.Prisma.ModelName = {
   AiModelKnowledge: 'AiModelKnowledge',
   AiModerationKnowledge: 'AiModerationKnowledge',
   AiSearchKnowledge: 'AiSearchKnowledge',
-  UserActivity: 'UserActivity'
+  UserActivity: 'UserActivity',
+  Banner: 'Banner'
 };
 
 /**
