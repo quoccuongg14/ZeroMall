@@ -13,7 +13,7 @@ interface CsCategoryAuditTabProps {
   triggerAuditLog: (action: string) => Promise<void>
 }
 
-export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, triggerAuditLog }) => {
+export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ triggerAuditLog }) => {
   const [batchAudit, setBatchAudit] = useState<BatchAuditStats | null>(null)
   const [isAuditing, setIsAuditing] = useState(false)
   const [fixingId, setFixingId] = useState<string | null>(null)
@@ -37,10 +37,6 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   
   // Modals
   const [imagePreview, setImagePreview] = useState<{ src: string; title: string } | null>(null)
-  const [warningModalItem, setWarningModalItem] = useState<any | null>(null)
-  const [warningTitle, setWarningTitle] = useState('')
-  const [warningMessage, setWarningMessage] = useState('')
-  const [isSendingWarning, setIsSendingWarning] = useState(false)
 
   // Fetch shop metadata
   const fetchShops = async () => {
@@ -219,65 +215,6 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
       alert('Lỗi khi tạm ẩn toàn bộ vi phạm: ' + e.message)
     } finally {
       setIsBulkHidingAll(false)
-    }
-  }
-
-  // Open Warning Notification Modal
-  const openWarningModal = (item: any) => {
-    const shop = shopsMap[item.shopId]
-    const shopName = shop?.name || `Shop #${item.shopId?.slice(0, 8)}`
-    const isImageMismatch = item.auditResult?.issueType === 'IMAGE_MISMATCH'
-
-    setWarningModalItem(item)
-    setWarningTitle(isImageMismatch ? `[Cảnh báo CSKH] Hình ảnh sản phẩm không khớp nội dung` : `[Cảnh báo CSKH] Sản phẩm sai phân loại ngành hàng`)
-    
-    if (isImageMismatch) {
-      setWarningMessage(
-        `Kính gửi ${shopName},\n\nBộ phận CSKH & Kiểm duyệt ZeroMall phát hiện sản phẩm "${item.name}" (Mã: ${item.id}) có hình ảnh minh họa không khớp với tiêu đề và mô tả.\n\nChi tiết đánh giá: ${item.auditResult?.imageFeedback || item.auditResult?.recommendation}\n\nVui lòng cập nhật hình ảnh đúng thực tế của sản phẩm trong vòng 24 giờ. Sau thời gian này, sản phẩm có thể bị tạm khóa hiển thị để bảo vệ quyền lợi người mua.\n\nTrân trọng,\nBộ phận CSKH ZeroMall`
-      )
-    } else {
-      setWarningMessage(
-        `Kính gửi ${shopName},\n\nBộ phận CSKH & Kiểm duyệt ZeroMall phát hiện sản phẩm "${item.name}" (Mã: ${item.id}) đang đăng bán trong danh mục "${item.category}" chưa phù hợp.\n\nĐề xuất điều chỉnh: Chuyển sang danh mục "${item.auditResult?.suggestedCategory || 'Danh mục chuẩn'}".\n\nVui lòng vào Kênh Người Bán để cập nhật lại danh mục đúng chuẩn.\n\nTrân trọng,\nBộ phận CSKH ZeroMall`
-      )
-    }
-  }
-
-  // Send Warning Notification to Shop Owner
-  const handleSendWarning = async () => {
-    if (!warningModalItem) return
-    const shop = shopsMap[warningModalItem.shopId]
-    const targetUserId = shop?.ownerId || warningModalItem.shopId
-
-    setIsSendingWarning(true)
-    try {
-      const res = await fetch(`${API_BASE_URL}/notifications`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: targetUserId,
-          title: warningTitle,
-          content: warningMessage,
-          type: 'SYSTEM',
-          metadata: {
-            productId: warningModalItem.id,
-            shopId: warningModalItem.shopId,
-            sentBy: user?.email || 'cskh@zeromall.vn',
-            issueType: warningModalItem.auditResult?.issueType
-          }
-        })
-      })
-
-      if (res.ok) {
-        await triggerAuditLog(`[CSKH CẢNH BÁO SHOP] Đã gửi thông báo nhắc nhở Shop "${shop?.name || warningModalItem.shopId}" về sản phẩm "${warningModalItem.name}"`)
-        alert('✅ Đã gửi thông báo cảnh báo thành công tới chủ gian hàng!')
-        setWarningModalItem(null)
-      } else {
-        alert('Không thể gửi thông báo. Vui lòng thử lại.')
-      }
-    } catch (e: any) {
-      alert('Lỗi khi gửi thông báo: ' + e.message)
-    } finally {
-      setIsSendingWarning(false)
     }
   }
 
@@ -879,32 +816,22 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                               <span>Đã Duyệt Đạt Chuẩn</span>
                             </span>
                           ) : isHidden ? (
-                            /* Sản phẩm ĐÃ BỊ TẠM ẨN: Hiển thị trạng thái rõ ràng, không hiển thị các nút thao tác thừa */
-                            <div className="flex flex-col gap-1 items-stretch justify-center">
+                            /* Sản phẩm ĐÃ BỊ TẠM ẨN: Hiển thị trạng thái rõ ràng và nút mở khóa khi shop đã sửa */
+                            <div className="flex flex-col gap-1.5 items-stretch justify-center">
                               <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-[11px] font-bold border border-slate-200 flex items-center justify-center gap-1.5 shadow-2xs">
                                 <span>🚫</span>
                                 <span>Đã Ẩn (Chờ Shop Sửa)</span>
                               </span>
-                              <div className="flex items-center justify-center gap-2 mt-1">
-                                <button
-                                  type="button"
-                                  onClick={() => openWarningModal(item)}
-                                  className="text-[10px] text-amber-700 hover:text-amber-800 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
-                                  title="Gửi lại cảnh báo nhắc nhở Shop sửa lỗi"
-                                >
-                                  <span>🔔</span> Báo lại Shop
-                                </button>
-                                <span className="text-slate-300">|</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleProductStatus(item)}
-                                  disabled={hidingId === item.id}
-                                  className="text-[10px] text-slate-500 hover:text-emerald-700 font-bold hover:underline cursor-pointer"
-                                  title="Mở khóa hiển thị ngoại lệ nếu sản phẩm hợp lệ"
-                                >
-                                  Mở khóa
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleProductStatus(item)}
+                                disabled={hidingId === item.id}
+                                className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold hover:underline cursor-pointer flex items-center justify-center gap-1"
+                                title="Mở khóa hiển thị lại sản phẩm nếu shop đã sửa hợp lệ"
+                              >
+                                <span>👁️</span>
+                                <span>{hidingId === item.id ? 'Đang mở khóa...' : 'Mở khóa hiển thị'}</span>
+                              </button>
                             </div>
                           ) : isProhibited ? (
                             /* Khóa Khẩn Cấp dành riêng cho Hàng Cấm */
@@ -945,17 +872,6 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                               >
                                 <span>{hidingId === item.id ? '⏳' : '🚫'}</span>
                                 <span>Tạm Ẩn & Báo Shop</span>
-                              </button>
-
-                              {/* Nhắc nhở phụ (chưa tạm ẩn) */}
-                              <button
-                                type="button"
-                                onClick={() => openWarningModal(item)}
-                                className="text-[10px] text-amber-700 hover:text-amber-800 font-bold hover:underline cursor-pointer flex items-center justify-center gap-1 mt-0.5"
-                                title="Chỉ gửi cảnh báo nhắc nhở mà chưa tạm ẩn sản phẩm"
-                              >
-                                <span>🔔</span>
-                                <span>Chỉ nhắc nhở (chưa ẩn)</span>
                               </button>
                             </>
                           )}
@@ -1095,78 +1011,6 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
         </div>
       )}
 
-      {/* 5. CSKH Warning Notification Modal */}
-      {warningModalItem && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4"
-          onClick={() => setWarningModalItem(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl max-w-lg w-full shadow-2xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🔔</span>
-                <h3 className="text-sm font-black text-slate-900">
-                  Gửi Cảnh Báo Vi Phạm Cho Gian Hàng
-                </h3>
-              </div>
-              <button 
-                onClick={() => setWarningModalItem(null)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-sm px-2 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                  Tiêu đề thông báo
-                </label>
-                <input
-                  type="text"
-                  value={warningTitle}
-                  onChange={(e) => setWarningTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                  Nội dung nhắc nhở / Yêu cầu khắc phục
-                </label>
-                <textarea
-                  rows={7}
-                  value={warningMessage}
-                  onChange={(e) => setWarningMessage(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setWarningModalItem(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleSendWarning}
-                disabled={isSendingWarning}
-                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              >
-                <span>{isSendingWarning ? '⏳' : '🚀'}</span>
-                <span>{isSendingWarning ? 'Đang gửi...' : 'Gửi Cảnh Báo Ngay'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
