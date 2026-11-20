@@ -997,6 +997,24 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
 
         {/* Tab Content Panels */}
         <div className="p-6 flex-1 text-left space-y-6">
+          {/* Violation Notice Banner when Editing Violated / Hidden Product */}
+          {(initialData?.status === 'hidden' || initialData?.isViolated) && (
+            <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900 shadow-sm animate-in fade-in">
+              <span className="text-2xl shrink-0">⚠️</span>
+              <div className="space-y-1">
+                <h4 className="text-xs font-black uppercase text-rose-800 tracking-wide">
+                  Sản phẩm đang bị tạm khóa hiển thị do yêu cầu kiểm duyệt từ Sàn
+                </h4>
+                <p className="text-xs font-semibold text-rose-700">
+                  Lý do vi phạm: <span className="font-bold">{initialData.violationReason || 'Ảnh và tiêu đề hoặc ngành hàng chưa đồng nhất'}</span>
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  Vui lòng cập nhật hình ảnh đúng thực tế hoặc điều chỉnh tiêu đề/ngành hàng cho chính xác. Sau khi bạn bấm <b>Cập nhật sản phẩm</b>, hệ thống AI sẽ tự động rà soát lại và khôi phục hiển thị ngay lập tức nếu đạt chuẩn.
+                </p>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'basic' && (
             <AddProductBasicTab
               images={images}

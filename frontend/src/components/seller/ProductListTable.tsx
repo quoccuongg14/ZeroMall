@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-interface Product {
+export interface Product {
   id: string
   name: string
   image: string
@@ -11,6 +11,8 @@ interface Product {
   stock: number
   sales: number
   status: 'active' | 'hidden'
+  isViolated?: boolean
+  violationReason?: string | null
   sku?: string
   variationsText?: string
 }
@@ -30,8 +32,8 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
   onToggleStatus,
   onAddNew,
 }) => {
-  // Tabs: 'all' | 'active' | 'hidden' | 'outOfStock'
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'hidden' | 'outOfStock'>('all')
+  // Tabs: 'all' | 'active' | 'violation' | 'outOfStock'
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'violation' | 'outOfStock'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
 
@@ -42,9 +44,9 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
   const getTabFilteredProducts = () => {
     switch (activeTab) {
       case 'active':
-        return products.filter((p) => p.status === 'active' && p.stock > 0)
-      case 'hidden':
-        return products.filter((p) => p.status === 'hidden')
+        return products.filter((p) => p.status === 'active' && !p.isViolated && p.stock > 0)
+      case 'violation':
+        return products.filter((p) => p.status === 'hidden' || p.isViolated)
       case 'outOfStock':
         return products.filter((p) => p.stock <= 0)
       case 'all':
@@ -151,15 +153,15 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
               activeTab === 'active' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
           >
-            Đang hoạt động ({products.filter((p) => p.status === 'active' && p.stock > 0).length})
+            Đang hoạt động ({products.filter((p) => p.status === 'active' && !p.isViolated && p.stock > 0).length})
           </button>
           <button
-            onClick={() => setActiveTab('hidden')}
+            onClick={() => setActiveTab('violation')}
             className={`px-6 py-4 text-xs font-bold border-b-2 cursor-pointer transition ${
-              activeTab === 'hidden' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+              activeTab === 'violation' ? 'border-rose-600 text-rose-600 bg-rose-50/40' : 'border-transparent text-slate-400 hover:text-rose-600'
             }`}
           >
-            Đã ẩn ({products.filter((p) => p.status === 'hidden').length})
+            🚫 Vi phạm / Tạm ẩn ({products.filter((p) => p.status === 'hidden' || p.isViolated).length})
           </button>
           <button
             onClick={() => setActiveTab('outOfStock')}
@@ -202,17 +204,38 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
                     
                     {/* Image & Name Column */}
                     <td className="p-4">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         <img
                           src={p.image || 'https://placehold.co/80x80?text=No+Image'}
                           alt={p.name}
-                          className="w-12 h-12 object-cover border border-slate-100 rounded-lg shadow-3xs shrink-0"
+                          className="w-12 h-12 object-cover border border-slate-100 rounded-lg shadow-3xs shrink-0 mt-0.5"
                         />
-                        <div className="space-y-0.5 min-w-0">
+                        <div className="space-y-0.5 min-w-0 flex-1">
                           <p className="font-bold text-slate-800 line-clamp-2 leading-snug hover:text-emerald-600 cursor-default">
                             {p.name}
                           </p>
                           <p className="text-[10px] text-slate-400 font-semibold">{p.category}</p>
+
+                          {/* Remediation Callout Box if hidden or violated */}
+                          {(p.status === 'hidden' || p.isViolated) && (
+                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 space-y-1 mt-1.5 shadow-2xs">
+                              <p className="font-extrabold text-rose-700 flex items-start gap-1">
+                                <span className="shrink-0">⚠️ Sàn yêu cầu sửa:</span>
+                                <span className="font-semibold text-rose-900">{p.violationReason || 'Ảnh và tiêu đề hoặc ngành hàng chưa đồng nhất với quy chuẩn sàn'}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-600">
+                                👉 Bấm{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => onEdit(p)}
+                                  className="text-rose-700 font-extrabold underline cursor-pointer hover:text-rose-900"
+                                >
+                                  Sửa Ngay
+                                </button>{' '}
+                                để cập nhật lại ảnh/thông tin đúng. Sau khi lưu, AI sẽ tự động duyệt lại và mở bán cho Shop!
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -243,26 +266,37 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
                     {/* Status Badge */}
                     <td className="p-4 text-center">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                        p.status === 'hidden'
-                          ? 'bg-slate-100 text-slate-500 border border-slate-200'
+                        p.status === 'hidden' || p.isViolated
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
                           : p.stock <= 0
                             ? 'bg-red-50 text-red-500 border border-red-200'
                             : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                       }`}>
-                        {p.status === 'hidden' ? 'Đã ẩn' : p.stock <= 0 ? 'Hết hàng' : 'Đang bán'}
+                        {p.status === 'hidden' || p.isViolated ? '🚫 Bị Tạm Khóa' : p.stock <= 0 ? 'Hết hàng' : 'Đang bán'}
                       </span>
                     </td>
 
                     {/* Action Buttons */}
                     <td className="p-4 text-right">
                       <div className="flex justify-end items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(p)}
-                          className="text-xs font-bold text-slate-500 hover:text-emerald-600 transition cursor-pointer"
-                        >
-                          Sửa
-                        </button>
+                        {p.status === 'hidden' || p.isViolated ? (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(p)}
+                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <span>✏️</span>
+                            <span>Sửa Ngay</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(p)}
+                            className="text-xs font-bold text-slate-500 hover:text-emerald-600 transition cursor-pointer"
+                          >
+                            Sửa
+                          </button>
+                        )}
                         
                         <span className="text-slate-200">|</span>
                         

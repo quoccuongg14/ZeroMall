@@ -214,8 +214,8 @@ export class ProductController {
   }
 
   @Put('bulk-status')
-  async bulkUpdateStatus(@Body() body: { productIds: string[]; status: 'active' | 'hidden' }) {
-    return this.productService.bulkUpdateStatus(body.productIds, body.status);
+  async bulkUpdateStatus(@Body() body: { productIds: string[]; status: 'active' | 'hidden'; reason?: string }) {
+    return this.productService.bulkUpdateStatus(body.productIds, body.status, body.reason);
   }
 
   @Put(':id')
@@ -224,8 +224,8 @@ export class ProductController {
   }
 
   @Put(':id/toggle-status')
-  async toggleStatus(@Param('id') id: string) {
-    return this.productService.toggleStatus(id);
+  async toggleStatus(@Param('id') id: string, @Body('reason') reason?: string) {
+    return this.productService.toggleStatus(id, reason);
   }
 
   @Delete(':id')

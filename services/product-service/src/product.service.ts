@@ -640,6 +640,60 @@ export class ProductService {
       data: updateData,
     });
 
+    // Tự động kiểm duyệt lại và mở khóa nếu sản phẩm bị vi phạm được Shop sửa đạt chuẩn
+    if (this.aiCategoryAuditor && (currentProduct.status === 'hidden' || currentProduct.isViolated)) {
+      try {
+        const coverImg = updateData.image || (updateData.images ? JSON.parse(updateData.images)[0] : currentProduct.image);
+        const audit = await this.aiCategoryAuditor.auditProduct({
+          productId: currentProduct.id,
+          name: updateData.name || currentProduct.name,
+          category: updateData.category || currentProduct.category,
+          image: coverImg,
+        });
+
+        if (audit && audit.isMatched) {
+          // Tự động mở khóa sản phẩm đạt chuẩn!
+          await this.prisma.product.update({
+            where: { id },
+            data: {
+              status: 'active',
+              isViolated: false,
+              violationReason: null,
+            },
+          });
+          updatedProduct.status = 'active';
+          updatedProduct.isViolated = false;
+          updatedProduct.violationReason = null;
+
+          // Bắn thông báo chúc mừng Shop
+          const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+          fetch(`${notifServiceUrl}/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: currentProduct.shopId,
+              title: '🎉 Sản phẩm đã được tự động mở bán lại!',
+              content: `Sản phẩm "${updatedProduct.name}" sau khi chỉnh sửa đã được AI đối soát đạt chuẩn ngành "${updatedProduct.category}" và tự động mở khóa hiển thị trên chợ ZeroMall.`,
+              type: 'SYSTEM',
+              metadata: { action: 'VIEW_PRODUCT', productId: id },
+            }),
+          }).catch(() => {});
+        } else if (audit && !audit.isMatched) {
+          const newReason = audit.imageFeedback || audit.titleFeedback || audit.recommendation;
+          await this.prisma.product.update({
+            where: { id },
+            data: {
+              isViolated: true,
+              violationReason: newReason,
+            },
+          });
+          updatedProduct.violationReason = newReason;
+        }
+      } catch (err: any) {
+        this.logger.warn(`AI re-audit on product update skipped: ${err.message}`);
+      }
+    }
+
     // Tự động ghi lại lịch sử nếu giá bán thay đổi qua form sửa sản phẩm
     if (dto.price !== undefined) {
       const oldPrice = Number(currentProduct.price) || 0;
@@ -670,22 +724,44 @@ export class ProductService {
     return updatedProduct;
   }
 
-  async toggleStatus(id: string) {
+  async toggleStatus(id: string, reason?: string) {
     const product = await this.findOne(id);
     const newStatus = product.status === 'active' ? 'hidden' : 'active';
     const updated = await this.prisma.product.update({
       where: { id },
-      data: { status: newStatus },
+      data: {
+        status: newStatus,
+        isViolated: newStatus === 'hidden',
+        violationReason: newStatus === 'hidden' ? (reason || 'CSKH tạm ẩn do vi phạm quy định hình ảnh hoặc ngành hàng') : null,
+      },
     });
 
     await this.redis.del(`product:detail:${id}`);
     await this.redis.delByPattern('products:*');
     await this.redis.delByPattern('categories:*');
 
+    // Tự động gửi thông báo đến Shop khi bị tạm ẩn
+    if (newStatus === 'hidden' && product.shopId) {
+      try {
+        const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+        fetch(`${notifServiceUrl}/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: product.shopId,
+            title: '🚫 Sản phẩm bị tạm ẩn do vi phạm quy định',
+            content: `Sản phẩm "${product.name}" đã bị CSKH tạm ẩn khỏi sàn do: ${reason || 'Không khớp hình ảnh hoặc sai ngành hàng'}. Vui lòng vào Kênh Người Bán -> Tab "Vi phạm / Tạm khóa" để chỉnh sửa.`,
+            type: 'SYSTEM',
+            metadata: { action: 'EDIT_PRODUCT', productId: id, shopId: product.shopId },
+          }),
+        }).catch(() => {});
+      } catch (err) {}
+    }
+
     return updated;
   }
 
-  async bulkUpdateStatus(productIds: string[], status: 'active' | 'hidden') {
+  async bulkUpdateStatus(productIds: string[], status: 'active' | 'hidden', reason?: string) {
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
       return { count: 0, updatedIds: [] };
     }
@@ -694,7 +770,12 @@ export class ProductService {
       where: {
         id: { in: productIds },
       },
-      data: { status },
+      data: {
+        status,
+        ...(status === 'hidden'
+          ? { isViolated: true, violationReason: reason || 'CSKH tạm ẩn do vi phạm quy định hình ảnh hoặc ngành hàng' }
+          : { isViolated: false, violationReason: null }),
+      },
     });
 
     for (const id of productIds) {
@@ -702,6 +783,33 @@ export class ProductService {
     }
     await this.redis.delByPattern('products:*');
     await this.redis.delByPattern('categories:*');
+
+    // Tự động bắn thông báo vi phạm đến từng Shop
+    if (status === 'hidden') {
+      try {
+        const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+        const productsInfo = await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, shopId: true },
+        });
+
+        for (const p of productsInfo) {
+          if (p.shopId) {
+            fetch(`${notifServiceUrl}/notifications`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: p.shopId,
+                title: '🚫 Sản phẩm bị tạm ẩn do vi phạm quy định',
+                content: `Sản phẩm "${p.name}" (Mã: ${p.id}) đã bị tạm ẩn khỏi sàn do: ${reason || 'Không khớp hình ảnh hoặc sai ngành hàng'}. Vui lòng vào Kênh Người Bán -> Tab "Vi phạm / Tạm khóa" để cập nhật lại.`,
+                type: 'SYSTEM',
+                metadata: { action: 'EDIT_PRODUCT', productId: p.id, shopId: p.shopId },
+              }),
+            }).catch(() => {});
+          }
+        }
+      } catch (err) {}
+    }
 
     return { count: updated.count, updatedIds: productIds, status };
   }
