@@ -325,7 +325,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
 
   const menuItems = [
     { id: 'SHOPS', label: 'Quản Lý & Khóa Shop', icon: '🏪' },
-    { id: 'CATEGORY_AUDIT', label: 'Kiểm Tra Ngành Hàng (AI)', icon: '🤖' },
+    { id: 'CATEGORY_AUDIT', label: 'Kiểm Duyệt Sản Phẩm (Trust & Safety)', icon: '🛡️' },
     { id: 'WITHDRAWALS', label: 'Phê duyệt rút tiền', icon: '💰' },
     { id: 'DISPUTES', label: 'Tranh chấp khiếu nại', icon: '⚖️' },
     { id: 'ORDERS', label: 'Lịch sử đơn hàng', icon: '📋' },

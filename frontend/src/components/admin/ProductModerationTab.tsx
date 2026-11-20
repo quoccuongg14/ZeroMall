@@ -277,24 +277,24 @@ export const ProductModerationTab: React.FC<ProductModerationTabProps> = ({ trig
           </div>
         </div>
 
-        {/* Informational Banner: AI Category Audit Handled by CSKH */}
-        <div className="mt-3 p-3.5 bg-indigo-50/80 border border-indigo-100 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl shrink-0">🤖</span>
+        {/* Informational Banner: Handed over to CSKH Trust & Safety Center */}
+        <div className="mt-3 p-4 bg-emerald-50/90 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl shrink-0">🛡️</span>
             <div>
-              <p className="text-xs font-bold text-indigo-950">
-                Nghiệp vụ AI rà soát ngành hàng & đối soát ảnh đã chuyển sang bộ phận CSKH
+              <p className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                Nghiệp vụ Kiểm Duyệt Sản Phẩm & An Toàn đã chuyển giao sang Cổng CSKH (Trust & Safety)
               </p>
-              <p className="text-[11px] text-indigo-700 font-medium">
-                Bộ phận Chăm Sóc Khách Hàng phụ trách rà soát sản phẩm vi phạm, 1-Click sửa ngành hàng và gửi thông báo nhắc nhở Shop hàng ngày.
+              <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
+                Nhân viên CSKH chịu trách nhiệm rà soát AI, phát hiện hàng cấm/hàng giả, delist sản phẩm và áp dụng Điểm Phạt Sao Quả Tạ đối với gian hàng vi phạm.
               </p>
             </div>
           </div>
           <a
             href="/cs-support?tab=category-audit"
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0 shadow-2xs"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 shrink-0 shadow-3xs"
           >
-            <span>🎧 Đi Đến Cổng CSKH</span>
+            <span>🎧 Mở Cổng CSKH (Trust & Safety)</span>
             <span>→</span>
           </a>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
+import { CsProductModerationSubTab } from './CsProductModerationSubTab'
 import {
   fetchBatchAuditScan,
   fetchViolationQueue,
@@ -14,6 +15,7 @@ interface CsCategoryAuditTabProps {
 }
 
 export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ triggerAuditLog }) => {
+  const [activeDomain, setActiveDomain] = useState<'AI_CATEGORY_AUDIT' | 'POLICY_MODERATION'>('AI_CATEGORY_AUDIT')
   const [batchAudit, setBatchAudit] = useState<BatchAuditStats | null>(null)
   const [isAuditing, setIsAuditing] = useState(false)
   const [fixingId, setFixingId] = useState<string | null>(null)
@@ -284,8 +286,55 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ triggerA
 
   return (
     <div className="space-y-6">
-      {/* 1. Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white rounded-2xl p-6 shadow-sm space-y-4">
+      {/* Top Segmented Domain Switcher (Trung Tâm Kiểm Duyệt Nội Dung & An Toàn) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200/80 p-2.5 rounded-2xl shadow-2xs">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveDomain('AI_CATEGORY_AUDIT')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+              activeDomain === 'AI_CATEGORY_AUDIT'
+                ? 'bg-emerald-600 text-white shadow-3xs'
+                : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200'
+            }`}
+          >
+            <span>🤖</span>
+            <span>Rà Soát AI (Ảnh & Ngành Hàng)</span>
+            {activeViolationsCount > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeDomain === 'AI_CATEGORY_AUDIT' ? 'bg-white text-emerald-800' : 'bg-rose-500 text-white'
+              }`}>
+                {activeViolationsCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveDomain('POLICY_MODERATION')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+              activeDomain === 'POLICY_MODERATION'
+                ? 'bg-rose-600 text-white shadow-3xs'
+                : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200'
+            }`}
+          >
+            <span>🚫</span>
+            <span>Chính Sách, Từ Cấm & Báo Cáo</span>
+          </button>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-bold pr-3">
+          <span>🛡️</span>
+          <span>ZeroMall Trust & Safety Center</span>
+        </div>
+      </div>
+
+      {activeDomain === 'POLICY_MODERATION' ? (
+        <CsProductModerationSubTab triggerAuditLog={triggerAuditLog} />
+      ) : (
+        <>
+          {/* 1. Header Banner */}
+          <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -1009,6 +1058,8 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ triggerA
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
     </div>
