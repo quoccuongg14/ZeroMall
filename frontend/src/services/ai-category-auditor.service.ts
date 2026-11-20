@@ -21,7 +21,7 @@ export interface AuditCategoryResult {
   detectedVisual?: string;
   titleFeedback: string;
   imageFeedback?: string;
-  actionRequired: 'NONE' | 'CHANGE_CATEGORY' | 'REPLACE_IMAGE' | 'UPDATE_TITLE';
+  actionRequired: 'NONE' | 'CHANGE_CATEGORY' | 'REPLACE_IMAGE' | 'UPDATE_TITLE' | 'TAKEDOWN';
   recommendation: string;
   source: string;
 }
@@ -45,6 +45,7 @@ export interface BatchAuditStats {
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
+  prohibitedCount?: number;
   flaggedProducts: ScannedProductItem[];
   allProducts: ScannedProductItem[];
 }

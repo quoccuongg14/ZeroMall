@@ -18,7 +18,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
   const pageSize = 50
   
   // Filter & Search (Mặc định: Chỉ hiện các sản phẩm Cần Xử Lý / Vi Phạm để CSKH tập trung thao tác)
-  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'MATCHED'>('FLAGGED')
+  const [filterIssue, setFilterIssue] = useState<'ALL' | 'FLAGGED' | 'WRONG_CATEGORY' | 'IMAGE_MISMATCH' | 'PROHIBITED' | 'MATCHED'>('FLAGGED')
   const [searchQuery, setSearchQuery] = useState('')
   
   // Shops map: id -> { id, name, ownerId, phoneNumber }
@@ -184,6 +184,7 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
     if (filterIssue === 'FLAGGED' && item.auditResult?.isMatched) return false
     if (filterIssue === 'WRONG_CATEGORY' && item.auditResult?.issueType !== 'WRONG_CATEGORY') return false
     if (filterIssue === 'IMAGE_MISMATCH' && item.auditResult?.issueType !== 'IMAGE_MISMATCH') return false
+    if (filterIssue === 'PROHIBITED' && item.auditResult?.issueType !== 'PROHIBITED_ITEM' && !item.auditResult?.isProhibited) return false
     if (filterIssue === 'MATCHED' && !item.auditResult?.isMatched) return false
 
     // 2. Search query
@@ -301,6 +302,21 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                 {batchAudit?.imageMismatchCount || 0}
               </span>
             </button>
+            {Boolean(batchAudit?.prohibitedCount && batchAudit.prohibitedCount > 0) && (
+              <button
+                onClick={() => setFilterIssue('PROHIBITED')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  filterIssue === 'PROHIBITED'
+                    ? 'bg-red-700 text-white shadow-xs'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                }`}
+              >
+                <span>🚫 Vi phạm hàng cấm</span>
+                <span className="px-1.5 py-0.2 bg-red-700/30 rounded-full text-[10px]">
+                  {batchAudit?.prohibitedCount}
+                </span>
+              </button>
+            )}
             <button
               onClick={() => setFilterIssue('MATCHED')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
@@ -381,7 +397,9 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                   const shop = shopsMap[item.shopId]
                   const shopName = shop?.name || `Shop #${item.shopId?.slice(0, 8)}`
                   const res = item.auditResult
-                  const isImageMismatch = res?.issueType === 'IMAGE_MISMATCH'
+                  const isProhibited = res?.issueType === 'PROHIBITED_ITEM' || res?.isProhibited
+                  const isImageMismatch = !isProhibited && res?.issueType === 'IMAGE_MISMATCH'
+                  const isWrongCategory = !isProhibited && res?.issueType === 'WRONG_CATEGORY'
                   const isHidden = item.status === 'hidden'
 
                   return (
@@ -442,6 +460,10 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                           <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
                             ✅ {item.category}
                           </span>
+                        ) : isProhibited ? (
+                          <span className="inline-block px-2.5 py-1 rounded-lg bg-red-100 border border-red-300 text-red-800 text-[11px] font-black">
+                            🚫 {item.category}
+                          </span>
                         ) : (
                           <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
                             ❌ {item.category}
@@ -465,6 +487,27 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                               {res?.recommendation || 'Hình ảnh và tiêu đề hoàn toàn đồng nhất với phân loại ngành hàng.'}
                             </p>
                           </div>
+                        ) : isProhibited ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-red-700 text-white flex items-center gap-1 shadow-xs">
+                                <span>🚫</span>
+                                <span>VI PHẠM HÀNG CẤM</span>
+                              </span>
+                              <span className="text-[10px] text-red-600 font-bold">
+                                Độ tin cậy: {res?.confidence || 98}%
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-red-900 font-bold leading-relaxed bg-red-50 p-2 rounded-lg border border-red-200">
+                              {res?.recommendation || res?.imageFeedback || `[Cảnh báo an toàn] Hình ảnh nhận diện là ${res?.prohibitedLabel || 'vật phẩm cấm kinh doanh'}.`}
+                            </p>
+                            <p className="text-[11px] text-red-700 font-bold flex items-center gap-1.5">
+                              <span>👉 Biện pháp xử lý:</span>
+                              <span className="px-2 py-0.5 bg-red-100 border border-red-300 rounded-md font-extrabold text-red-800">
+                                Khóa sản phẩm khẩn cấp & Cảnh cáo vi phạm chính sách sàn
+                              </span>
+                            </p>
+                          </div>
                         ) : (
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2">
@@ -482,8 +525,8 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                             <p className="text-[11px] text-slate-700 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">
                               {res?.imageFeedback || res?.recommendation}
                             </p>
-                            {/* Đề xuất chuyển ngành CHỈ hiển thị khi SAI NGÀNH HÀNG */}
-                            {!isImageMismatch && res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                            {/* Đề xuất chuyển ngành CHỈ hiển thị khi SAI NGÀNH HÀNG và KHÔNG PHẢI HÀNG CẤM */}
+                            {isWrongCategory && res?.suggestedCategory && res.suggestedCategory !== item.category && res.suggestedCategory !== 'Hàng Cấm Kinh Doanh' && (
                               <p className="text-[11px] text-indigo-700 font-bold flex items-center gap-1.5">
                                 <span>👉 Đề xuất chuyển sang:</span>
                                 <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-md font-extrabold text-indigo-800">
@@ -513,10 +556,38 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                               <span>🛡️</span>
                               <span>Đã Duyệt Đạt Chuẩn</span>
                             </span>
+                          ) : isProhibited ? (
+                            <>
+                              {/* Nút Khóa Khẩn Cấp dành riêng cho Hàng Cấm */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleProductStatus(item)}
+                                disabled={hidingId === item.id}
+                                className={`px-3 py-1.5 rounded-xl text-[11px] font-black transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs ${
+                                  isHidden
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    : 'bg-red-600 hover:bg-red-700 text-white'
+                                }`}
+                                title="Khóa sản phẩm vi phạm hàng cấm ngay lập tức"
+                              >
+                                <span>{isHidden ? '👁️' : '🚫'}</span>
+                                <span>{isHidden ? 'Mở Khóa Lại' : 'Khóa Khẩn Cấp'}</span>
+                              </button>
+
+                              {/* Gửi cảnh báo vi phạm chính sách hàng cấm */}
+                              <button
+                                type="button"
+                                onClick={() => openWarningModal(item)}
+                                className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
+                              >
+                                <span>⚠️</span>
+                                <span>Cảnh Báo Shop</span>
+                              </button>
+                            </>
                           ) : (
                             <>
-                              {/* 1-Click Fix Category: CHỈ HIỂN THỊ KHI SAI NGÀNH HÀNG (WRONG_CATEGORY) */}
-                              {!isImageMismatch && res?.suggestedCategory && res?.suggestedCategory !== item.category && (
+                              {/* 1-Click Fix Category: CHỈ HIỂN THỊ KHI SAI NGÀNH HÀNG (WRONG_CATEGORY) VÀ KHÔNG PHẢI HÀNG CẤM */}
+                              {isWrongCategory && res?.suggestedCategory && res.suggestedCategory !== item.category && res.suggestedCategory !== 'Hàng Cấm Kinh Doanh' && (
                                 <button
                                   type="button"
                                   onClick={() => handleAutoFixCategory(item.id, res.suggestedCategory, item.name)}
@@ -542,23 +613,23 @@ export const CsCategoryAuditTab: React.FC<CsCategoryAuditTabProps> = ({ user, tr
                                 <span>🔔</span>
                                 <span>{isImageMismatch ? 'Cảnh Báo Đổi Ảnh' : 'Nhắc Nhở Shop'}</span>
                               </button>
+
+                              {/* Tạm ẩn / Mở khóa sản phẩm */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleProductStatus(item)}
+                                disabled={hidingId === item.id}
+                                className={`px-3 py-1 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                  isHidden
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    : 'bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600'
+                                }`}
+                              >
+                                <span>{isHidden ? '👁️' : '🚫'}</span>
+                                <span>{isHidden ? 'Mở Khóa Hiển Thị' : 'Tạm Ẩn Khỏi Sàn'}</span>
+                              </button>
                             </>
                           )}
-
-                          {/* Tạm ẩn / Mở khóa sản phẩm */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleProductStatus(item)}
-                            disabled={hidingId === item.id}
-                            className={`px-3 py-1 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1 ${
-                              isHidden
-                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                : 'bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600'
-                            }`}
-                          >
-                            <span>{isHidden ? '👁️' : '🚫'}</span>
-                            <span>{isHidden ? 'Mở Khóa Hiển Thị' : 'Tạm Ẩn Khỏi Sàn'}</span>
-                          </button>
                         </div>
                       </td>
                     </tr>

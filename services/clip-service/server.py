@@ -204,32 +204,32 @@ PROHIBITED_CONCEPTS = {
     "Vũ khí / Súng đạn": {
         "prompt": "gun handgun pistol rifle shotgun assault firearm weapon ammunition military weapon revolver sniper firearm súng súng ngắn súng trường vũ khí",
         "label": "Súng / Vũ khí sát thương (Firearms/Weapons)",
-        "threshold": 0.22
+        "threshold": 0.30
     },
     "Vũ khí lạnh / Kiếm / Dao găm": {
         "prompt": "sword katana samurai combat blade tactical dagger hunting knife switchblade weapon bayonet kiếm dao găm vũ khí thô sơ",
         "label": "Kiếm / Dao găm / Vũ khí thô sơ (Swords/Blades)",
-        "threshold": 0.22
+        "threshold": 0.30
     },
     "Chất cấm / Cần sa / Ma túy": {
         "prompt": "cannabis marijuana weed dried drug narcotic pills ecstasy heroin substance meth thuốc phiện cần sa ma túy",
         "label": "Cần sa / Ma túy / Chất kích thích (Cannabis/Drugs)",
-        "threshold": 0.22
+        "threshold": 0.30
     },
     "Pháo nổ / Thuốc nổ": {
         "prompt": "firecrackers fireworks pyrotechnics explosives explosive device dynamite pháo nổ pháo hoa nổ thuốc nổ",
         "label": "Pháo nổ / Thuốc nổ (Fireworks/Explosives)",
-        "threshold": 0.22
+        "threshold": 0.30
     },
     "Thiết bị quay lén giấu kín": {
         "prompt": "hidden spy camera pinhole spy cam covert surveillance camera camera quay lén ngụy trang",
         "label": "Camera quay lén ngụy trang (Spy Cameras)",
-        "threshold": 0.22
+        "threshold": 0.30
     },
     "Tiền polymer giả": {
         "prompt": "counterfeit currency fake banknotes fake money polymer bills tiền polymer giả tiền giả",
         "label": "Tiền polymer giả (Counterfeit Currency)",
-        "threshold": 0.22
+        "threshold": 0.30
     }
 }
 
@@ -326,7 +326,18 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     """
     img_emb = model.encode(pil_img)
 
+    # Tính độ khớp với các danh mục ngành hàng tiêu chuẩn
+    sims = util.cos_sim(img_emb, CAT_EMBEDDINGS)[0]
+    best_idx = sims.argmax().item()
+    best_cat = CAT_KEYS[best_idx]
+    cat_info = CANONICAL_CATEGORIES[best_cat]
+    max_cat_sim = float(sims[best_idx].item())
+    visual_confidence = round(max_cat_sim * 100, 1)
+
     # 0. QUÉT AN TOÀN THỊ GIÁC: PHÁT HIỆN HÀNG CẤM (Vũ khí, Súng, Kiếm, Cần sa...)
+    # Chỉ cảnh báo hàng cấm khi độ tương đồng với vật phẩm cấm đạt ngưỡng cao (>= threshold)
+    # VÀ vượt trội hơn so với các ngành hàng thương mại hợp pháp (max_proh_sim > max_cat_sim + 0.03)
+    # Tránh tuyệt đối việc nếp gấp quần áo/váy hoa bị nhận diện nhầm thành vũ khí!
     prohibited_sims = util.cos_sim(img_emb, PROHIBITED_EMBEDDINGS)[0]
     best_proh_idx = prohibited_sims.argmax().item()
     max_proh_sim = float(prohibited_sims[best_proh_idx].item())
@@ -335,15 +346,9 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
     is_prohibited = False
     prohibited_label = ""
-    if max_proh_sim >= proh_info["threshold"]:
+    if max_proh_sim >= proh_info["threshold"] and max_proh_sim > (max_cat_sim + 0.03):
         is_prohibited = True
         prohibited_label = proh_info["label"]
-
-    sims = util.cos_sim(img_emb, CAT_EMBEDDINGS)[0]
-    best_idx = sims.argmax().item()
-    best_cat = CAT_KEYS[best_idx]
-    cat_info = CANONICAL_CATEGORIES[best_cat]
-    visual_confidence = round(float(sims[best_idx]) * 100, 1)
 
     title_sim = 0.0
     is_mismatch = False
@@ -648,7 +653,7 @@ class ClipHandler(BaseHTTPRequestHandler):
                         "minSimilarity": round(min_sim, 4),
                         "detectedVisual": worst_item["detectedVisual"] if worst_item else "Sản phẩm",
                         "suggestedTitle": worst_item["suggestedTitle"] if worst_item else name,
-                        "suggestedCategory": "Hàng Cấm Kinh Doanh" if any_prohibited else (worst_item["suggestedCategory"] if worst_item else category),
+                        "suggestedCategory": (worst_item["suggestedCategory"] if worst_item else category) if not any_prohibited else category,
                         "visualConfidence": worst_item["visualConfidence"] if worst_item else 95.0,
                         "similarity": round(min_sim, 4),
                         "reason": agg_reason,

@@ -26,7 +26,7 @@ export interface AuditCategoryResult {
   detectedVisual?: string;
   titleFeedback: string;
   imageFeedback?: string;
-  actionRequired: 'NONE' | 'CHANGE_CATEGORY' | 'REPLACE_IMAGE' | 'UPDATE_TITLE';
+  actionRequired: 'NONE' | 'CHANGE_CATEGORY' | 'REPLACE_IMAGE' | 'UPDATE_TITLE' | 'TAKEDOWN';
   recommendation: string;
   source: 'ai-multimodal-engine' | 'gemini-vision' | 'catalog-rules' | 'local-clip-engine' | 'local-ai-engine';
 }
@@ -50,6 +50,7 @@ export interface BatchAuditStats {
   matchedCount: number;
   wrongCategoryCount: number;
   imageMismatchCount: number;
+  prohibitedCount?: number;
   flaggedProducts: ScannedProductItem[];
   allProducts: ScannedProductItem[];
 }
@@ -175,11 +176,11 @@ export class AiCategoryAuditorService {
         currentCategory: currentCat,
         suggestedTitle: visualCheck.suggestedTitle,
         detectedVisual: visualCheck.detectedVisual,
-        suggestedCategory: 'Hàng Cấm Kinh Doanh',
+        suggestedCategory: currentCat, // Tuyệt đối KHÔNG gán 'Hàng Cấm Kinh Doanh' làm ngành hàng!
         titleFeedback: rawName ? `Tiêu đề bạn nhập là "${rawName}".` : `Chưa nhập tiêu đề sản phẩm.`,
         imageFeedback: visualCheck.reason || `Ảnh là "${visualCheck.detectedVisual}".`,
-        actionRequired: 'REPLACE_IMAGE',
-        recommendation: `🚫 CẢNH BÁO HÀNG CẤM: Hình ảnh chứa ${visualCheck.prohibitedLabel || 'vật phẩm cấm kinh doanh'}. Sàn ZeroMall nghiêm cấm tuyệt đối đăng tải!`,
+        actionRequired: 'TAKEDOWN',
+        recommendation: `🚫 CẢNH BÁO HÀNG CẤM: Hình ảnh chứa ${visualCheck.prohibitedLabel || 'vật phẩm cấm kinh doanh'}. Sàn ZeroMall nghiêm cấm tuyệt đối đăng tải! Khuyến nghị: Khóa và Gỡ bỏ sản phẩm ngay lập tức.`,
         source: 'local-clip-engine',
       };
     }
@@ -219,10 +220,10 @@ export class AiCategoryAuditorService {
             issueType: 'PROHIBITED_ITEM',
             confidence: textCheck.confidence || 98,
             currentCategory: currentCat,
-            suggestedCategory: 'Hàng Cấm Kinh Doanh',
+            suggestedCategory: currentCat, // Tuyệt đối KHÔNG gán 'Hàng Cấm Kinh Doanh' làm ngành hàng!
             titleFeedback: `🚫 VI PHẠM CHÍNH SÁCH: ${textCheck.reason}`,
-            actionRequired: 'REPLACE_IMAGE',
-            recommendation: textCheck.suggestion || 'Sản phẩm vi phạm quy định kinh doanh hàng cấm/lách luật. ZeroMall nghiêm cấm tuyệt đối đăng tải!',
+            actionRequired: 'TAKEDOWN',
+            recommendation: textCheck.suggestion || 'Sản phẩm vi phạm quy định kinh doanh hàng cấm/lách luật. ZeroMall nghiêm cấm tuyệt đối đăng tải! Khuyến nghị: Khóa và Gỡ bỏ sản phẩm ngay lập tức.',
             source: (textCheck.source as any) || 'local-ai-engine',
           };
         }
@@ -326,6 +327,7 @@ export class AiCategoryAuditorService {
     let matchedCount = 0;
     let wrongCategoryCount = 0;
     let imageMismatchCount = 0;
+    let prohibitedCount = 0;
     const allProducts: BatchAuditStats['allProducts'] = [];
     const flaggedProducts: BatchAuditStats['flaggedProducts'] = [];
 
@@ -361,7 +363,8 @@ export class AiCategoryAuditorService {
         allProducts.push(item);
 
         if (!res.audit.isMatched) {
-          if (res.audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
+          if (res.audit.issueType === 'PROHIBITED_ITEM' || res.audit.isProhibited) prohibitedCount++;
+          else if (res.audit.issueType === 'IMAGE_MISMATCH') imageMismatchCount++;
           else if (res.audit.issueType === 'WRONG_CATEGORY') wrongCategoryCount++;
 
           flaggedProducts.push(item);
@@ -382,6 +385,7 @@ export class AiCategoryAuditorService {
       matchedCount,
       wrongCategoryCount,
       imageMismatchCount,
+      prohibitedCount,
       flaggedProducts,
       allProducts,
     };
@@ -1150,7 +1154,7 @@ export class AiCategoryAuditorService {
             prohibitedLabel: clipRes.prohibitedLabel,
             detectedVisual: clipRes.detectedVisual || clipRes.prohibitedLabel || 'Vật phẩm cấm',
             suggestedTitle: clipRes.suggestedTitle || rawName,
-            suggestedCategory: 'Hàng Cấm Kinh Doanh',
+            suggestedCategory: category || 'Thời Trang Nam',
             reason: clipRes.reason || `[Visual Safety Guard] Ảnh phát hiện ${clipRes.prohibitedLabel} - thuộc danh mục cấm kinh doanh trên sàn!`,
             confidence: clipRes.confidence || 98,
             source: 'local-clip-engine',
