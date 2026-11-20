@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { useSearchParams } from 'react-router-dom'
-import { UsersTab } from '../../components/admin/UsersTab'
-import { ShopsTab } from '../../components/admin/ShopsTab'
 import { CategoriesTab } from '../../components/admin/CategoriesTab'
-import { ProductModerationTab } from '../../components/admin/ProductModerationTab'
 import { PlatformVouchersTab } from '../../components/admin/PlatformVouchersTab'
 import { FlashSaleTab } from '../../components/admin/FlashSaleTab'
 import { CsStaffTab } from '../../components/admin/CsStaffTab'
@@ -12,7 +9,6 @@ import { SystemReportsTab } from '../../components/admin/SystemReportsTab'
 import { CommissionSettingTab } from '../../components/admin/CommissionSettingTab'
 import { AuditLogsTab } from '../../components/admin/AuditLogsTab'
 import AdminPriceAnalyticsTab from '../../components/admin/AdminPriceAnalyticsTab'
-import { CsLiveChatTab } from '../../components/admin/CsLiveChatTab'
 import { AiEvaluationStudioTab } from '../../components/admin/AiEvaluationStudioTab'
 import { BannersTab } from '../../components/admin/banners/BannersTab'
 
@@ -27,7 +23,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onLogout,
   onBackToHome
 }) => {
-  const [shops, setShops] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [platformVouchers, setPlatformVouchers] = useState<any[]>([])
@@ -77,7 +72,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       case 'PRICE_ANALYTICS': return 'price-analytics';
       case 'AI_EVALUATION': return 'ai-evaluation';
       case 'BANNERS': return 'banners';
-      default: return 'users';
+      default: return 'reports';
     }
   }
 
@@ -90,7 +85,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const parsed = getTabFromParam(param);
       if (parsed) return parsed;
     }
-    return 'USERS';
+    return 'SYSTEM_REPORTS';
   })
 
   const triggerAuditLog = async (action: string) => {
@@ -101,17 +96,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         body: JSON.stringify({ user: user?.email || 'Unknown Admin', action })
       })
     } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const fetchShops = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/shops`)
-      if (!response.ok) throw new Error('Không thể tải danh sách cửa hàng')
-      const data = await response.json()
-      setShops(data)
-    } catch (err: any) {
       console.error(err)
     }
   }
@@ -208,11 +192,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   }
 
   useEffect(() => {
-    if (activePortalTab === 'MANAGE_SHOPS') {
-      fetchShops()
-    } else if (activePortalTab === 'USERS') {
-      fetchUsers()
-    } else if (activePortalTab === 'CATEGORIES') {
+    if (activePortalTab === 'CATEGORIES') {
       fetchCategories()
     } else if (activePortalTab === 'PLATFORM_VOUCHERS') {
       loadVouchers()
@@ -223,7 +203,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     } else if (activePortalTab === 'AUDIT_LOGS') {
       loadAuditLogs()
     } else if (activePortalTab === 'SYSTEM_REPORTS') {
-      fetchShops()
       fetchUsers()
       loadRevenue()
       loadCommissionRate()
@@ -248,35 +227,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   const menuGroups = [
     {
-      groupTitle: '🛡️ Bảo Mật & Phân Quyền',
-      items: [
-        { id: 'MANAGE_CS_STAFF', label: 'Nhân viên Platform CS', icon: '🎧' },
-        { id: 'AUDIT_LOGS', label: 'Lịch sử thao tác (Audit)', icon: '📜' },
-      ],
-    },
-    {
       groupTitle: '💰 Tài Chính & Doanh Thu Sàn',
       items: [
-        { id: 'SYSTEM_REPORTS', label: 'Báo cáo hệ thống & GMV', icon: '📊' },
+        { id: 'SYSTEM_REPORTS', label: 'Báo cáo doanh thu & GMV', icon: '📊' },
         { id: 'PRICE_ANALYTICS', label: 'Biến động & Giá vốn', icon: '📈' },
         { id: 'COMMISSION_SETTING', label: 'Cài đặt chiết khấu sàn', icon: '⚙️' },
       ],
     },
     {
-      groupTitle: '⚙️ Thiết Lập Nền Tảng',
+      groupTitle: '⚙️ Cấu Hình & Chính Sách Sàn',
       items: [
         { id: 'CATEGORIES', label: 'Cây danh mục sàn', icon: '🗂️' },
         { id: 'PLATFORM_VOUCHERS', label: 'Voucher toàn sàn', icon: '🎟️' },
         { id: 'FLASH_SALE', label: 'Cấu hình giờ vàng Flash Sale', icon: '⚡' },
         { id: 'BANNERS', label: 'Quản Lý Banner Sàn', icon: '🖼️' },
-        { id: 'MANAGE_SHOPS', label: 'Giám sát Shop cấp cao', icon: '🏪' },
-        { id: 'USERS', label: 'Giám sát User cấp cao', icon: '👥' },
-        { id: 'VIOLATIONS', label: 'Kiểm duyệt SP (Tổng quan)', icon: '📦' },
       ],
     },
     {
-      groupTitle: '🔬 Phòng Thí Nghiệm AI',
+      groupTitle: '🛡️ Bảo Mật & Phòng Thí Nghiệm',
       items: [
+        { id: 'MANAGE_CS_STAFF', label: 'Nhân viên Platform CS', icon: '🎧' },
+        { id: 'AUDIT_LOGS', label: 'Lịch sử thao tác (Audit)', icon: '📜' },
         { id: 'AI_EVALUATION', label: 'Đánh giá AI NCKH (Likert)', icon: '🔬' },
       ],
     },
@@ -301,6 +272,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 Admin Control
               </span>
             </div>
+          </div>
+
+          {/* Quick Jump to CS Portal */}
+          <div className="px-3 pt-3 shrink-0">
+            <a
+              href="/cs-support"
+              className="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-3xs hover:opacity-95 transition group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎧</span>
+                <div className="text-left">
+                  <p className="text-[11px] font-black leading-tight">Cổng CSKH & Vận Hành</p>
+                  <p className="text-[9px] text-emerald-100 font-semibold">Khóa Shop, User & Duyệt SP</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold group-hover:translate-x-0.5 transition">↗</span>
+            </a>
           </div>
 
           {/* Navigation Links Grouped */}
@@ -362,6 +350,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            <a
+              href="/cs-support"
+              className="text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 transition flex items-center gap-1.5 cursor-pointer px-3.5 py-1.5 rounded-lg shadow-3xs"
+              title="Chuyển sang Cổng CSKH & Vận hành sàn"
+            >
+              <span>🎧</span> Cổng CSKH & Tuân Thủ
+            </a>
             <button
               onClick={() => {
                 const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
@@ -392,19 +387,99 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* Content Container */}
         <main className="p-8 flex-1">
           {activePortalTab === 'USERS' && (
-            <UsersTab users={users} fetchUsers={fetchUsers} triggerAuditLog={triggerAuditLog} />
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-10 shadow-2xs max-w-xl mx-auto my-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mx-auto border border-emerald-100">
+                👥
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900 uppercase">Nghiệp Vụ Quản Lý & Khóa User Đã Chuyển Sang CSKH</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Nhân viên CSKH chịu trách nhiệm tra cứu lịch sử mua hàng, tỷ lệ bom hàng và thực hiện tạm khóa tài khoản gian lận tại CS Portal.
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href="/cs-support?tab=users"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-3xs transition"
+                >
+                  <span>🎧 Mở Quản Lý User trên Cổng CSKH</span>
+                  <span>→</span>
+                </a>
+              </div>
+            </div>
           )}
 
           {activePortalTab === 'MANAGE_SHOPS' && (
-            <ShopsTab shops={shops} fetchShops={fetchShops} triggerAuditLog={triggerAuditLog} />
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-10 shadow-2xs max-w-xl mx-auto my-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mx-auto border border-emerald-100">
+                🏪
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900 uppercase">Nghiệp Vụ Quản Lý & Khóa Shop Đã Chuyển Sang CSKH</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Trung tâm Tuân thủ Cửa hàng (Shop Compliance Hub) trên CS Portal phụ trách phê duyệt, tạm khóa vi phạm kèm đồng hồ đếm ngược và mở khóa shop.
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href="/cs-support?tab=shops"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-3xs transition"
+                >
+                  <span>🎧 Mở Quản Lý Shop trên Cổng CSKH</span>
+                  <span>→</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {activePortalTab === 'VIOLATIONS' && (
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-10 shadow-2xs max-w-xl mx-auto my-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-3xl mx-auto border border-rose-100">
+                🛡️
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900 uppercase">Nghiệp Vụ Kiểm Duyệt Sản Phẩm Đã Chuyển Sang CSKH</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Trung tâm Kiểm duyệt & An Toàn (Trust & Safety Center) trên CS Portal phụ trách rà soát AI, xử lý từ cấm, hàng giả và áp dụng Điểm Phạt Sao Quả Tạ.
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href="/cs-support?tab=category-audit"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-xs shadow-3xs transition"
+                >
+                  <span>🎧 Mở Trust & Safety trên Cổng CSKH</span>
+                  <span>→</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {activePortalTab === 'LIVE_CHAT' && (
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-10 shadow-2xs max-w-xl mx-auto my-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mx-auto border border-indigo-100">
+                💬
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900 uppercase">Nghiệp Vụ Live Chat Đã Chuyển Sang CSKH</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Nhân viên CSKH trực tuyến phụ trách tiếp nhận và phản hồi tin nhắn hỗ trợ của khách hàng trên CS Portal.
+                </p>
+              </div>
+              <div className="pt-2">
+                <a
+                  href="/cs-support?tab=live-chat"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-xs shadow-3xs transition"
+                >
+                  <span>🎧 Mở Live Chat trên Cổng CSKH</span>
+                  <span>→</span>
+                </a>
+              </div>
+            </div>
           )}
 
           {activePortalTab === 'CATEGORIES' && (
             <CategoriesTab categories={categories} fetchCategories={fetchCategories} triggerAuditLog={triggerAuditLog} />
-          )}
-
-          {activePortalTab === 'VIOLATIONS' && (
-            <ProductModerationTab triggerAuditLog={triggerAuditLog} />
           )}
 
           {activePortalTab === 'PLATFORM_VOUCHERS' && (
@@ -417,10 +492,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
           {activePortalTab === 'MANAGE_CS_STAFF' && (
             <CsStaffTab csStaff={csStaff} fetchCsStaff={fetchCsStaff} triggerAuditLog={triggerAuditLog} />
-          )}
-
-          {activePortalTab === 'LIVE_CHAT' && (
-            <CsLiveChatTab user={user} />
           )}
 
           {activePortalTab === 'SYSTEM_REPORTS' && (
