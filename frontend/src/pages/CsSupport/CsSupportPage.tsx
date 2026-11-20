@@ -21,7 +21,6 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
   onBackToHome
 }) => {
   const [shops, setShops] = useState<any[]>([])
-  const [statusFilter, setStatusFilter] = useState<string>('PENDING_APPROVAL')
   const [withdrawals, setWithdrawals] = useState<any[]>([])
   const [withdrawLoading, setWithdrawLoading] = useState(false)
   const [disputes, setDisputes] = useState<any[]>([])
@@ -33,7 +32,6 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
 
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -89,10 +87,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
   const fetchShops = async () => {
     setLoading(true)
     try {
-      const url = statusFilter === 'ALL' 
-        ? `${API_BASE_URL}/auth/shops`
-        : `${API_BASE_URL}/auth/shops?status=${statusFilter}`
-      const response = await fetch(url)
+      const response = await fetch(`${API_BASE_URL}/auth/shops`)
       if (!response.ok) throw new Error('Không thể tải danh sách cửa hàng')
       const data = await response.json()
       setShops(data)
@@ -272,7 +267,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
     } else if (activePortalTab === 'ORDERS') {
       fetchReportedOrders()
     }
-  }, [statusFilter, activePortalTab])
+  }, [activePortalTab])
 
   // Lắng nghe Realtime các khiếu nại / tranh chấp mới hoặc cập nhật từ Supabase
   useEffect(() => {
@@ -300,27 +295,6 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
     setSearchParams({ tab: getParamFromTab(activePortalTab) }, { replace: true })
   }, [activePortalTab, setSearchParams])
 
-  const handleApprove = async (shopId: string, status: string) => {
-    setActionLoadingId(shopId)
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/shops/${shopId}/approve`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      })
-
-      if (!response.ok) throw new Error('Không thể cập nhật trạng thái cửa hàng')
-
-      await triggerAuditLog(`${status === 'APPROVED' ? 'Phê duyệt' : 'Từ chối'} cửa hàng ID ${shopId}`)
-      alert(`Đã ${status === 'APPROVED' ? 'phê duyệt' : 'từ chối'} thành công!`)
-      fetchShops()
-    } catch (err: any) {
-      alert('Lỗi: ' + err.message)
-    } finally {
-      setActionLoadingId(null)
-    }
-  }
-
   const handleApproveWithdrawal = async (reqId: string, status: string) => {
     setActionLoadingId(reqId)
     try {
@@ -344,20 +318,13 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
 
 
 
-  const filteredShops = shops.filter(shop => {
-    const matchesSearch = shop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          shop.ownerId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          shop.id.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
-  })
-
   const filteredOrders = allOrders.filter(o => 
     o.id.toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
     o.buyerId.toLowerCase().includes(orderSearchTerm.toLowerCase())
   )
 
   const menuItems = [
-    { id: 'SHOPS', label: 'Duyệt Đăng Ký Shop', icon: '🏪' },
+    { id: 'SHOPS', label: 'Quản Lý & Khóa Shop', icon: '🏪' },
     { id: 'CATEGORY_AUDIT', label: 'Kiểm Tra Ngành Hàng (AI)', icon: '🤖' },
     { id: 'WITHDRAWALS', label: 'Phê duyệt rút tiền', icon: '💰' },
     { id: 'DISPUTES', label: 'Tranh chấp khiếu nại', icon: '⚖️' },
@@ -466,14 +433,9 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
           {activePortalTab === 'SHOPS' && (
             <CsShopsTab
               shops={shops}
-              filteredShops={filteredShops}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
+              fetchShops={fetchShops}
+              triggerAuditLog={triggerAuditLog}
               loading={loading}
-              actionLoadingId={actionLoadingId}
-              handleApprove={handleApprove}
             />
           )}
 
