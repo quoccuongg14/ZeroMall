@@ -7,6 +7,7 @@ import { CsDisputesTab } from '../../components/cs-support/CsDisputesTab'
 import { CsOrdersTab } from '../../components/cs-support/CsOrdersTab'
 import { CsLiveChatTab } from '../../components/admin/CsLiveChatTab'
 import { CsCategoryAuditTab } from '../../components/cs-support/CsCategoryAuditTab'
+import { CsUsersTab } from '../../components/cs-support/CsUsersTab'
 import { subscribeDisputeChanges } from '../../services/supabase-realtime.service'
 
 interface CsSupportPageProps {
@@ -42,8 +43,11 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'withdrawals': return 'WITHDRAWALS';
       case 'disputes': return 'DISPUTES';
       case 'orders': return 'ORDERS';
+      case 'users': return 'USERS';
       case 'live-chat': return 'LIVE_CHAT';
-      case 'category-audit': return 'CATEGORY_AUDIT';
+      case 'category-audit':
+      case 'trust-safety':
+      case 'moderation': return 'CATEGORY_AUDIT';
       default: return null;
     }
   }
@@ -54,6 +58,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'WITHDRAWALS': return 'withdrawals';
       case 'DISPUTES': return 'disputes';
       case 'ORDERS': return 'orders';
+      case 'USERS': return 'users';
       case 'LIVE_CHAT': return 'live-chat';
       case 'CATEGORY_AUDIT': return 'category-audit';
       default: return 'shops';
@@ -61,7 +66,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
   }
 
   const [activePortalTab, setActivePortalTab] = useState<
-    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT'
+    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT' | 'USERS'
   >(() => {
     const searchParamsLocal = new URLSearchParams(window.location.search);
     const param = searchParamsLocal.get('tab');
@@ -326,6 +331,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
   const menuItems = [
     { id: 'SHOPS', label: 'Quản Lý & Khóa Shop', icon: '🏪' },
     { id: 'CATEGORY_AUDIT', label: 'Kiểm Duyệt Sản Phẩm (Trust & Safety)', icon: '🛡️' },
+    { id: 'USERS', label: 'Quản Lý & Khóa User', icon: '👥' },
     { id: 'WITHDRAWALS', label: 'Phê duyệt rút tiền', icon: '💰' },
     { id: 'DISPUTES', label: 'Tranh chấp khiếu nại', icon: '⚖️' },
     { id: 'ORDERS', label: 'Lịch sử đơn hàng', icon: '📋' },
@@ -444,6 +450,10 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
               user={user}
               triggerAuditLog={triggerAuditLog}
             />
+          )}
+
+          {activePortalTab === 'USERS' && (
+            <CsUsersTab triggerAuditLog={triggerAuditLog} />
           )}
 
           {activePortalTab === 'WITHDRAWALS' && (
