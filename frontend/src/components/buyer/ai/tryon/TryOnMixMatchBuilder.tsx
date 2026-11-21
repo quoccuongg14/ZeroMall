@@ -10,7 +10,7 @@ interface TryOnMixMatchBuilderProps {
   onRemoveSlot: (slot: 'top' | 'bottom' | 'shoes' | 'accessory', e: React.MouseEvent) => void
   onApplyPreset: (type: 'streetwear' | 'office' | 'sport') => void
   isLoadingAi: boolean
-  tryonEngineMode: TryonEngineMode
+  tryonEngineMode?: TryonEngineMode
   totalOutfitPrice: number
   outfitItems: Product[]
   onTryOnWholeOutfit: () => void
@@ -29,7 +29,6 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
   onRemoveSlot,
   onApplyPreset,
   isLoadingAi,
-  tryonEngineMode,
   totalOutfitPrice,
   outfitItems,
   onTryOnWholeOutfit,
@@ -249,7 +248,7 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
               disabled={isLoadingAi}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs active:scale-[0.98]"
             >
-              <span>✨</span> {isLoadingAi ? 'Đang Ướm...' : (tryonEngineMode === 'free' ? 'Ướm Thử Lên Người (0 Gem)' : 'Ướm Thử Mage HD')}
+              <span>✨</span> {isLoadingAi ? 'Đang Ướm...' : 'Ướm Thử Lên Người'}
             </button>
             <button
               type="button"

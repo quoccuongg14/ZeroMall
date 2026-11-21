@@ -48,9 +48,9 @@ export const useTryOnLogic = ({
     return (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
   })
 
-  // 2. Quản lý Gem & Chế độ thử đồ
+  // 2. Quản lý Chế độ thử đồ AI Siêu Thực
   const [gemBalance, setGemBalance] = useState<number | null>(7060)
-  const [tryonEngineMode, setTryonEngineMode] = useState<TryonEngineMode>('free')
+  const [tryonEngineMode, setTryonEngineMode] = useState<TryonEngineMode>('mage')
   const [showMageConfirmModal, setShowMageConfirmModal] = useState<boolean>(false)
 
   // Đồng bộ dọn sạch ảnh cũ & nạp số dư Gem từ Backend
@@ -578,7 +578,7 @@ export const useTryOnLogic = ({
           pant: targetPant || {},
           outfit: effectiveOutfit,
           user_image: effectivePhoto,
-          use_mage: tryonEngineMode === 'mage'
+          use_mage: true
         })
       })
 
@@ -603,18 +603,11 @@ export const useTryOnLogic = ({
           } else {
             triggerToast(`Đã ướm thử theo khung người ${effectiveH}cm • ${effectiveW}kg thành công!`)
           }
-
-          if (tryonEngineMode === 'mage') {
-            fetch(`${TRYON_SERVICE_URL}/api/tryon/gem-status`)
-              .then(r => r.json())
-              .then(d => { if (d && typeof d.balance === 'number') setGemBalance(d.balance) })
-              .catch(() => {})
-          }
         }
       }
     } catch (e: any) {
       console.error('Try-on API error:', e)
-      triggerToast('Không thể kết nối Local AI Service (Port 5006).')
+      triggerToast('Không thể kết nối dịch vụ AI Thử Đồ (Port 5006).')
     } finally {
       setIsLoadingAi(false)
     }

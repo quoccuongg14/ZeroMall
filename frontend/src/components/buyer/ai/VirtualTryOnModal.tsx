@@ -6,7 +6,6 @@ import {
   TryOnWardrobeTab,
   TryOnScannerTab,
   GemShieldBar,
-  MageConfirmModal,
   SlotItemPickerModal,
   useTryOnLogic,
 } from './tryon'
@@ -30,18 +29,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         </div>
       )}
 
-      {/* Modal xác nhận Mage Ultra HD */}
-      <MageConfirmModal
-        isOpen={logic.showMageConfirmModal}
-        onClose={() => logic.setShowMageConfirmModal(false)}
-        onConfirm={() => {
-          logic.setTryonEngineMode('mage')
-          logic.setShowMageConfirmModal(false)
-          logic.triggerToast('💎 Đã bật chế độ Mage Ultra HD. Chỉ trừ Gem khi bạn bấm "Ướm Thử"!')
-        }}
-        gemBalance={logic.gemBalance}
-      />
-
       {/* Modal Dialog Container Chuẩn Tone Sáng ZeroMall */}
       <div 
         className="bg-[#f8fafc] w-[98vw] max-w-[1560px] h-[96vh] max-h-[96vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 text-slate-800 font-sans"
@@ -63,7 +50,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Ướm thử trang phục chân thực lên cơ thể bằng AI • Chuẩn vóc dáng & miễn phí 0 Gem
+                Ướm thử trang phục chân thực lên cơ thể bằng AI • Chuẩn vóc dáng & mô phỏng siêu thực Ultra HD
               </p>
             </div>
           </div>
@@ -99,16 +86,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
 
         {/* Modal Body: 2 Columns */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-[#f8fafc]">
-          {/* Thanh bảo vệ Gem & Chế độ thử đồ (Gọn gàng, tinh tế) */}
-          <GemShieldBar
-            tryonEngineMode={logic.tryonEngineMode}
-            onSetEngineMode={(mode) => {
-              logic.setTryonEngineMode(mode)
-              logic.triggerToast(`Đã chuyển sang chế độ ${mode === 'free' ? 'Local AI (0 Gem - Miễn phí)' : 'Mage Ultra HD'}.`)
-            }}
-            onOpenMageConfirm={() => logic.setShowMageConfirmModal(true)}
-            gemBalance={logic.gemBalance}
-          />
+          {/* Thanh hiển thị chế độ AI Siêu Thực Ultra HD */}
+          <GemShieldBar />
 
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
             {/* CỘT 1: HERO FITTING MIRROR & HỒ SƠ THỂ HÌNH */}

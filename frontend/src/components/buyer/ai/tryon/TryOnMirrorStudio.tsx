@@ -13,7 +13,7 @@ interface TryOnMirrorStudioProps {
   userPhoto: string
   userPhotoName: string
   compositeTryOnImage: string
-  tryonEngineMode: TryonEngineMode
+  tryonEngineMode?: TryonEngineMode
   selectedPant: Product | null
   extractedGarment?: ExtractedGarment | null
   isScanningGarment?: boolean
@@ -47,7 +47,6 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
   userPhoto,
   userPhotoName,
   compositeTryOnImage,
-  tryonEngineMode,
   selectedPant,
   fitResult,
   measurements,
@@ -242,7 +241,7 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
                   />
                   <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-xs px-3 py-1 rounded-full text-xs font-semibold text-slate-700 border border-slate-200/80 flex items-center gap-1.5 shadow-2xs">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    {tryonEngineMode === 'free' ? 'Ảnh ướm Local AI (0 Gem)' : 'Ảnh ướm Mage HD'}
+                    Ảnh Ướm AI Siêu Thực (Ultra HD)
                   </div>
                 </>
               ) : userPhoto ? (
