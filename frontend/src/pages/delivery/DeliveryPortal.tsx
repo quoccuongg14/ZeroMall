@@ -213,6 +213,17 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
     return <DeliveryAuthForm onAuthSuccess={handleLoginSuccess} onBackToHome={onBackToHome || (() => {})} />
   }
 
+  // Màn hình chờ khi đang đồng bộ dữ liệu trạm từ CSDL thực tế
+  if (loading && hubs.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 text-slate-700">
+        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <h3 className="text-sm font-bold text-slate-800">Đang đồng bộ dữ liệu trạm vận hành ZeroExpress...</h3>
+        <p className="text-xs text-slate-400 mt-1">Vui lòng chờ trong giây lát</p>
+      </div>
+    )
+  }
+
   const isDriver = currentUser.role === 'DRIVER'
 
   // Tìm Driver profile tương ứng trong CSDL
@@ -255,27 +266,53 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
 
   // 2. NẾU LÀ NHÂN VIÊN KHO (HUB_OPERATOR) -> HIỂN THỊ TRẠM PHÂN LOẠI & MÁY QUÉT CỦA BƯU CỤC ĐÓ
   if (currentUser.role === 'HUB_OPERATOR') {
-    // Tự động tìm Hub phù hợp theo hubId / email / tên nhân viên
-    const email = (currentUser?.email || '').toLowerCase()
+    // Tự động tìm Hub phù hợp theo hubId / email thực tế từ CSDL
+    const email = (currentUser?.email || '').toLowerCase().trim()
     const assignedHub = (() => {
+      // 1. Ưu tiên khớp chính xác theo hubId gán trên tài khoản
       if (currentUser?.hubId) {
         const found = hubs.find((h) => h.id === currentUser.hubId)
         if (found) return found
       }
+      // 2. Khớp chính xác theo email bưu cục
       if (email) {
-        const found = hubs.find((h) => h.email && h.email.toLowerCase() === email)
+        const found = hubs.find((h) => h.email && h.email.toLowerCase().trim() === email)
         if (found) return found
       }
-      const foundByCode = hubs.find((h) => email.includes(h.code.toLowerCase()))
+      // 3. Khớp theo mã bưu cục (nếu email có chứa mã)
+      const foundByCode = hubs.find((h) => h.code && email.includes(h.code.toLowerCase()))
       if (foundByCode) return foundByCode
 
-      if (email.includes('haiphong')) return hubs.find((h) => h.code === 'HUB692') || hubs[0]
-      if (email.includes('bienhoa')) return hubs.find((h) => h.code === 'DN01') || hubs[0]
-      if (email.includes('melinh')) return hubs.find((h) => h.code === 'HN01') || hubs[0]
-      if (email.includes('danang') || email.includes('hoacam')) return hubs.find((h) => h.code === 'DNG01' || h.code === 'HC01') || hubs[0]
-      if (email.includes('cantho') || email.includes('tranoc')) return hubs.find((h) => h.code === 'CT01' || h.code === 'NK01') || hubs[0]
-      return hubs.find((h) => h.code === 'HCM01') || hubs[0]
+      return null
     })()
+
+    if (!assignedHub && !loading) {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 text-slate-700">
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-md w-full text-center space-y-4">
+            <span className="text-4xl">🏢</span>
+            <h3 className="text-base font-black text-slate-900">Chưa Gán Bưu Cục Vận Hành</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Tài khoản <strong>{currentUser?.email}</strong> hiện chưa được liên kết với trạm bưu cục nào trong hệ thống ZeroExpress.
+            </p>
+            <div className="pt-2 flex justify-center gap-3">
+              <button
+                onClick={() => fetchAllData()}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                🔄 Đồng Bộ Lại
+              </button>
+              <button
+                onClick={handleDeliveryLogout}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Đăng Xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
 
     const isAssignedSoc = assignedHub?.type === 'SORTING_CENTER'
 
@@ -347,7 +384,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
               handleUpdateStatus(shipmentId, status, failureReason, undefined, hubId, note, linehaulData)
             }
             actionLoading={actionLoading}
-            assignedHub={assignedHub}
+            assignedHub={assignedHub || undefined}
             assignedHubId={assignedHub?.id}
           />
         </main>

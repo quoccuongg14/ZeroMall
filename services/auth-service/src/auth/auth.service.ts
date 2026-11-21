@@ -115,6 +115,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       shopId: user.shopId || user.ownedShop?.id || null,
+      hubId: user.hubId || null,
     };
 
     return {
@@ -125,6 +126,7 @@ export class AuthService {
         name: user.name,
         role: user.role,
         shopId: payload.shopId,
+        hubId: user.hubId || null,
         avatar: user.avatar,
         gender: user.gender,
         birthday: user.birthday,

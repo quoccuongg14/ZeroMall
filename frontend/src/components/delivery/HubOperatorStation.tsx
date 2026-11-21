@@ -36,14 +36,25 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   onUpdateStatus,
   actionLoading,
   assignedHubId,
+  assignedHub,
 }) => {
   const currentHub = useMemo(() => {
-    if (assignedHubId) return hubs.find((h) => h.id === assignedHubId) || hubs[0]
-    const email = (currentUser?.email || '').toLowerCase()
-    if (email.includes('bienhoa')) return hubs.find((h) => h.code === 'DN01') || hubs[0]
-    if (email.includes('melinh')) return hubs.find((h) => h.code === 'HN01') || hubs[0]
-    return hubs.find((h) => h.code === 'HCM01') || hubs[0]
-  }, [assignedHubId, currentUser?.email, hubs])
+    if (assignedHub) return assignedHub
+    if (assignedHubId) {
+      const found = hubs.find((h) => h.id === assignedHubId)
+      if (found) return found
+    }
+    const email = (currentUser?.email || '').toLowerCase().trim()
+    if (email) {
+      const matchedByEmail = hubs.find((h) => h.email && h.email.toLowerCase().trim() === email)
+      if (matchedByEmail) return matchedByEmail
+    }
+    if (currentUser?.hubId) {
+      const matchedByHubId = hubs.find((h) => h.id === currentUser.hubId)
+      if (matchedByHubId) return matchedByHubId
+    }
+    return hubs[0] || null
+  }, [assignedHub, assignedHubId, currentUser, hubs])
 
   const isSoc = currentHub?.type === 'SORTING_CENTER'
 
@@ -56,11 +67,11 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   // Tự động chuyển tab phù hợp khi đổi loại Hub (SOC vs HUB)
   useEffect(() => {
     if (isSoc) {
-      if (stationTab === 'DISPATCH_LASTMILE' || stationTab === 'HUB_CASHIER') {
+      if (stationTab === 'DISPATCH_LASTMILE' || stationTab === 'HUB_CASHIER' || stationTab === 'INBOUND_PICKUP') {
         setStationTab('INBOUND_RECEIVING')
       }
     } else {
-      if (stationTab === 'SOC_DASHBOARD') {
+      if (stationTab === 'SOC_DASHBOARD' || stationTab === 'INBOUND_RECEIVING' || stationTab === 'SORTING_LINEHAUL') {
         setStationTab('INBOUND_PICKUP')
       }
     }
