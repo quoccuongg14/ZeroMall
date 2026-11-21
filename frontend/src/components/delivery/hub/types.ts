@@ -58,7 +58,10 @@ export interface Hub {
   type: string
   province: string
   district: string
+  ward?: string
   address?: string
+  latitude?: number
+  longitude?: number
   email?: string
   parentSocId?: string | null
   parentSoc?: any

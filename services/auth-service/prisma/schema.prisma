@@ -23,6 +23,7 @@ model User {
   gender      String?
   birthday    String?
   phoneNumber String?
+  mustChangePassword Boolean @default(false)
 
   // Mối quan hệ Nhân viên CSKH của shop (Nhiều nhân viên thuộc 1 Shop)
   shopId    String?

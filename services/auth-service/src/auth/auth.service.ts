@@ -131,6 +131,7 @@ export class AuthService {
         gender: user.gender,
         birthday: user.birthday,
         phoneNumber: user.phoneNumber,
+        mustChangePassword: !!(user as any).mustChangePassword,
       },
     };
   }
@@ -609,7 +610,10 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id },
-      data: { password: passwordHash },
+      data: {
+        password: passwordHash,
+        mustChangePassword: false,
+      } as any,
     });
 
     return { message: 'Đổi mật khẩu thành công' };
@@ -1261,6 +1265,8 @@ export class AuthService {
       passwordHash = await bcrypt.hash(dto.password.trim(), salt);
     }
 
+    const isDefaultPwd = !dto.password || dto.password.trim() === '123456';
+
     if (existing) {
       return this.prisma.user.update({
         where: { id: existing.id },
@@ -1271,7 +1277,8 @@ export class AuthService {
           hubId: dto.hubId,
           status: 'ACTIVE',
           ...(passwordHash && { password: passwordHash }),
-        },
+          mustChangePassword: isDefaultPwd,
+        } as any,
       });
     }
 
@@ -1287,7 +1294,8 @@ export class AuthService {
         phoneNumber: dto.phoneNumber,
         hubId: dto.hubId,
         status: 'ACTIVE',
-      },
+        mustChangePassword: isDefaultPwd,
+      } as any,
     });
   }
 }

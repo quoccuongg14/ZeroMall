@@ -1234,14 +1234,37 @@ export class DeliveryService {
     email?: string;
     password?: string;
   }) {
-    const hub = await this.prisma.hub.findUnique({ where: { id: data.hubId } });
+    const rawHubId = (data.hubId || '').trim();
+    let hub = await this.prisma.hub.findUnique({ where: { id: rawHubId } }).catch(() => null);
+
+    if (!hub && rawHubId) {
+      hub = await this.prisma.hub.findUnique({ where: { code: rawHubId.toUpperCase() } }).catch(() => null);
+    }
+
+    if (!hub && rawHubId) {
+      hub = await this.prisma.hub.findFirst({
+        where: {
+          OR: [
+            { code: { equals: rawHubId, mode: 'insensitive' } },
+            { name: { contains: rawHubId, mode: 'insensitive' } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
     if (!hub) throw new NotFoundException('Không tìm thấy Bưu cục chỉ định');
+
+    if (hub.type !== 'SORTING_CENTER' && data.vehicleType === 'TRUCK') {
+      throw new BadRequestException('Bưu cục giao hàng không được phép tuyển xe tải tuyến đường dài (chỉ Mega SOC mới quản lý xe tải)');
+    }
 
     const assignedProvince = data.assignedProvince || hub.province;
     const assignedDistrict = data.assignedDistrict || hub.district;
 
     let userId: string | null = null;
-    const driverEmail = data.email ? data.email.toLowerCase().trim() : `shipper_${data.phone.replace(/[^0-9]/g, '')}@spx.zeromall.vn`;
+    const cleanPhone = data.phone.trim();
+    const cleanVehicleNumber = data.vehicleNumber.trim().toUpperCase();
+    const driverEmail = data.email ? data.email.toLowerCase().trim() : `shipper_${cleanPhone.replace(/[^0-9]/g, '')}@spx.zeromall.vn`;
 
     // Cấp tài khoản đăng nhập cho tài xế bên auth-service
     try {
@@ -1253,8 +1276,8 @@ export class DeliveryService {
           email: driverEmail,
           password: data.password || '123456',
           name: data.name.trim(),
-          phoneNumber: data.phone.trim(),
-          hubId: data.hubId,
+          phoneNumber: cleanPhone,
+          hubId: hub.id,
         }),
       });
       if (userRes.ok) {
@@ -1268,10 +1291,10 @@ export class DeliveryService {
     return this.prisma.driver.create({
       data: {
         name: data.name.trim(),
-        phone: data.phone.trim(),
-        vehicleNumber: data.vehicleNumber.trim().toUpperCase(),
+        phone: cleanPhone,
+        vehicleNumber: cleanVehicleNumber,
         vehicleType: data.vehicleType || 'MOTORBIKE',
-        hubId: data.hubId,
+        hubId: hub.id,
         userId,
         operatingArea: data.operatingArea?.trim() || `${assignedDistrict}, ${assignedProvince}`,
         assignedDistrict,

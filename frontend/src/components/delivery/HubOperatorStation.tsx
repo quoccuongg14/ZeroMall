@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { API_BASE_URL } from '../../config/api.config'
 import { LinehaulDispatchModal } from './LinehaulDispatchModal'
 import { LinehaulInboundReconciliationModal } from './LinehaulInboundReconciliationModal'
 import { LastMileDispatchModal } from './LastMileDispatchModal'
@@ -26,6 +25,7 @@ import { HubParcelTable } from './hub/HubParcelTable'
 import { HubCashierDesk } from './hub/HubCashierDesk'
 import { SocDashboard } from './hub/SocDashboard'
 import { HubCreateEditModal } from './HubCreateEditModal'
+import { DriverCreateModal } from './hub/DriverCreateModal'
 
 export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   currentUser,
@@ -80,62 +80,8 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
 
   // Modal Tuyển / Thêm tài xế mới cho Bưu cục hoặc Xe tải cho SOC
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState(false)
+  const [driverModalVehicleType, setDriverModalVehicleType] = useState<'MOTORBIKE' | 'VAN' | 'TRUCK'>('MOTORBIKE')
   const [isAddHubModalOpen, setIsAddHubModalOpen] = useState(false)
-  const [addingDriver, setAddingDriver] = useState(false)
-  const [driverForm, setDriverForm] = useState({
-    name: '',
-    phone: '',
-    vehicleNumber: '',
-    vehicleType: 'MOTORBIKE',
-    operatingArea: '',
-    email: '',
-    password: '123456',
-  })
-
-  const handleCreateDriver = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!driverForm.name.trim() || !driverForm.phone.trim() || !driverForm.vehicleNumber.trim()) {
-      alert('Vui lòng điền đầy đủ Tên, SĐT và Biển số xe của tài xế!')
-      return
-    }
-
-    setAddingDriver(true)
-    try {
-      const res = await fetch(`${API_BASE_URL}/delivery/drivers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...driverForm,
-          hubId: currentHub?.id,
-          assignedProvince: currentHub?.province,
-          assignedDistrict: currentHub?.district,
-          operatingArea: driverForm.operatingArea.trim() || `${currentHub?.district}, ${currentHub?.province}`
-        })
-      })
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson.message || 'Không thể thêm tài xế')
-      }
-
-      alert(`Tuyển / Thêm tài xế ${driverForm.name} cho ${isSoc ? 'Kho Tổng SOC' : 'Bưu cục'} ${currentHub?.name} thành công!`)
-      setIsAddDriverModalOpen(false)
-      setDriverForm({
-        name: '',
-        phone: '',
-        vehicleNumber: '',
-        vehicleType: isSoc ? 'TRUCK' : 'MOTORBIKE',
-        operatingArea: '',
-        email: '',
-        password: '123456',
-      })
-      onRefresh()
-    } catch (err: any) {
-      alert('Lỗi: ' + (err.message || 'Đã xảy ra lỗi khi thêm tài xế'))
-    } finally {
-      setAddingDriver(false)
-    }
-  }
 
   // 1. Nhận Từ Shipper
   const pickupInboundList = useMemo(
@@ -613,15 +559,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
             </button>
             <button
               onClick={() => {
-                setDriverForm({
-                  name: '',
-                  phone: '',
-                  vehicleNumber: '',
-                  vehicleType: 'TRUCK',
-                  operatingArea: `Tuyến xe tải xuất phát từ ${currentHub?.name}`,
-                  email: '',
-                  password: '123456',
-                })
+                setDriverModalVehicleType('TRUCK')
                 setIsAddDriverModalOpen(true)
               }}
               className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -642,15 +580,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         ) : (
           <button
             onClick={() => {
-              setDriverForm({
-                name: '',
-                phone: '',
-                vehicleNumber: '',
-                vehicleType: 'MOTORBIKE',
-                operatingArea: `${currentHub?.district || ''}, ${currentHub?.province || ''}`,
-                email: '',
-                password: '123456',
-              })
+              setDriverModalVehicleType('MOTORBIKE')
               setIsAddDriverModalOpen(true)
             }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -691,15 +621,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           onRefresh={onRefresh}
           onAddChildHub={() => setIsAddHubModalOpen(true)}
           onAddTruckDriver={() => {
-            setDriverForm({
-              name: '',
-              phone: '',
-              vehicleNumber: '',
-              vehicleType: 'TRUCK',
-              operatingArea: `Tuyến xe tải xuất phát từ ${currentHub?.name}`,
-              email: '',
-              password: '123456',
-            })
+            setDriverModalVehicleType('TRUCK')
             setIsAddDriverModalOpen(true)
           }}
         />
@@ -868,150 +790,13 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
       />
 
       {/* MODAL 5: TUYỂN / THÊM TÀI XẾ CHO BƯU CỤC NÀY */}
-      {isAddDriverModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-left border border-slate-100 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
-                  <span>🛵</span> Tuyển / Thêm Tài Xế Mới
-                </h3>
-                <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
-                  Bưu cục: {currentHub?.name} ({currentHub?.code})
-                </p>
-              </div>
-              <button
-                onClick={() => setIsAddDriverModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDriver} className="space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Họ Và Tên Tài Xế <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={driverForm.name}
-                  onChange={(e) => setDriverForm({ ...driverForm, name: e.target.value })}
-                  placeholder="VD: Bùi Văn Hòa, Nguyễn Văn Giao..."
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Số Điện Thoại <span className="text-rose-500">*</span>:
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={driverForm.phone}
-                    onChange={(e) => setDriverForm({ ...driverForm, phone: e.target.value })}
-                    placeholder="VD: 0988123456"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-medium focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Biển Số Xe <span className="text-rose-500">*</span>:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={driverForm.vehicleNumber}
-                    onChange={(e) => setDriverForm({ ...driverForm, vehicleNumber: e.target.value.toUpperCase() })}
-                    placeholder="VD: 28-A1 999.88"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Loại Phương Tiện:
-                </label>
-                <select
-                  value={driverForm.vehicleType}
-                  onChange={(e) => setDriverForm({ ...driverForm, vehicleType: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600"
-                >
-                  <option value="MOTORBIKE">🛵 Xe máy (Lấy & Giao nội thành)</option>
-                  <option value="VAN">🚐 Xe Van / Bán tải (Hàng cồng kềnh / Shop lớn)</option>
-                  <option value="TRUCK">🚛 Xe tải đường dài (Trung chuyển Linehaul)</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Email / Gmail Đăng Nhập:
-                  </label>
-                  <input
-                    type="email"
-                    value={driverForm.email}
-                    onChange={(e) => setDriverForm({ ...driverForm, email: e.target.value })}
-                    placeholder="tài-xế@gmail.com"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Mật Khẩu Đăng Nhập:
-                  </label>
-                  <input
-                    type="password"
-                    value={driverForm.password}
-                    onChange={(e) => setDriverForm({ ...driverForm, password: e.target.value })}
-                    placeholder="Mặc định: 123456"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Tuyến Giao Nhận Phụ Trách:
-                </label>
-                <input
-                  type="text"
-                  value={driverForm.operatingArea}
-                  onChange={(e) => setDriverForm({ ...driverForm, operatingArea: e.target.value })}
-                  placeholder={`VD: ${currentHub?.district || ''}, ${currentHub?.province || ''}`}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Khu vực tỉnh/thành sẽ tự động liên kết với: <b>{currentHub?.province}</b>
-                </p>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsAddDriverModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs hover:bg-slate-200 cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={addingDriver}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
-                >
-                  {addingDriver ? 'Đang thêm...' : 'Xác Nhận Thêm'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <DriverCreateModal
+        isOpen={isAddDriverModalOpen}
+        onClose={() => setIsAddDriverModalOpen(false)}
+        currentHub={currentHub}
+        onSuccess={onRefresh}
+        initialVehicleType={driverModalVehicleType}
+      />
       {/* MODAL THIẾT LẬP BƯU CỤC CON (DÀNH CHO ĐIỀU PHỐI VIÊN SOC) */}
       <HubCreateEditModal
         isOpen={isAddHubModalOpen}

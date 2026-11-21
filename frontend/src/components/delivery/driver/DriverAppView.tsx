@@ -90,6 +90,70 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
   const [returnPickups, setReturnPickups] = useState<ReturnData[]>([])
   const [holdingReturnTasks, setHoldingReturnTasks] = useState<ReturnData[]>([])
 
+  // Modal Bắt buộc đổi mật khẩu ở lần đăng nhập đầu tiên
+  const [showFirstLoginPasswordModal, setShowFirstLoginPasswordModal] = useState<boolean>(() => {
+    return !!currentUser?.mustChangePassword
+  })
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null)
+  const [submittingPassword, setSubmittingPassword] = useState(false)
+
+  const handleChangeFirstPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setChangePasswordError(null)
+
+    if (newPassword.length < 6) {
+      setChangePasswordError('Mật khẩu mới phải có ít nhất 6 ký tự!')
+      return
+    }
+
+    if (newPassword === '123456') {
+      setChangePasswordError('Vui lòng chọn mật khẩu khác mật khẩu mặc định 123456!')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setChangePasswordError('Mật khẩu xác nhận không khớp!')
+      return
+    }
+
+    setSubmittingPassword(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/users/${currentUser.id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: '123456',
+          newPassword,
+        }),
+      })
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.message || 'Không thể đổi mật khẩu')
+      }
+
+      alert('Đổi mật khẩu tài khoản thành công! Bạn có thể bắt đầu nhận ca làm việc.')
+
+      // Cập nhật localStorage
+      const stored = localStorage.getItem('delivery_user')
+      if (stored) {
+        try {
+          const userObj = JSON.parse(stored)
+          userObj.mustChangePassword = false
+          localStorage.setItem('delivery_user', JSON.stringify(userObj))
+        } catch {}
+      }
+
+      setShowFirstLoginPasswordModal(false)
+    } catch (err: any) {
+      setChangePasswordError(err.message || 'Lỗi đổi mật khẩu')
+    } finally {
+      setSubmittingPassword(false)
+    }
+  }
+
   // Lấy danh sách các đơn Trả Hàng (Cần thu hồi & Đang giữ trên xe)
   const fetchReturnPickups = useCallback(async () => {
     try {
@@ -502,6 +566,81 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
           onClose={() => setShowCheckInModal(false)}
           onSuccess={handleCheckInSuccess}
         />
+      )}
+
+      {/* ── Modal Bắt Buộc Đổi Mật Khẩu Lần Đầu (First Login) ── */}
+      {showFirstLoginPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs text-left animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center text-2xl font-black shadow-inner">
+                🔐
+              </div>
+              <h3 className="text-base font-black text-slate-900">
+                Đổi Mật Khẩu Lần Đầu Đăng Nhập
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Chào mừng tài xế <strong>{currentUser?.name || 'mới'}</strong>! Vì lý do an toàn tài khoản và đối soát ví COD, vui lòng thiết lập mật khẩu cá nhân mới của bạn trước khi bắt đầu nhận ca.
+              </p>
+            </div>
+
+            <form onSubmit={handleChangeFirstPassword} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Mật khẩu hiện tại (mặc định):
+                </label>
+                <input
+                  type="password"
+                  disabled
+                  value="123456"
+                  className="w-full px-3.5 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Mật khẩu mới <span className="text-rose-500">*</span>:
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Nhập ít nhất 6 ký tự..."
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-600 focus:bg-white transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Xác nhận mật khẩu mới <span className="text-rose-500">*</span>:
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Nhập lại mật khẩu mới..."
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-600 focus:bg-white transition"
+                />
+              </div>
+
+              {changePasswordError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-600 font-bold">
+                  ⚠️ {changePasswordError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submittingPassword}
+                className="w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold rounded-xl text-xs shadow-md transition cursor-pointer"
+              >
+                {submittingPassword ? 'Đang lưu...' : '✓ Xác Nhận & Bắt Đầu Nhận Ca'}
+              </button>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )
