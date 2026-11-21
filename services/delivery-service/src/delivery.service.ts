@@ -116,11 +116,23 @@ export class DeliveryService {
 
     // Tìm Hub gốc tương ứng với địa chỉ lấy hàng của Shop (Ưu tiên Quận/Huyện trước, sau đó Tỉnh/Thành)
     let originHub: any = null;
+    const cleanAdminName = (str?: string | null) => {
+      if (!str) return '';
+      return str
+        .toLowerCase()
+        .replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '')
+        .replace(/^(quận|huyện|thị xã|tx\.?)\s+/i, '')
+        .replace(/^(phường|xã|thị trấn)\s+/i, '')
+        .trim();
+    };
+
     if (pickupAddressId) {
       const pAddr = await this.prisma.sellerAddress.findUnique({ where: { id: pickupAddressId } });
       if (pAddr) {
         const sellerProvince = (pAddr.province || '').toLowerCase().trim();
         const sellerDistrict = (pAddr.district || '').toLowerCase().trim();
+        const cleanSellerProv = cleanAdminName(sellerProvince);
+        const cleanSellerDist = cleanAdminName(sellerDistrict);
         const sellerFullAddr = [pAddr.address, pAddr.ward, pAddr.district, pAddr.province]
           .filter(Boolean)
           .join(', ')
@@ -129,33 +141,32 @@ export class DeliveryService {
         const allHubs = await this.prisma.hub.findMany({ where: { status: 'ACTIVE' } });
 
         // 1. Ưu tiên 1: Khớp chính xác Quận/Huyện (District Geofencing)
-        if (sellerDistrict || sellerFullAddr) {
+        if (cleanSellerDist || sellerFullAddr) {
           originHub = allHubs.find((h) => {
-            const hubDistrict = (h.district || '').toLowerCase().trim();
+            const cleanHubDist = cleanAdminName(h.district);
+            const cleanHubProv = cleanAdminName(h.province);
             const hubName = (h.name || '').toLowerCase();
             const hubAddr = (h.address || '').toLowerCase();
-            const hubProvince = (h.province || '').toLowerCase().trim();
 
             const provinceMatch =
-              !sellerProvince ||
-              !hubProvince ||
-              hubProvince.includes(sellerProvince) ||
-              sellerProvince.includes(hubProvince);
+              !cleanSellerProv ||
+              !cleanHubProv ||
+              cleanHubProv.includes(cleanSellerProv) ||
+              cleanSellerProv.includes(cleanHubProv);
 
             if (!provinceMatch) return false;
 
-            // Khớp theo hubDistrict hoặc Tên bưu cục có chứa tên quận (VD: "HUD Gò Vấp", "Gò Vấp")
-            if (sellerDistrict && hubDistrict) {
-              if (sellerDistrict.includes(hubDistrict) || hubDistrict.includes(sellerDistrict)) {
+            if (cleanSellerDist && cleanHubDist) {
+              if (cleanSellerDist.includes(cleanHubDist) || cleanHubDist.includes(cleanSellerDist)) {
                 return true;
               }
             }
 
-            if (sellerDistrict && (hubName.includes(sellerDistrict) || hubAddr.includes(sellerDistrict))) {
+            if (cleanSellerDist && (hubName.includes(cleanSellerDist) || hubAddr.includes(cleanSellerDist))) {
               return true;
             }
 
-            if (hubDistrict && sellerFullAddr.includes(hubDistrict)) {
+            if (cleanHubDist && sellerFullAddr.includes(cleanHubDist)) {
               return true;
             }
 
@@ -164,10 +175,10 @@ export class DeliveryService {
         }
 
         // 2. Ưu tiên 2: Khớp theo Tỉnh/Thành (nếu Quận chưa có Bưu cục riêng)
-        if (!originHub && sellerProvince) {
+        if (!originHub && cleanSellerProv) {
           originHub = allHubs.find((h) => {
-            const hubProvince = (h.province || '').toLowerCase().trim();
-            return hubProvince && (hubProvince.includes(sellerProvince) || sellerProvince.includes(hubProvince));
+            const cleanHubProv = cleanAdminName(h.province);
+            return cleanHubProv && (cleanHubProv.includes(cleanSellerProv) || cleanSellerProv.includes(cleanHubProv));
           });
         }
       }
@@ -755,20 +766,26 @@ export class DeliveryService {
         },
       });
 
-      const updated = await tx.shipment.update({
-        where: { id: shipmentId },
-        data: {
-          status: nextStatus,
-          trackingLogs: {
-            create: {
-              status: nextStatus,
-              driverId,
-              title,
-              description: desc,
-              location: `${driver.name} (${driver.vehicleNumber})`,
-            },
+      const updateData: any = {
+        status: nextStatus,
+        trackingLogs: {
+          create: {
+            status: nextStatus,
+            driverId,
+            title,
+            description: desc,
+            location: `${driver.name} (${driver.vehicleNumber})`,
           },
         },
+      };
+
+      if (type === 'PICKUP' && driver.hubId) {
+        updateData.currentHubId = driver.hubId;
+      }
+
+      const updated = await tx.shipment.update({
+        where: { id: shipmentId },
+        data: updateData,
         include: {
           trackingLogs: { orderBy: { timestamp: 'desc' } },
           assignments: { include: { driver: true } },
@@ -1382,33 +1399,83 @@ export class DeliveryService {
     return Math.round(R * c);
   }
 
-  // 7.2. Tự động quét hàng đợi gom đơn của Hub khi Tài Xế Điểm Danh vào ca
+  // 7.2. Tự động quét hàng đợi gom đơn của Hub khi Tài Xế Điểm Danh vào ca hoặc bấm Quét Hàng Đợi
   async dispatchPendingHubQueue(driverId: string) {
     const driver = await this.prisma.driver.findUnique({
       where: { id: driverId },
       include: { hub: true },
     });
-    if (!driver || driver.status === 'OFFLINE') return [];
+    if (!driver || driver.status === 'SUSPENDED') return [];
 
-    // Tìm các đơn hàng WAITING_PICKUP hoặc CREATED chưa có tài xế phân công trong cùng bưu cục hoặc cùng tỉnh
+    // Helper chuẩn hóa tên hành chính (áp dụng toàn quốc: Hà Nội, TP.HCM, Hải Phòng, Đà Nẵng, Cần Thơ,...)
+    const cleanAdminName = (str?: string | null) => {
+      if (!str) return '';
+      return str
+        .toLowerCase()
+        .replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '')
+        .replace(/^(quận|huyện|thị xã|tx\.?)\s+/i, '')
+        .replace(/^(phường|xã|thị trấn)\s+/i, '')
+        .trim();
+    };
+
+    const rawProvince = driver.assignedProvince || driver.hub?.province || '';
+    const rawDistrict = driver.assignedDistrict || driver.hub?.district || '';
+    const cleanProv = cleanAdminName(rawProvince);
+    const cleanDist = cleanAdminName(rawDistrict);
+
+    // Xây dựng điều kiện tìm kiếm đơn hàng đang chờ lấy (WAITING_PICKUP hoặc CREATED chưa có tài xế active)
+    const orConditions: any[] = [];
+    if (driver.hubId) {
+      orConditions.push({ currentHubId: driver.hubId });
+    }
+    if (cleanProv) {
+      orConditions.push({
+        pickupAddress: {
+          province: { contains: cleanProv, mode: 'insensitive' },
+        },
+      });
+      orConditions.push({
+        pickupAddress: {
+          address: { contains: cleanProv, mode: 'insensitive' },
+        },
+      });
+    }
+
+    if (orConditions.length === 0) {
+      return [];
+    }
+
+    // Tìm các đơn hàng WAITING_PICKUP hoặc CREATED chưa có phân công active
     const pendingShipments = await this.prisma.shipment.findMany({
       where: {
         status: { in: ['WAITING_PICKUP', 'CREATED'] },
         assignments: { none: { status: { in: ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS'] } } },
-        OR: [
-          { currentHubId: driver.hubId },
-          driver.assignedProvince ? {
-            pickupAddress: {
-              province: { contains: driver.assignedProvince, mode: 'insensitive' },
-            },
-          } : {},
-        ],
+        OR: orConditions,
       },
       include: { pickupAddress: true, currentHub: true },
-      take: 15, // Gán tối đa 15 đơn cùng đợt gom
+      take: 20, // Gom tối đa 20 đơn
     });
 
-    this.logger.debug(`dispatchPendingHubQueue: Tìm thấy ${pendingShipments.length} đơn đang chờ cho tài xế ${driver.name}`);
+    // Sắp xếp ưu tiên: Các đơn đúng Quận/Huyện phụ trách sẽ được ưu tiên gán trước
+    if (cleanDist) {
+      pendingShipments.sort((a, b) => {
+        const aDist = cleanAdminName(a.pickupAddress?.district) || '';
+        const bDist = cleanAdminName(b.pickupAddress?.district) || '';
+        const aAddr = (a.pickupAddress?.address || '').toLowerCase();
+        const bAddr = (b.pickupAddress?.address || '').toLowerCase();
+
+        const aMatch = aDist.includes(cleanDist) || cleanDist.includes(aDist) || aAddr.includes(cleanDist);
+        const bMatch = bDist.includes(cleanDist) || cleanDist.includes(bDist) || bAddr.includes(cleanDist);
+
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+
+    this.logger.log(
+      `dispatchPendingHubQueue: Tìm thấy ${pendingShipments.length} đơn chờ lấy cho tài xế ${driver.name} (Hub: ${driver.hub?.name || 'N/A'}, Khu vực: ${rawProvince} - ${rawDistrict})`
+    );
 
     const dispatched: any[] = [];
     for (const s of pendingShipments) {

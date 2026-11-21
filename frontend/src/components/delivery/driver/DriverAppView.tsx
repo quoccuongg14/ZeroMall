@@ -443,9 +443,10 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
 
   // Quét thủ công hàng đợi bưu cục
   const handleDrainQueue = async () => {
-    if (!driverProfile?.id) return
+    const profId = effectiveProfile?.id || driverProfile?.id
+    if (!profId) return
     try {
-      const res = await fetch(`${API_BASE_URL}/delivery/drivers/${driverProfile.id}/drain-queue`, {
+      const res = await fetch(`${API_BASE_URL}/delivery/drivers/${profId}/drain-queue`, {
         method: 'POST',
       })
       if (res.ok) {
