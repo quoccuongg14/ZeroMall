@@ -86,7 +86,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     return params?.get('hub') || 'ALL'
   })
-  const [driverStatusFilter, setDriverStatusFilter] = useState<'ALL' | 'BUSY' | 'AVAILABLE' | 'OFFLINE' | 'SUSPENDED'>('ALL')
+  const [driverStatusFilter, setDriverStatusFilter] = useState<'ALL' | 'BUSY' | 'AVAILABLE' | 'OFFLINE' | 'SUSPENDED'>('BUSY')
   const [driverPage, setDriverPage] = useState<number>(1)
   const [driverPageSize, setDriverPageSize] = useState<number>(20)
   const [updatingDriverId, setUpdatingDriverId] = useState<string | null>(null)
@@ -232,9 +232,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     return { busy, available, offline, suspended }
   }, [allDrivers, shipments])
 
-  // Lọc danh sách tài xế chuẩn Enterprise
+  // Lọc danh sách tài xế chuẩn Enterprise & Sắp xếp ưu tiên vận hành
   const filteredDrivers = useMemo(() => {
-    return allDrivers.filter((d) => {
+    const list = allDrivers.filter((d) => {
       const query = searchQuery.toLowerCase().trim()
       const matchesSearch =
         !query ||
@@ -266,6 +266,39 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
       }
 
       return true
+    })
+
+    // Sắp xếp ưu tiên vận hành:
+    // 1. BUSY (Đang đi giao) - tài xế có nhiều đơn active hơn xếp trước, COD cao hơn
+    // 2. AVAILABLE (Sẵn sàng nhận đơn)
+    // 3. OFFLINE (Ngoại tuyến / Nghỉ ca)
+    // 4. SUSPENDED (Tạm khóa / Đình chỉ)
+    const statusPriority: Record<string, number> = {
+      BUSY: 1,
+      AVAILABLE: 2,
+      OFFLINE: 3,
+      SUSPENDED: 4,
+    }
+
+    return list.sort((a, b) => {
+      const infoA = getDriverOperationalInfo(a)
+      const infoB = getDriverOperationalInfo(b)
+
+      const prioA = statusPriority[infoA.operationalStatus] || 99
+      const prioB = statusPriority[infoB.operationalStatus] || 99
+
+      if (prioA !== prioB) {
+        return prioA - prioB
+      }
+
+      if (infoA.operationalStatus === 'BUSY' && infoB.operationalStatus === 'BUSY') {
+        if (infoB.activeShipments.length !== infoA.activeShipments.length) {
+          return infoB.activeShipments.length - infoA.activeShipments.length
+        }
+        return (infoB.codInHand || 0) - (infoA.codInHand || 0)
+      }
+
+      return a.name.localeCompare(b.name, 'vi')
     })
   }, [allDrivers, searchQuery, selectedHubFilter, vehicleFilter, driverStatusFilter, shipments])
 
@@ -696,35 +729,15 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
           <div className="bg-slate-50/80 border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
-                Trạng Thái Ca:
+                Ưu Tiên Vận Hành:
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setDriverStatusFilter('ALL')
-                  setDriverPage(1)
-                }}
-                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
-                  driverStatusFilter === 'ALL'
-                    ? 'bg-slate-900 text-white shadow-3xs'
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <span>Tất Cả</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  driverStatusFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {allDrivers.length}
-                </span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => {
                   setDriverStatusFilter('BUSY')
                   setDriverPage(1)
                 }}
-                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
                   driverStatusFilter === 'BUSY'
                     ? 'bg-emerald-600 text-white shadow-3xs'
                     : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
@@ -782,6 +795,21 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  setDriverStatusFilter('ALL')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-3xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>Tất Cả ({allDrivers.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   setDriverStatusFilter('SUSPENDED')
                   setDriverPage(1)
                 }}
@@ -791,12 +819,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                     : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
                 }`}
               >
-                <span>🔴 Tạm Khóa / Đình Chỉ</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  driverStatusFilter === 'SUSPENDED' ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-800 font-bold'
-                }`}>
-                  {driverStatusCounts.suspended}
-                </span>
+                <span>🔴 Tạm Khóa ({driverStatusCounts.suspended})</span>
               </button>
             </div>
 
