@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { LockUserModal } from '../admin/LockUserModal'
+import { IssueGoodwillVoucherModal } from './modals/IssueGoodwillVoucherModal'
 
 interface CsUsersTabProps {
   triggerAuditLog: (action: string) => Promise<void>
@@ -10,6 +11,7 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedLockUser, setSelectedLockUser] = useState<any | null>(null)
+  const [selectedCompensationUser, setSelectedCompensationUser] = useState<any | null>(null)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState<number>(Date.now())
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -375,6 +377,15 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
                       {/* Cột 5: Chế tài & Thao tác CSKH */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
+                          {/* Nút Cấp Voucher Đền Bù Thiện Chí 1-1 */}
+                          <button
+                            onClick={() => setSelectedCompensationUser(u)}
+                            className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-3xs"
+                            title="Cấp voucher bồi thường thiện chí 1-1 cho khách hàng"
+                          >
+                            <span>🎁</span> Đền Bù
+                          </button>
+
                           {isBlocked ? (
                             <button
                               disabled={actionLoadingId === u.id}
@@ -410,6 +421,18 @@ export const CsUsersTab: React.FC<CsUsersTabProps> = ({ triggerAuditLog }) => {
         onClose={() => setSelectedLockUser(null)}
         onSuccess={() => {
           setSelectedLockUser(null)
+          fetchUsers()
+        }}
+        triggerAuditLog={triggerAuditLog}
+      />
+
+      {/* 5. MODAL CẤP VOUCHER ĐỀN BÙ CSKH 1-1 */}
+      <IssueGoodwillVoucherModal
+        isOpen={!!selectedCompensationUser}
+        user={selectedCompensationUser}
+        onClose={() => setSelectedCompensationUser(null)}
+        onSuccess={() => {
+          setSelectedCompensationUser(null)
           fetchUsers()
         }}
         triggerAuditLog={triggerAuditLog}

@@ -18,32 +18,20 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
   const [minSpend, setMinSpend] = useState<number | ''>(0)
   const [usageLimit, setUsageLimit] = useState<number | ''>(1000)
   const [validDays, setValidDays] = useState<number>(30)
-  const [targetUserId, setTargetUserId] = useState('')
-  const [isGoodwill, setIsGoodwill] = useState(false)
-  const [isClaimable, setIsClaimable] = useState(true)
-  const [filterType, setFilterType] = useState<'ALL' | 'PLATFORM' | 'GOODWILL'>('ALL')
+  const [isClaimable, setIsClaimable] = useState<boolean>(true) // true: Săn Giờ Vàng (FCFS), false: Mã Công Khai
+  const [filterType, setFilterType] = useState<'ALL' | 'GOLDEN_HOUR' | 'PUBLIC' | 'GOODWILL'>('ALL')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Switch between mode
-  const handleToggleMode = (goodwill: boolean) => {
-    setIsGoodwill(goodwill)
-    if (goodwill) {
-      setUsageLimit(1)
-      setNewVoucherName('Voucher CSKH Đền Bù 1-1')
-    } else {
-      setUsageLimit(1000)
-      setNewVoucherName('Voucher Toàn Sàn ZeroMall')
-      setTargetUserId('')
-    }
-  }
-
-  // Filter vouchers
+  // Filter vouchers on table
   const filteredVouchers = useMemo(() => {
     if (filterType === 'GOODWILL') {
       return platformVouchers.filter(v => Boolean(v.targetUserId))
     }
-    if (filterType === 'PLATFORM') {
-      return platformVouchers.filter(v => !v.targetUserId)
+    if (filterType === 'GOLDEN_HOUR') {
+      return platformVouchers.filter(v => v.isClaimable && !v.targetUserId)
+    }
+    if (filterType === 'PUBLIC') {
+      return platformVouchers.filter(v => !v.isClaimable && !v.targetUserId)
     }
     return platformVouchers
   }, [platformVouchers, filterType])
@@ -62,10 +50,6 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
       alert('Số tiền giảm phải lớn hơn 0đ!')
       return
     }
-    if (isGoodwill && !targetUserId.trim()) {
-      alert('Vui lòng nhập User ID để cấp Voucher Đền Bù CSKH!')
-      return
-    }
 
     setIsSubmitting(true)
     try {
@@ -73,14 +57,13 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newVoucherName.trim() || (isGoodwill ? 'Voucher CSKH Đền Bù 1-1' : 'Voucher Toàn Sàn ZeroMall'),
+          name: newVoucherName.trim() || (isClaimable ? 'Voucher Săn Giờ Vàng ZeroMall' : 'Voucher Khuyến Mãi Toàn Sàn'),
           code,
           type: 'fixed',
           value: discountVal,
           minSpend: minSpendVal,
           usageLimit: limitVal,
-          targetUserId: isGoodwill ? targetUserId.trim() : null,
-          isClaimable: isGoodwill ? false : isClaimable,
+          isClaimable: Boolean(isClaimable),
           startDate: new Date().toISOString(),
           endDate: new Date(Date.now() + 86400000 * validDays).toISOString()
         })
@@ -91,16 +74,16 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
         throw new Error(errorData.message || 'Không thể tạo voucher')
       }
 
+      const modeText = isClaimable ? 'Săn Giờ Vàng (Lưu ví FCFS)' : 'Mã Nhập Tự Do'
       await triggerAuditLog(
-        `Tạo voucher ${isGoodwill ? `CSKH Đền bù cho User "${targetUserId}"` : 'toàn sàn'} "${code}" giảm ${discountVal.toLocaleString('vi-VN')}đ (Đơn từ ${minSpendVal.toLocaleString('vi-VN')}đ)`
+        `Admin tạo voucher toàn sàn "${code}" giảm ${discountVal.toLocaleString('vi-VN')}đ (Hình thức: ${modeText}, Hạn mức: ${limitVal.toLocaleString('vi-VN')} lượt)`
       )
       fetchVouchers()
       setNewVoucherCode('')
       setNewVoucherName('')
       setNewVoucherDiscount('')
       setMinSpend(0)
-      setTargetUserId('')
-      alert('Tạo voucher thành công!')
+      alert('Tạo voucher toàn sàn thành công!')
     } catch (err: any) {
       alert('Lỗi: ' + err.message)
     } finally {
@@ -117,7 +100,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
         method: 'DELETE'
       })
       if (res.ok) {
-        await triggerAuditLog(`Xóa voucher toàn sàn "${v.code}"`)
+        await triggerAuditLog(`Admin xóa voucher toàn sàn "${v.code}"`)
         fetchVouchers()
         alert('Đã xóa voucher thành công!')
       } else {
@@ -131,44 +114,62 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
   return (
     <div className="space-y-6">
       
-      {/* CARD 1: FORM TẠO VOUCHER TOÀN SÀN & CSKH */}
+      {/* CARD 1: FORM CẤU HÌNH VOUCHER TOÀN SÀN */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-3xs space-y-5">
         
-        {/* Header & Mode Switcher */}
+        {/* Header & Distribution Mode Switcher */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div>
             <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-              <span>🎟️</span> Quản Lý Voucher Toàn Sàn & CSKH Đền Bù
+              <span>🎟️</span> Quản Lý Voucher Toàn Sàn (Marketing & Khuyến Mãi)
             </h3>
             <p className="text-xs text-slate-400 font-medium mt-0.5">
-              Tạo mã giảm giá do Sàn tài trợ ngân sách (Toàn sàn hoặc Đền bù sự cố cho User)
+              Cấu hình các chương trình trợ giá của Sàn: Mã nhập công khai hoặc Voucher săn theo Khung Giờ Vàng
             </p>
           </div>
 
+          {/* Mode Switcher */}
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl shrink-0">
             <button
               type="button"
-              onClick={() => handleToggleMode(false)}
+              onClick={() => setIsClaimable(true)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                !isGoodwill
+                isClaimable
+                  ? 'bg-amber-600 text-white shadow-3xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              ⚡ Săn Giờ Vàng (FCFS)
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsClaimable(false)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !isClaimable
                   ? 'bg-emerald-600 text-white shadow-3xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
               }`}
             >
-              🌐 Toàn Sàn (Mọi User)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleMode(true)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                isGoodwill
-                  ? 'bg-purple-600 text-white shadow-3xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              🎁 CSKH Đền Bù (User 1-1)
+              🏷️ Mã Nhập Tự Do
             </button>
           </div>
+        </div>
+
+        {/* Explain Selected Distribution Mode */}
+        <div className={`p-3 rounded-xl border text-xs font-medium ${
+          isClaimable 
+            ? 'bg-amber-50/70 border-amber-200 text-amber-900' 
+            : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+        }`}>
+          {isClaimable ? (
+            <p>
+              ⚡ <strong>Chế độ Săn Giờ Vàng (Claimable):</strong> Mã sẽ xuất hiện trên banner Giờ Vàng (0h, 9h, 12h, 21h). Người mua bắt buộc phải bấm <strong>"Lưu Vào Ví"</strong> và áp dụng theo thứ tự ưu tiên ai chốt đơn trước thì được giảm giá trước (FCFS).
+            </p>
+          ) : (
+            <p>
+              🏷️ <strong>Chế độ Mã Nhập Tự Do (Public Code):</strong> Mã khuyến mãi công khai. Người mua chỉ cần nhập đúng mã code tại trang Giỏ hàng / Thanh toán để được giảm giá mà không cần bấm lưu ví trước.
+            </p>
+          )}
         </div>
 
         {/* Form Inputs Grid */}
@@ -216,17 +217,16 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
             />
           </div>
 
-          {/* Lượt dùng */}
+          {/* Hạn mức lượt dùng */}
           <div className="md:col-span-2 space-y-1.5 text-left">
             <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
-              {isGoodwill ? 'Giới Hạn' : 'Tổng Lượt Dùng'}
+              Hạn Mức Ngân Sách
             </label>
             <input
               type="number"
-              disabled={isGoodwill}
               value={usageLimit}
               onChange={(e) => setUsageLimit(e.target.value ? Number(e.target.value) : '')}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-3xs disabled:bg-slate-100 disabled:text-slate-400"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-3xs"
             />
           </div>
 
@@ -250,68 +250,37 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
 
         </div>
 
-        {/* Hàng 2: Input Tên Voucher & User ID (nếu CSKH đền bù) */}
+        {/* Hàng 2: Mô tả Tên Voucher & Nút Tạo */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-center pt-1">
-          <div className={isGoodwill ? 'md:col-span-6 space-y-1.5 text-left' : 'md:col-span-9 space-y-1.5 text-left'}>
+          <div className="md:col-span-9 space-y-1.5 text-left">
             <label className="text-xs font-bold text-slate-500">
-              Mô tả / Tên Voucher (hiển thị cho khách khi lưu vào ví)
+              Tên Chiến Dịch / Mô Tả (hiển thị cho khách khi lưu vào ví)
             </label>
             <input
               type="text"
-              placeholder={isGoodwill ? 'Voucher CSKH Đền Bù Sự Cố 1-1' : 'Voucher Tri Ân Toàn Sàn ZeroMall'}
+              placeholder={isClaimable ? 'Voucher Săn Giờ Vàng Tri Ân Khách Hàng' : 'Mã Giảm Giá Toàn Sàn ZeroMall'}
               value={newVoucherName}
               onChange={(e) => setNewVoucherName(e.target.value)}
               className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-3xs"
             />
           </div>
 
-          {isGoodwill && (
-            <div className="md:col-span-3 space-y-1.5 text-left">
-              <label className="text-xs font-black text-purple-700 flex items-center gap-1">
-                <span>🎯</span> User ID Nhận Đền Bù <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="ID User (VD: user-123...)"
-                value={targetUserId}
-                onChange={(e) => setTargetUserId(e.target.value)}
-                className="w-full px-3.5 py-2 bg-purple-50 border border-purple-200 rounded-xl text-xs font-mono font-bold text-purple-800 focus:outline-none focus:border-purple-600 focus:bg-white shadow-3xs"
-              />
-            </div>
-          )}
-
-          <div className={isGoodwill ? 'md:col-span-3 flex justify-end mt-4' : 'md:col-span-3 flex justify-end mt-4'}>
+          <div className="md:col-span-3 flex justify-end mt-4">
             <button
               type="button"
               disabled={isSubmitting}
               onClick={handleCreateVoucher}
               className={`w-full py-2.5 px-4 text-white font-black rounded-xl text-xs cursor-pointer shadow-3xs transition-all flex items-center justify-center gap-2 ${
-                isGoodwill
-                  ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'
+                isClaimable
+                  ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
                   : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
               } disabled:opacity-50`}
             >
-              <span>{isGoodwill ? '🎁' : '✨'}</span>
-              <span>{isSubmitting ? 'Đang tạo...' : isGoodwill ? 'Cấp Voucher CSKH' : 'Tạo Voucher Sàn'}</span>
+              <span>{isClaimable ? '⚡' : '✨'}</span>
+              <span>{isSubmitting ? 'Đang tạo...' : isClaimable ? 'Tạo Voucher Giờ Vàng' : 'Tạo Voucher Công Khai'}</span>
             </button>
           </div>
         </div>
-
-        {!isGoodwill && (
-          <div className="flex items-center gap-2 pt-1 text-xs border-t border-slate-100">
-            <input
-              type="checkbox"
-              id="claimableCheck"
-              checked={isClaimable}
-              onChange={(e) => setIsClaimable(e.target.checked)}
-              className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
-            />
-            <label htmlFor="claimableCheck" className="text-slate-700 font-bold cursor-pointer select-none flex items-center gap-1.5">
-              <span>⚡</span>
-              <span>Kích hoạt Cơ chế 1: Voucher Khung Giờ Vàng (Bắt buộc người mua bấm "Lưu vào ví" trước khi thanh toán - FCFS)</span>
-            </label>
-          </div>
-        )}
 
       </div>
 
@@ -322,7 +291,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
         <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Danh Sách Voucher Hiện Có
+              Danh Sách Voucher Đang Hoạt Động
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
               {filteredVouchers.length} mã
@@ -341,14 +310,24 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
               Tất Cả ({platformVouchers.length})
             </button>
             <button
-              onClick={() => setFilterType('PLATFORM')}
+              onClick={() => setFilterType('GOLDEN_HOUR')}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                filterType === 'PLATFORM'
+                filterType === 'GOLDEN_HOUR'
+                  ? 'bg-white text-amber-700 shadow-3xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ⚡ Giờ Vàng ({platformVouchers.filter(v => v.isClaimable && !v.targetUserId).length})
+            </button>
+            <button
+              onClick={() => setFilterType('PUBLIC')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                filterType === 'PUBLIC'
                   ? 'bg-white text-emerald-700 shadow-3xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              🌐 Toàn Sàn ({platformVouchers.filter(v => !v.targetUserId).length})
+              🏷️ Mã Tự Do ({platformVouchers.filter(v => !v.isClaimable && !v.targetUserId).length})
             </button>
             <button
               onClick={() => setFilterType('GOODWILL')}
@@ -357,6 +336,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
                   ? 'bg-white text-purple-700 shadow-3xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
+              title="Voucher đền bù do đội ngũ CSKH cấp phát cho từng User"
             >
               🎁 CSKH Đền Bù ({platformVouchers.filter(v => Boolean(v.targetUserId)).length})
             </button>
@@ -369,9 +349,9 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/60 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
                 <th className="py-3.5 px-5">Mã Voucher & Tên</th>
-                <th className="py-3.5 px-4">Đối Tượng Áp Dụng</th>
+                <th className="py-3.5 px-4">Hình Thức Phát Hành</th>
                 <th className="py-3.5 px-5 text-right">Mức Giảm & Điều Kiện</th>
-                <th className="py-3.5 px-5 text-center min-w-[140px]">Tiến Độ Lượt Dùng</th>
+                <th className="py-3.5 px-5 text-center min-w-[140px]">Tiến Độ Lượt Dùng (FCFS)</th>
                 <th className="py-3.5 px-5 text-center min-w-[130px]">Hạn Sử Dụng</th>
                 <th className="py-3.5 px-5 text-center">Thao Tác</th>
               </tr>
@@ -396,7 +376,9 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
                       {/* Cột 1: Mã Code & Tên */}
                       <td className="py-3.5 px-5">
                         <div className="font-mono font-black text-slate-900 text-xs tracking-wider flex items-center gap-1.5">
-                          <span className="text-emerald-600">🎟️</span>
+                          <span className={v.isClaimable ? 'text-amber-500' : 'text-emerald-600'}>
+                            {v.isClaimable ? '⚡' : '🎟️'}
+                          </span>
                           <span>{v.code}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 font-medium mt-0.5 line-clamp-1">
@@ -404,25 +386,23 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Cột 2: Đối Tượng Áp Dụng */}
+                      {/* Cột 2: Hình Thức Phát Hành */}
                       <td className="py-3.5 px-4">
                         <div className="flex flex-col gap-1 items-start">
                           {v.targetUserId ? (
                             <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200/60 font-bold text-[10px]">
                               <span>🎁</span>
-                              <span>CSKH Đền Bù:</span>
-                              <span className="font-mono">{v.targetUserId.slice(0, 8)}...</span>
+                              <span>CSKH Đền Bù (User: {v.targetUserId.slice(0, 8)}...)</span>
+                            </div>
+                          ) : v.isClaimable ? (
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200/80 font-bold text-[10px]">
+                              <span>⚡</span>
+                              <span>Săn Giờ Vàng (Lưu Ví FCFS)</span>
                             </div>
                           ) : (
                             <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-bold text-[10px]">
-                              <span>🌐</span>
-                              <span>Mọi Người Mua (Toàn Sàn)</span>
-                            </div>
-                          )}
-                          {v.isClaimable && (
-                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 font-bold text-[9px] uppercase tracking-wider">
-                              <span>⚡</span>
-                              <span>Giờ Vàng (Lưu Ví FCFS)</span>
+                              <span>🏷️</span>
+                              <span>Mã Nhập Tự Do (Toàn Sàn)</span>
                             </div>
                           )}
                         </div>
@@ -438,7 +418,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Cột 4: Lượt Dùng (Có Progress Bar riêng biệt) */}
+                      {/* Cột 4: Lượt Dùng (Có Progress Bar FCFS) */}
                       <td className="py-3.5 px-5 text-center">
                         <div className="flex items-center justify-between text-[11px] font-bold mb-1">
                           <span className={isExhausted ? 'text-rose-600 font-black' : 'text-slate-800'}>
@@ -458,7 +438,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Cột 5: Hạn Sử Dụng (Có khoảng cách và Badge) */}
+                      {/* Cột 5: Hạn Sử Dụng */}
                       <td className="py-3.5 px-5 text-center">
                         <div className="font-semibold text-slate-700 text-xs">
                           {new Date(v.endDate).toLocaleDateString('vi-VN')}
