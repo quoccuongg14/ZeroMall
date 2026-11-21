@@ -149,7 +149,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   // Quản trị giải ngân Người Bán (Shop Settlement)
   const [shops, setShops] = useState<any[]>([])
   const [locallySettledSellerIds, setLocallySettledSellerIds] = useState<string[]>([])
-  const [settlingSellerId, setSettlingSellerId] = useState<string | null>(null)
+  const [frozenSellerIds, setFrozenSellerIds] = useState<string[]>([])
   const [sellerSearch, setSellerSearch] = useState('')
 
   useEffect(() => {
@@ -345,6 +345,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
 
     return Array.from(map.values()).map((item) => {
       const isLocallySettled = locallySettledSellerIds.includes(item.sellerId)
+      const isFrozen = frozenSellerIds.includes(item.sellerId)
       // 5% phí hoa hồng dịch vụ Sàn thu trên doanh số COD giao thành công
       const platformFee = Math.round(item.deliveredCod * 0.05)
       const netPayable = Math.max(0, item.deliveredCod - platformFee)
@@ -355,9 +356,10 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         platformFee,
         netPayable,
         isSettled,
+        isFrozen,
       }
     }).sort((a, b) => b.deliveredCod - a.deliveredCod)
-  }, [codShipments, shopMap, locallySettledSellerIds])
+  }, [codShipments, shopMap, locallySettledSellerIds, frozenSellerIds])
 
   // Lọc danh sách Shop theo tìm kiếm
   const filteredSellerSettlements = useMemo(() => {
@@ -372,22 +374,28 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
     )
   }, [sellerSettlements, sellerSearch])
 
-  // Thao tác Kế toán / Admin duyệt giải ngân vào Ví Shop
-  const handleSettleSeller = (sellerItem: any) => {
-    if (sellerItem.deliveredCod <= 0) {
-      alert(`Người bán "${sellerItem.shopName}" chưa có đơn COD giao thành công để giải ngân.`)
-      return
-    }
-
-    const confirmMsg = `XÁC NHẬN GIẢI NGÂN VÍ DOANH THU SHOP:\n\n• Tên Shop: ${sellerItem.shopName}\n• Tổng tiền COD thu hộ: ${formatMoney(sellerItem.deliveredCod)} (${sellerItem.deliveredShipments} đơn)\n• Khấu trừ hoa hồng sàn (5%): -${formatMoney(sellerItem.platformFee)}\n• Số tiền thực chuyển vào Ví Shop: ${formatMoney(sellerItem.netPayable)}\n\nXác nhận chuyển tiền vào Ví Người Bán ngay bây giờ?`
+  // Thẩm quyền Admin can thiệp: Đóng băng tạm dừng giải ngân tự động khi có nghi vấn/khiếu nại
+  const handleFreezeSeller = (sellerItem: any) => {
+    const confirmMsg = `XÁC NHẬN ĐÓNG BĂNG DÒNG TIỀN KÝ QUỸ:\n\n• Shop: ${sellerItem.shopName}\n• Số tiền tạm giữ: ${formatMoney(sellerItem.netPayable)}\n\nHành động này sẽ tạm dừng chu trình TỰ ĐỘNG GIẢI NGÂN về ví của Shop do nghi vấn vi phạm hoặc có khiếu nại chưa giải quyết. Tiếp tục?`
     if (!window.confirm(confirmMsg)) return
 
-    setSettlingSellerId(sellerItem.sellerId)
-    setTimeout(() => {
-      setLocallySettledSellerIds((prev) => [...prev, sellerItem.sellerId])
-      setSettlingSellerId(null)
-      alert(`✓ ĐÃ GIẢI NGÂN THÀNH CÔNG!\n\nĐã chuyển ${formatMoney(sellerItem.netPayable)} vào Ví Người Bán "${sellerItem.shopName}".\nSàn đã thu ${formatMoney(sellerItem.platformFee)} hoa hồng dịch vụ.`)
-    }, 500)
+    setFrozenSellerIds((prev) => [...prev, sellerItem.sellerId])
+    alert(`🔒 ĐÃ ĐÓNG BĂNG DÒNG TIỀN CỦA SHOP "${sellerItem.shopName}".\nHệ thống tạm ngưng giải ngân tự động cho đến khi Admin mở khóa.`)
+  }
+
+  // Thẩm quyền Admin can thiệp: Mở khóa giải ngân tự động
+  const handleUnfreezeSeller = (sellerId: string) => {
+    setFrozenSellerIds((prev) => prev.filter((id) => id !== sellerId))
+    alert(`🔓 ĐÃ MỞ KHÓA DÒNG TIỀN SHOP.\nHệ thống sẽ tiếp tục chu trình tự động giải ngân bình thường sau khi hết hạn đổi trả.`)
+  }
+
+  // Thao tác phê duyệt giải phóng tiền sớm theo yêu cầu (Priority Early Release)
+  const handlePriorityReleaseSeller = (sellerItem: any) => {
+    const confirmMsg = `XÁC NHẬN GIẢI NGÂN SỚM TRƯỚC HẠN:\n\n• Shop: ${sellerItem.shopName}\n• Số tiền net: ${formatMoney(sellerItem.netPayable)}\n\nPhê duyệt giải phóng dòng tiền ký quỹ ngay lập tức vào Ví Shop trước khi hết hạn đổi trả 7 ngày?`
+    if (!window.confirm(confirmMsg)) return
+
+    setLocallySettledSellerIds((prev) => [...prev, sellerItem.sellerId])
+    alert(`✓ ĐÃ DUYỆT GIẢI NGÂN SỚM!\nĐã chuyển ${formatMoney(sellerItem.netPayable)} vào Ví Người Bán "${sellerItem.shopName}".`)
   }
 
   // Thao tác Kế toán duyệt chốt két và nộp tiền từ Bưu cục về Sàn
@@ -947,7 +955,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
               </div>
 
               <span className="text-[11px] text-slate-400 font-medium">
-                Quy chuẩn: Tự động khấu trừ 5% hoa hồng dịch vụ Sàn trước khi giải ngân vào Ví Shop
+                Quy chuẩn: Hệ thống tự động khấu trừ 5% hoa hồng và tự động giải ngân vào Ví Shop sau 7 ngày. Admin can thiệp Đóng Băng khi có rủi ro.
               </span>
             </div>
 
@@ -960,8 +968,8 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                     <th className="py-3 px-4 text-right whitespace-nowrap">Tổng COD Thu Hộ</th>
                     <th className="py-3 px-4 text-right whitespace-nowrap">Hoa Hồng Sàn (5%)</th>
                     <th className="py-3 px-4 text-right whitespace-nowrap">Thực Nhận Vào Ví Shop</th>
-                    <th className="py-3 px-4 text-center whitespace-nowrap">Trạng Thái Ký Quỹ</th>
-                    <th className="py-3 px-4 text-right min-w-44 whitespace-nowrap">Thao Tác Kế Toán</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">Tiến Độ Ký Quỹ Tự Động</th>
+                    <th className="py-3 px-4 text-right min-w-44 whitespace-nowrap">Kiểm Soát Rủi Ro (Admin)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1028,15 +1036,19 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                           )}
                         </td>
 
-                        {/* Trạng thái Ký quỹ */}
+                        {/* Tiến độ Ký quỹ Tự Động */}
                         <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                          {item.isSettled ? (
+                          {item.isFrozen ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                              🔒 Đang Đóng Băng Ký Quỹ
+                            </span>
+                          ) : item.isSettled ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              ✓ Đã Giải Ngân Vào Ví
+                              ✓ Đã Tự Động Cộng Ví Shop
                             </span>
                           ) : isDeliveredReady ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              ⏳ Sẵn Sàng Giải Ngân
+                              ⏳ Ký Quỹ Tự Động (Hạn 7 ngày)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
@@ -1045,23 +1057,39 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                           )}
                         </td>
 
-                        {/* Thao tác kế toán */}
+                        {/* Kiểm soát rủi ro của Admin */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {isDeliveredReady && !item.isSettled ? (
+                            {item.isFrozen ? (
                               <button
                                 type="button"
-                                disabled={settlingSellerId === item.sellerId}
-                                onClick={() => handleSettleSeller(item)}
-                                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
-                                title="Giải ngân số tiền Net vào ví doanh thu của Shop"
+                                onClick={() => handleUnfreezeSeller(item.sellerId)}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                                title="Mở khóa đóng băng, đưa về chu kỳ giải ngân tự động bình thường"
                               >
-                                <span>⚡</span> Giải Ngân Ví
+                                <span>🔓</span> Mở Khóa Ví
                               </button>
-                            ) : item.isSettled ? (
-                              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                                ✓ Hoàn tất
-                              </span>
+                            ) : isDeliveredReady ? (
+                              <>
+                                {!item.isSettled && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePriorityReleaseSeller(item)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                                    title="Phê duyệt giải phóng tiền sớm vào Ví Shop trước khi hết hạn 7 ngày"
+                                  >
+                                    <span>⚡</span> Duyệt Sớm
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleFreezeSeller(item)}
+                                  className="px-2.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                                  title="Đóng băng tạm giữ tiền nếu phát hiện Shop vi phạm hoặc có tranh chấp"
+                                >
+                                  <span>🔒</span> Đóng Băng
+                                </button>
+                              </>
                             ) : null}
 
                             <button
