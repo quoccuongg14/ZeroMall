@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import type { ReturnData } from '../../services/return.service'
 
@@ -114,11 +114,12 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
     return initialToken || localStorage.getItem('delivery_token') || null
   })
 
-  const handleLoginSuccess = (usr: any, tok: string) => {
+  const handleLoginSuccess = async (usr: any, tok: string) => {
     setCurrentUser(usr)
     setToken(tok)
     localStorage.setItem('delivery_user', JSON.stringify(usr))
     localStorage.setItem('delivery_token', tok)
+    await fetchAllData()
     if (onAuthSuccess) onAuthSuccess(usr, tok)
   }
 
@@ -161,7 +162,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
 
   useEffect(() => {
     fetchAllData()
-  }, [])
+  }, [currentUser?.id])
 
   const handleUpdateStatus = async (
     shipmentId: string,
@@ -227,7 +228,43 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
   const isDriver = currentUser.role === 'DRIVER'
 
   // Tìm Driver profile tương ứng trong CSDL
-  const currentDriver = drivers.find((d) => (d as any).userId === currentUser.id || d.phone === currentUser.phoneNumber)
+  const currentDriver = useMemo(() => {
+    if (!currentUser) return null
+    const cleanUserPhone = (currentUser.phoneNumber || '').replace(/[^0-9]/g, '')
+    const userEmail = (currentUser.email || '').toLowerCase().trim()
+
+    // 1. Khớp chính xác theo userId
+    let found = drivers.find((d: any) => d.userId && d.userId === currentUser.id)
+    if (found) return found
+
+    // 2. Khớp theo số điện thoại chuẩn hóa
+    if (cleanUserPhone) {
+      found = drivers.find((d) => (d.phone || '').replace(/[^0-9]/g, '') === cleanUserPhone)
+      if (found) return found
+    }
+
+    // 3. Khớp nếu driver có email hoặc phone trong email
+    if (userEmail) {
+      found = drivers.find((d: any) => {
+        if (d.email && d.email.toLowerCase().trim() === userEmail) return true
+        if (cleanUserPhone && userEmail.includes(cleanUserPhone)) return true
+        return false
+      })
+      if (found) return found
+    }
+
+    // 4. Khớp theo hubId và tên nếu trùng
+    if (currentUser.hubId && currentUser.name) {
+      found = drivers.find(
+        (d) =>
+          d.hubId === currentUser.hubId &&
+          d.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase()
+      )
+      if (found) return found
+    }
+
+    return null
+  }, [drivers, currentUser])
 
   // Bộ lọc dữ liệu theo Tab & Vai trò (DRIVER chỉ thấy đơn của mình và các đơn tại Hub của mình, OPERATOR/ADMIN thấy toàn sàn)
   const roleBaseShipments = isDriver
@@ -254,6 +291,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
       <DriverAppView
         currentUser={currentUser}
         driverProfile={currentDriver}
+        hubs={hubs}
         shipments={roleBaseShipments}
         onRefresh={fetchAllData}
         onUpdateStatus={handleUpdateStatus}

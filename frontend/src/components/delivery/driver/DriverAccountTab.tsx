@@ -3,6 +3,7 @@ import React from 'react'
 export interface DriverAccountTabProps {
   currentUser: any
   driverProfile: any
+  hubs?: any[]
   completedCount: number
   totalOrders: number
   onLogout: () => void
@@ -15,15 +16,23 @@ export interface DriverAccountTabProps {
 export const DriverAccountTab: React.FC<DriverAccountTabProps> = ({
   currentUser,
   driverProfile,
+  hubs = [],
   completedCount,
   totalOrders,
   onLogout,
 }) => {
-  const driverName = currentUser?.name || currentUser?.fullName || ''
+  const driverName = driverProfile?.name || currentUser?.name || currentUser?.fullName || ''
   const driverPhone = driverProfile?.phone || currentUser?.phoneNumber || ''
-  const vehicleNumber = driverProfile?.vehicleNumber || ''
-  const vehicleType = driverProfile?.vehicleType || 'Xe máy'
-  const hubName = driverProfile?.hub?.name || ''
+  const vehicleNumber = driverProfile?.vehicleNumber || (driverProfile as any)?.licensePlate || 'Đang đồng bộ...'
+  const vehicleType = driverProfile?.vehicleType === 'TRUCK'
+    ? '🚛 Xe tải đường dài (Linehaul liên tỉnh)'
+    : driverProfile?.vehicleType === 'VAN'
+    ? '🚐 Xe Van / Bán tải'
+    : '🛵 Xe máy (Lấy & Giao nội thành)'
+  const hubName =
+    driverProfile?.hub?.name ||
+    hubs?.find((h: any) => h.id === (driverProfile?.hubId || currentUser?.hubId))?.name ||
+    'Bưu Cục SPX'
   const email = currentUser?.email || ''
 
   const safeTotal = totalOrders || 0

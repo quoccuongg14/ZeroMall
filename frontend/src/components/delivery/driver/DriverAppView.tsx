@@ -22,6 +22,7 @@ export type { Shipment } from './DriverOrdersTab'
 export interface DriverAppViewProps {
   currentUser: any
   driverProfile: any
+  hubs?: any[]
   shipments: Array<{
     id: string
     orderId: string
@@ -74,6 +75,7 @@ type TabKey = 'HOME' | 'ORDERS' | 'SCAN' | 'WALLET' | 'ACCOUNT'
 export const DriverAppView: React.FC<DriverAppViewProps> = ({
   currentUser,
   driverProfile,
+  hubs = [],
   shipments,
   onRefresh,
   onUpdateStatus,
@@ -83,6 +85,39 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
 }) => {
   // ── Navigation state ──
   const [activeTab, setActiveTab] = useState<TabKey>('HOME')
+
+  // Hồ sơ tài xế tự phục hồi (Fallback trực tiếp từ API nếu props ban đầu chưa kịp nạp)
+  const [localDriverProfile, setLocalDriverProfile] = useState<any>(driverProfile || null)
+
+  useEffect(() => {
+    if (driverProfile) {
+      setLocalDriverProfile(driverProfile)
+    } else {
+      fetch(`${API_BASE_URL}/delivery/drivers`)
+        .then((res) => res.json())
+        .then((list: any[]) => {
+          if (Array.isArray(list)) {
+            const cleanPhone = (currentUser?.phoneNumber || '').replace(/[^0-9]/g, '')
+            const found = list.find(
+              (d) =>
+                (d.userId && d.userId === currentUser?.id) ||
+                (cleanPhone && (d.phone || '').replace(/[^0-9]/g, '') === cleanPhone) ||
+                (d.hubId === currentUser?.hubId && d.name?.trim().toLowerCase() === currentUser?.name?.trim().toLowerCase())
+            )
+            if (found) {
+              setLocalDriverProfile(found)
+            }
+          }
+        })
+        .catch((err) => console.error('Auto resolve driver profile error:', err))
+    }
+  }, [driverProfile, currentUser])
+
+  const effectiveProfile = localDriverProfile || driverProfile
+  const effectiveHubName =
+    effectiveProfile?.hub?.name ||
+    hubs.find((h: any) => h.id === (effectiveProfile?.hubId || currentUser?.hubId))?.name ||
+    'Bưu Cục SPX'
 
   const [driverState, setDriverState] = useState<'ONLINE' | 'OFFLINE'>('OFFLINE')
   const [showCheckInModal, setShowCheckInModal] = useState(false)
@@ -430,9 +465,9 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               🛵
             </div>
             <div>
-              <h2 className="font-bold text-sm leading-tight">{currentUser?.name || 'Tài Xế'}</h2>
+              <h2 className="font-bold text-sm leading-tight">{effectiveProfile?.name || currentUser?.name || 'Tài Xế'}</h2>
               <p className="text-[11px] text-emerald-100 font-mono">
-                {driverProfile?.vehicleNumber} • {driverProfile?.hub?.name || 'Khai Thác'}
+                {effectiveProfile?.vehicleNumber ? `${effectiveProfile.vehicleNumber} • ` : ''}{effectiveHubName}
               </p>
             </div>
           </div>
@@ -462,7 +497,7 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
           {activeTab === 'HOME' && (
             <DriverHomeTab
               currentUser={currentUser}
-              driverProfile={driverProfile}
+              driverProfile={effectiveProfile}
               pickupCount={pickupTasks.length + returnPickups.length}
               holdingCount={holdingTasks.length + holdingReturnTasks.length}
               deliveryCount={deliveryTasks.length}
@@ -497,7 +532,7 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
           {activeTab === 'SCAN' && (
             <DriverScanTab
               currentUser={currentUser}
-              driverProfile={driverProfile}
+              driverProfile={effectiveProfile}
               shipments={shipments}
               onUpdateStatus={onUpdateStatus}
               onRefresh={onRefresh}
@@ -507,7 +542,7 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
 
           {activeTab === 'WALLET' && (
             <DriverWalletTab
-              driverProfile={driverProfile}
+              driverProfile={effectiveProfile}
               completedTasks={completedTasks.map((s) => ({
                 id: s.id,
                 trackingNumber: s.trackingNumber,
@@ -527,7 +562,8 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
           {activeTab === 'ACCOUNT' && (
             <DriverAccountTab
               currentUser={currentUser}
-              driverProfile={driverProfile}
+              driverProfile={effectiveProfile}
+              hubs={hubs}
               completedCount={completedTasks.length}
               totalOrders={myShipments.length}
               onLogout={onLogout}
