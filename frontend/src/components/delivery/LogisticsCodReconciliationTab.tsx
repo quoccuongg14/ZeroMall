@@ -343,7 +343,6 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
       grossCod: number
       deliveredCod: number
       collectingCod: number
-      platformFee: number
       netPayable: number
       shipments: Shipment[]
       isSettled: boolean
@@ -366,7 +365,6 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
           grossCod: 0,
           deliveredCod: 0,
           collectingCod: 0,
-          platformFee: 0,
           netPayable: 0,
           shipments: [],
           isSettled: false,
@@ -389,14 +387,11 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
     return Array.from(map.values()).map((item) => {
       const isLocallySettled = locallySettledSellerIds.includes(item.sellerId)
       const isFrozen = frozenSellerIds.includes(item.sellerId)
-      // 5% phí hoa hồng dịch vụ Sàn thu trên doanh số COD giao thành công
-      const platformFee = Math.round(item.deliveredCod * 0.05)
-      const netPayable = Math.max(0, item.deliveredCod - platformFee)
+      const netPayable = item.deliveredCod
       const isSettled = isLocallySettled || (item.deliveredShipments > 0 && item.shipments.every((s) => s.codTransaction?.status === 'SETTLED'))
 
       return {
         ...item,
-        platformFee,
         netPayable,
         isSettled,
         isFrozen,
@@ -469,7 +464,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
     let fileName = ''
 
     if (activeTierView === 'SELLERS') {
-      headers = ['Mã Shop', 'Tên Người Bán', 'Email', 'Số Điện Thoại', 'Tổng Đơn', 'Đã Giao', 'Tổng COD Phát Sinh (VND)', 'Đã Thu Thành Công (VND)', 'Hoa Hồng Sàn 5% (VND)', 'Thực Chuyển Ví Shop (VND)', 'Trạng Thái']
+      headers = ['Mã Shop', 'Tên Người Bán', 'Email', 'Số Điện Thoại', 'Tổng Đơn', 'Đã Giao', 'Tổng COD Phát Sinh (VND)', 'Đã Thu Thành Công (VND)', 'Thực Chuyển Ví Shop (VND)', 'Trạng Thái']
       rows = sellerSettlements.map((s) => [
         s.sellerId,
         `"${s.shopName}"`,
@@ -479,7 +474,6 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         s.deliveredShipments,
         s.grossCod,
         s.deliveredCod,
-        s.platformFee,
         s.netPayable,
         s.isSettled ? 'ĐÃ GIẢI NGÂN' : s.deliveredCod > 0 ? 'SẴN SÀNG GIẢI NGÂN' : 'ĐANG GIAO HÀNG',
       ])
@@ -675,42 +669,42 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
             </p>
           </div>
 
-          {/* Card 2: Công nợ tiền mặt cần thu hồi */}
-          <div className="bg-rose-50/60 border border-rose-200/80 p-4 rounded-2xl space-y-1">
-            <span className="text-[11px] text-rose-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>⚠️</span> Công Nợ Tiền Mặt Cần Thu Hồi
+          {/* Card 2: Đang thu ngoài đường */}
+          <div className="bg-amber-50/60 border border-amber-200/80 p-4 rounded-2xl space-y-1">
+            <span className="text-[11px] text-amber-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🛵</span> Đang Thu Ngoài Đường
             </span>
-            <p className="text-2xl font-black text-rose-600 font-mono mt-0.5">
-              {formatMoney(totalVault + totalCollecting)}
+            <p className="text-2xl font-black text-amber-700 font-mono mt-0.5">
+              {formatMoney(totalCollecting)}
             </p>
-            <p className="text-[10px] text-rose-700/80 font-medium">
-              {hubsWithVaultCount} Bưu cục giữ két ({formatMoney(totalVault)}) + Ngoài đường ({formatMoney(totalCollecting)})
+            <p className="text-[10px] text-amber-700/80 font-medium">
+              {collectingShipments.length} đơn bưu tá đang đi phát tận tay người mua
             </p>
           </div>
 
-          {/* Card 3: Tài khoản Ký Quỹ Sàn (Escrow Pool) */}
+          {/* Card 3: Tiền trong két sắt Hub */}
+          <div className="bg-rose-50/60 border border-rose-200/80 p-4 rounded-2xl space-y-1">
+            <span className="text-[11px] text-rose-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🏦</span> Tiền Trong Két Sắt Hub
+            </span>
+            <p className="text-2xl font-black text-rose-600 font-mono mt-0.5">
+              {formatMoney(totalVault)}
+            </p>
+            <p className="text-[10px] text-rose-700/80 font-medium">
+              {hubsWithVaultCount} Bưu cục giữ két ({vaultShipments.length} đơn chờ nộp Sàn)
+            </p>
+          </div>
+
+          {/* Card 4: Đã nộp an toàn & giải ngân Shop */}
           <div className="bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl space-y-1">
             <span className="text-[11px] text-emerald-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>🏦</span> Tài Khoản Ký Quỹ Sàn (Escrow)
+              <span>✅</span> Đã Nộp & Giải Ngân Shop
             </span>
             <p className="text-2xl font-black text-emerald-600 font-mono mt-0.5">
               {formatMoney(totalSettled)}
             </p>
             <p className="text-[10px] text-emerald-700/80 font-medium">
-              {settledShipments.length} đơn tiền đã chuyển khoản nộp về Sàn
-            </p>
-          </div>
-
-          {/* Card 4: Hoa hồng Sàn thu về (5%) */}
-          <div className="bg-indigo-50/60 border border-indigo-200/80 p-4 rounded-2xl space-y-1">
-            <span className="text-[11px] text-indigo-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>💎</span> Hoa Hồng Sàn Thu Về (5%)
-            </span>
-            <p className="text-2xl font-black text-indigo-600 font-mono mt-0.5">
-              {formatMoney(Math.round(totalCodAll * 0.05))}
-            </p>
-            <p className="text-[10px] text-indigo-700/80 font-medium">
-              Doanh thu hoa hồng dịch vụ Sàn khấu trừ từ đơn hàng
+              {settledShipments.length} đơn đã chốt số an toàn & kết chuyển vào Ví Shop
             </p>
           </div>
         </div>
@@ -1040,31 +1034,31 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    💰 COD Đã Thu: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.deliveredCod, 0))}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200">
-                    💎 Hoa Hồng Sàn (5%): {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.platformFee, 0))}
-                  </span>
                   <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-                    🤝 Net Trả Shop: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.netPayable, 0))}
+                    💰 Tổng COD Thu Hộ: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.grossCod, 0))}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                    🛵 Đang Đi Giao: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.collectingCod, 0))}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    🤝 COD Đã Giao (Trả Shop): {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.netPayable, 0))}
                   </span>
                 </div>
               </div>
 
               <span className="text-[11px] text-slate-400 font-medium">
-                Quy chuẩn: Hệ thống tự động khấu trừ 5% hoa hồng và tự động giải ngân vào Ví Shop sau 7 ngày. Admin can thiệp Đóng Băng khi có rủi ro.
+                Quy chuẩn: Hệ thống thu hộ 100% tiền hàng COD và tự động giải ngân vào Ví Shop sau 7 ngày an toàn. Admin can thiệp Đóng Băng khi có khiếu nại.
               </span>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-[1080px] w-full text-left text-xs text-slate-700">
+              <table className="min-w-[980px] w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
                   <tr>
                     <th className="py-3 px-4 min-w-64 whitespace-nowrap">Shop (Người Bán)</th>
                     <th className="py-3 px-3 text-center w-32 whitespace-nowrap">Số Đơn Hàng</th>
-                    <th className="py-3 px-4 text-right whitespace-nowrap">Tổng COD Thu Hộ</th>
-                    <th className="py-3 px-4 text-right whitespace-nowrap">Hoa Hồng Sàn (5%)</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Tổng COD Phát Sinh</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Đang Đi Giao</th>
                     <th className="py-3 px-4 text-right whitespace-nowrap">Thực Nhận Vào Ví Shop</th>
                     <th className="py-3 px-4 text-center whitespace-nowrap">Tiến Độ Ký Quỹ Tự Động</th>
                     <th className="py-3 px-4 text-right min-w-44 whitespace-nowrap">Kiểm Soát Rủi Ro (Admin)</th>
@@ -1100,33 +1094,20 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
 
                         {/* Tổng COD Thu Hộ */}
                         <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-xs whitespace-nowrap">
-                          {item.grossCod > 0 ? (
-                            <>
-                              <div>{formatMoney(item.grossCod)}</div>
-                              {item.collectingCod > 0 && (
-                                <span className="text-[10px] text-amber-600 font-sans font-normal">
-                                  ({formatMoney(item.collectingCod)} đang giao)
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-slate-400 font-mono text-xs">0đ</span>
-                          )}
+                          {formatMoney(item.grossCod)}
                         </td>
 
-                        {/* Hoa hồng sàn 5% */}
-                        <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-600 whitespace-nowrap">
-                          {item.platformFee > 0 ? (
-                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              +{formatMoney(item.platformFee)}
-                            </span>
+                        {/* Đang đi giao */}
+                        <td className="py-3.5 px-4 text-right font-mono text-xs whitespace-nowrap">
+                          {item.collectingCod > 0 ? (
+                            <span className="text-amber-700 font-bold">{formatMoney(item.collectingCod)}</span>
                           ) : (
-                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                            <span className="text-slate-400">0đ</span>
                           )}
                         </td>
 
                         {/* Thực nhận vào Ví Shop */}
-                        <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-indigo-700 whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-emerald-700 whitespace-nowrap">
                           {item.netPayable > 0 ? (
                             formatMoney(item.netPayable)
                           ) : (
