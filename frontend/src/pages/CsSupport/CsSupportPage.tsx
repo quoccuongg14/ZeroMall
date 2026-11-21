@@ -8,6 +8,7 @@ import { CsOrdersTab } from '../../components/cs-support/CsOrdersTab'
 import { CsLiveChatTab } from '../../components/admin/CsLiveChatTab'
 import { CsCategoryAuditTab } from '../../components/cs-support/CsCategoryAuditTab'
 import { CsUsersTab } from '../../components/cs-support/CsUsersTab'
+import { CsPriceAuditTab } from '../../components/cs-support/compliance/CsPriceAuditTab'
 import { subscribeDisputeChanges } from '../../services/supabase-realtime.service'
 
 interface CsSupportPageProps {
@@ -48,6 +49,8 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'category-audit':
       case 'trust-safety':
       case 'moderation': return 'CATEGORY_AUDIT';
+      case 'price-audit':
+      case 'price-analytics': return 'PRICE_AUDIT';
       default: return null;
     }
   }
@@ -61,12 +64,13 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'USERS': return 'users';
       case 'LIVE_CHAT': return 'live-chat';
       case 'CATEGORY_AUDIT': return 'category-audit';
+      case 'PRICE_AUDIT': return 'price-audit';
       default: return 'shops';
     }
   }
 
   const [activePortalTab, setActivePortalTab] = useState<
-    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT' | 'USERS'
+    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT' | 'USERS' | 'PRICE_AUDIT'
   >(() => {
     const searchParamsLocal = new URLSearchParams(window.location.search);
     const param = searchParamsLocal.get('tab');
@@ -331,6 +335,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
   const menuItems = [
     { id: 'SHOPS', label: 'Quản Lý & Khóa Shop', icon: '🏪' },
     { id: 'CATEGORY_AUDIT', label: 'Kiểm Duyệt Sản Phẩm (Trust & Safety)', icon: '🛡️' },
+    { id: 'PRICE_AUDIT', label: 'Giám Sát Giá & Chống Gian Lận', icon: '📈' },
     { id: 'USERS', label: 'Quản Lý & Khóa User', icon: '👥' },
     { id: 'WITHDRAWALS', label: 'Phê duyệt rút tiền', icon: '💰' },
     { id: 'DISPUTES', label: 'Tranh chấp khiếu nại', icon: '⚖️' },
@@ -441,6 +446,10 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
               user={user}
               triggerAuditLog={triggerAuditLog}
             />
+          )}
+
+          {activePortalTab === 'PRICE_AUDIT' && (
+            <CsPriceAuditTab triggerAuditLog={triggerAuditLog} />
           )}
 
           {activePortalTab === 'USERS' && (

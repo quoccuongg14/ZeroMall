@@ -8,7 +8,6 @@ import { CsStaffTab } from '../../components/admin/CsStaffTab'
 import { SystemReportsTab } from '../../components/admin/SystemReportsTab'
 import { CommissionSettingTab } from '../../components/admin/CommissionSettingTab'
 import { AuditLogsTab } from '../../components/admin/AuditLogsTab'
-import AdminPriceAnalyticsTab from '../../components/admin/AdminPriceAnalyticsTab'
 import { AiEvaluationStudioTab } from '../../components/admin/AiEvaluationStudioTab'
 import { BannersTab } from '../../components/admin/banners/BannersTab'
 
@@ -48,7 +47,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       case 'reports': return 'SYSTEM_REPORTS';
       case 'commission-setting': return 'COMMISSION_SETTING';
       case 'audit-logs': return 'AUDIT_LOGS';
-      case 'price-analytics': return 'PRICE_ANALYTICS';
+      case 'price-analytics': return 'SYSTEM_REPORTS'; // Chuyển giao sang CS Portal
       case 'ai-evaluation':
       case 'ai-studio': return 'AI_EVALUATION';
       case 'banners': return 'BANNERS';
@@ -69,7 +68,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       case 'SYSTEM_REPORTS': return 'reports';
       case 'COMMISSION_SETTING': return 'commission-setting';
       case 'AUDIT_LOGS': return 'audit-logs';
-      case 'PRICE_ANALYTICS': return 'price-analytics';
       case 'AI_EVALUATION': return 'ai-evaluation';
       case 'BANNERS': return 'banners';
       default: return 'reports';
@@ -77,7 +75,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   }
 
   const [activePortalTab, setActivePortalTab] = useState<
-    'USERS' | 'MANAGE_SHOPS' | 'CATEGORIES' | 'VIOLATIONS' | 'PLATFORM_VOUCHERS' | 'FLASH_SALE' | 'MANAGE_CS_STAFF' | 'LIVE_CHAT' | 'SYSTEM_REPORTS' | 'AUDIT_LOGS' | 'COMMISSION_SETTING' | 'PRICE_ANALYTICS' | 'AI_EVALUATION' | 'BANNERS'
+    'USERS' | 'MANAGE_SHOPS' | 'CATEGORIES' | 'VIOLATIONS' | 'PLATFORM_VOUCHERS' | 'FLASH_SALE' | 'MANAGE_CS_STAFF' | 'LIVE_CHAT' | 'SYSTEM_REPORTS' | 'AUDIT_LOGS' | 'COMMISSION_SETTING' | 'AI_EVALUATION' | 'BANNERS'
   >(() => {
     const searchParamsLocal = new URLSearchParams(window.location.search);
     const param = searchParamsLocal.get('tab');
@@ -230,7 +228,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       groupTitle: '💰 Tài Chính & Doanh Thu Sàn',
       items: [
         { id: 'SYSTEM_REPORTS', label: 'Báo cáo doanh thu & GMV', icon: '📊' },
-        { id: 'PRICE_ANALYTICS', label: 'Biến động & Giá vốn', icon: '📈' },
         { id: 'COMMISSION_SETTING', label: 'Cài đặt chiết khấu sàn', icon: '⚙️' },
       ],
     },
@@ -478,10 +475,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
           {activePortalTab === 'SYSTEM_REPORTS' && (
             <SystemReportsTab allOrders={allOrders} users={users} commissionRate={commissionRate} />
-          )}
-
-          {activePortalTab === 'PRICE_ANALYTICS' && (
-            <AdminPriceAnalyticsTab />
           )}
 
           {activePortalTab === 'COMMISSION_SETTING' && (
