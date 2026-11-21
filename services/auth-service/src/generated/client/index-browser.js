@@ -193,9 +193,27 @@ exports.Prisma.UserAddressScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ShopUpdateRequestScalarFieldEnum = {
+  id: 'id',
+  shopId: 'shopId',
+  oldData: 'oldData',
+  newData: 'newData',
+  reason: 'reason',
+  status: 'status',
+  rejectionReason: 'rejectionReason',
+  reviewedBy: 'reviewedBy',
+  reviewedAt: 'reviewedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
+};
+
+exports.Prisma.JsonNullValueInput = {
+  JsonNull: Prisma.JsonNull
 };
 
 exports.Prisma.QueryMode = {
@@ -208,13 +226,20 @@ exports.Prisma.NullsOrder = {
   last: 'last'
 };
 
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
+};
+
 
 exports.Prisma.ModelName = {
   User: 'User',
   Shop: 'Shop',
   ShopFollow: 'ShopFollow',
   AuditLog: 'AuditLog',
-  UserAddress: 'UserAddress'
+  UserAddress: 'UserAddress',
+  ShopUpdateRequest: 'ShopUpdateRequest'
 };
 
 /**

@@ -38,6 +38,11 @@ export type AuditLog = $Result.DefaultSelection<Prisma.$AuditLogPayload>
  * 
  */
 export type UserAddress = $Result.DefaultSelection<Prisma.$UserAddressPayload>
+/**
+ * Model ShopUpdateRequest
+ * 
+ */
+export type ShopUpdateRequest = $Result.DefaultSelection<Prisma.$ShopUpdateRequestPayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -209,6 +214,16 @@ export class PrismaClient<
     * ```
     */
   get userAddress(): Prisma.UserAddressDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.shopUpdateRequest`: Exposes CRUD operations for the **ShopUpdateRequest** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ShopUpdateRequests
+    * const shopUpdateRequests = await prisma.shopUpdateRequest.findMany()
+    * ```
+    */
+  get shopUpdateRequest(): Prisma.ShopUpdateRequestDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -647,7 +662,8 @@ export namespace Prisma {
     Shop: 'Shop',
     ShopFollow: 'ShopFollow',
     AuditLog: 'AuditLog',
-    UserAddress: 'UserAddress'
+    UserAddress: 'UserAddress',
+    ShopUpdateRequest: 'ShopUpdateRequest'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -663,7 +679,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "user" | "shop" | "shopFollow" | "auditLog" | "userAddress"
+      modelProps: "user" | "shop" | "shopFollow" | "auditLog" | "userAddress" | "shopUpdateRequest"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1037,6 +1053,80 @@ export namespace Prisma {
           }
         }
       }
+      ShopUpdateRequest: {
+        payload: Prisma.$ShopUpdateRequestPayload<ExtArgs>
+        fields: Prisma.ShopUpdateRequestFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ShopUpdateRequestFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ShopUpdateRequestFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          findFirst: {
+            args: Prisma.ShopUpdateRequestFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ShopUpdateRequestFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          findMany: {
+            args: Prisma.ShopUpdateRequestFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>[]
+          }
+          create: {
+            args: Prisma.ShopUpdateRequestCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          createMany: {
+            args: Prisma.ShopUpdateRequestCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ShopUpdateRequestCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>[]
+          }
+          delete: {
+            args: Prisma.ShopUpdateRequestDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          update: {
+            args: Prisma.ShopUpdateRequestUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          deleteMany: {
+            args: Prisma.ShopUpdateRequestDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ShopUpdateRequestUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ShopUpdateRequestUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>[]
+          }
+          upsert: {
+            args: Prisma.ShopUpdateRequestUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ShopUpdateRequestPayload>
+          }
+          aggregate: {
+            args: Prisma.ShopUpdateRequestAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateShopUpdateRequest>
+          }
+          groupBy: {
+            args: Prisma.ShopUpdateRequestGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ShopUpdateRequestGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ShopUpdateRequestCountArgs<ExtArgs>
+            result: $Utils.Optional<ShopUpdateRequestCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -1150,6 +1240,7 @@ export namespace Prisma {
     shopFollow?: ShopFollowOmit
     auditLog?: AuditLogOmit
     userAddress?: UserAddressOmit
+    shopUpdateRequest?: ShopUpdateRequestOmit
   }
 
   /* Types for Logging */
@@ -1272,11 +1363,13 @@ export namespace Prisma {
   export type ShopCountOutputType = {
     staff: number
     followers: number
+    updateRequests: number
   }
 
   export type ShopCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     staff?: boolean | ShopCountOutputTypeCountStaffArgs
     followers?: boolean | ShopCountOutputTypeCountFollowersArgs
+    updateRequests?: boolean | ShopCountOutputTypeCountUpdateRequestsArgs
   }
 
   // Custom InputTypes
@@ -1302,6 +1395,13 @@ export namespace Prisma {
    */
   export type ShopCountOutputTypeCountFollowersArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: ShopFollowWhereInput
+  }
+
+  /**
+   * ShopCountOutputType without action
+   */
+  export type ShopCountOutputTypeCountUpdateRequestsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ShopUpdateRequestWhereInput
   }
 
 
@@ -2891,6 +2991,7 @@ export namespace Prisma {
     owner?: boolean | UserDefaultArgs<ExtArgs>
     staff?: boolean | Shop$staffArgs<ExtArgs>
     followers?: boolean | Shop$followersArgs<ExtArgs>
+    updateRequests?: boolean | Shop$updateRequestsArgs<ExtArgs>
     _count?: boolean | ShopCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["shop"]>
 
@@ -2958,6 +3059,7 @@ export namespace Prisma {
     owner?: boolean | UserDefaultArgs<ExtArgs>
     staff?: boolean | Shop$staffArgs<ExtArgs>
     followers?: boolean | Shop$followersArgs<ExtArgs>
+    updateRequests?: boolean | Shop$updateRequestsArgs<ExtArgs>
     _count?: boolean | ShopCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type ShopIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2973,6 +3075,7 @@ export namespace Prisma {
       owner: Prisma.$UserPayload<ExtArgs>
       staff: Prisma.$UserPayload<ExtArgs>[]
       followers: Prisma.$ShopFollowPayload<ExtArgs>[]
+      updateRequests: Prisma.$ShopUpdateRequestPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -3388,6 +3491,7 @@ export namespace Prisma {
     owner<T extends UserDefaultArgs<ExtArgs> = {}>(args?: Subset<T, UserDefaultArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
     staff<T extends Shop$staffArgs<ExtArgs> = {}>(args?: Subset<T, Shop$staffArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     followers<T extends Shop$followersArgs<ExtArgs> = {}>(args?: Subset<T, Shop$followersArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ShopFollowPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    updateRequests<T extends Shop$updateRequestsArgs<ExtArgs> = {}>(args?: Subset<T, Shop$updateRequestsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -3879,6 +3983,30 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: ShopFollowScalarFieldEnum | ShopFollowScalarFieldEnum[]
+  }
+
+  /**
+   * Shop.updateRequests
+   */
+  export type Shop$updateRequestsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    where?: ShopUpdateRequestWhereInput
+    orderBy?: ShopUpdateRequestOrderByWithRelationInput | ShopUpdateRequestOrderByWithRelationInput[]
+    cursor?: ShopUpdateRequestWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ShopUpdateRequestScalarFieldEnum | ShopUpdateRequestScalarFieldEnum[]
   }
 
   /**
@@ -7233,6 +7361,1139 @@ export namespace Prisma {
 
 
   /**
+   * Model ShopUpdateRequest
+   */
+
+  export type AggregateShopUpdateRequest = {
+    _count: ShopUpdateRequestCountAggregateOutputType | null
+    _min: ShopUpdateRequestMinAggregateOutputType | null
+    _max: ShopUpdateRequestMaxAggregateOutputType | null
+  }
+
+  export type ShopUpdateRequestMinAggregateOutputType = {
+    id: string | null
+    shopId: string | null
+    reason: string | null
+    status: string | null
+    rejectionReason: string | null
+    reviewedBy: string | null
+    reviewedAt: Date | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ShopUpdateRequestMaxAggregateOutputType = {
+    id: string | null
+    shopId: string | null
+    reason: string | null
+    status: string | null
+    rejectionReason: string | null
+    reviewedBy: string | null
+    reviewedAt: Date | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ShopUpdateRequestCountAggregateOutputType = {
+    id: number
+    shopId: number
+    oldData: number
+    newData: number
+    reason: number
+    status: number
+    rejectionReason: number
+    reviewedBy: number
+    reviewedAt: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type ShopUpdateRequestMinAggregateInputType = {
+    id?: true
+    shopId?: true
+    reason?: true
+    status?: true
+    rejectionReason?: true
+    reviewedBy?: true
+    reviewedAt?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ShopUpdateRequestMaxAggregateInputType = {
+    id?: true
+    shopId?: true
+    reason?: true
+    status?: true
+    rejectionReason?: true
+    reviewedBy?: true
+    reviewedAt?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ShopUpdateRequestCountAggregateInputType = {
+    id?: true
+    shopId?: true
+    oldData?: true
+    newData?: true
+    reason?: true
+    status?: true
+    rejectionReason?: true
+    reviewedBy?: true
+    reviewedAt?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type ShopUpdateRequestAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ShopUpdateRequest to aggregate.
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ShopUpdateRequests to fetch.
+     */
+    orderBy?: ShopUpdateRequestOrderByWithRelationInput | ShopUpdateRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ShopUpdateRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ShopUpdateRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ShopUpdateRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ShopUpdateRequests
+    **/
+    _count?: true | ShopUpdateRequestCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ShopUpdateRequestMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ShopUpdateRequestMaxAggregateInputType
+  }
+
+  export type GetShopUpdateRequestAggregateType<T extends ShopUpdateRequestAggregateArgs> = {
+        [P in keyof T & keyof AggregateShopUpdateRequest]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateShopUpdateRequest[P]>
+      : GetScalarType<T[P], AggregateShopUpdateRequest[P]>
+  }
+
+
+
+
+  export type ShopUpdateRequestGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ShopUpdateRequestWhereInput
+    orderBy?: ShopUpdateRequestOrderByWithAggregationInput | ShopUpdateRequestOrderByWithAggregationInput[]
+    by: ShopUpdateRequestScalarFieldEnum[] | ShopUpdateRequestScalarFieldEnum
+    having?: ShopUpdateRequestScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ShopUpdateRequestCountAggregateInputType | true
+    _min?: ShopUpdateRequestMinAggregateInputType
+    _max?: ShopUpdateRequestMaxAggregateInputType
+  }
+
+  export type ShopUpdateRequestGroupByOutputType = {
+    id: string
+    shopId: string
+    oldData: JsonValue
+    newData: JsonValue
+    reason: string | null
+    status: string
+    rejectionReason: string | null
+    reviewedBy: string | null
+    reviewedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+    _count: ShopUpdateRequestCountAggregateOutputType | null
+    _min: ShopUpdateRequestMinAggregateOutputType | null
+    _max: ShopUpdateRequestMaxAggregateOutputType | null
+  }
+
+  type GetShopUpdateRequestGroupByPayload<T extends ShopUpdateRequestGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ShopUpdateRequestGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ShopUpdateRequestGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ShopUpdateRequestGroupByOutputType[P]>
+            : GetScalarType<T[P], ShopUpdateRequestGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ShopUpdateRequestSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    oldData?: boolean
+    newData?: boolean
+    reason?: boolean
+    status?: boolean
+    rejectionReason?: boolean
+    reviewedBy?: boolean
+    reviewedAt?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["shopUpdateRequest"]>
+
+  export type ShopUpdateRequestSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    oldData?: boolean
+    newData?: boolean
+    reason?: boolean
+    status?: boolean
+    rejectionReason?: boolean
+    reviewedBy?: boolean
+    reviewedAt?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["shopUpdateRequest"]>
+
+  export type ShopUpdateRequestSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    shopId?: boolean
+    oldData?: boolean
+    newData?: boolean
+    reason?: boolean
+    status?: boolean
+    rejectionReason?: boolean
+    reviewedBy?: boolean
+    reviewedAt?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["shopUpdateRequest"]>
+
+  export type ShopUpdateRequestSelectScalar = {
+    id?: boolean
+    shopId?: boolean
+    oldData?: boolean
+    newData?: boolean
+    reason?: boolean
+    status?: boolean
+    rejectionReason?: boolean
+    reviewedBy?: boolean
+    reviewedAt?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+  export type ShopUpdateRequestOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "oldData" | "newData" | "reason" | "status" | "rejectionReason" | "reviewedBy" | "reviewedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["shopUpdateRequest"]>
+  export type ShopUpdateRequestInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }
+  export type ShopUpdateRequestIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }
+  export type ShopUpdateRequestIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    shop?: boolean | ShopDefaultArgs<ExtArgs>
+  }
+
+  export type $ShopUpdateRequestPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ShopUpdateRequest"
+    objects: {
+      shop: Prisma.$ShopPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      shopId: string
+      oldData: Prisma.JsonValue
+      newData: Prisma.JsonValue
+      reason: string | null
+      status: string
+      rejectionReason: string | null
+      reviewedBy: string | null
+      reviewedAt: Date | null
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["shopUpdateRequest"]>
+    composites: {}
+  }
+
+  type ShopUpdateRequestGetPayload<S extends boolean | null | undefined | ShopUpdateRequestDefaultArgs> = $Result.GetResult<Prisma.$ShopUpdateRequestPayload, S>
+
+  type ShopUpdateRequestCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ShopUpdateRequestFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ShopUpdateRequestCountAggregateInputType | true
+    }
+
+  export interface ShopUpdateRequestDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ShopUpdateRequest'], meta: { name: 'ShopUpdateRequest' } }
+    /**
+     * Find zero or one ShopUpdateRequest that matches the filter.
+     * @param {ShopUpdateRequestFindUniqueArgs} args - Arguments to find a ShopUpdateRequest
+     * @example
+     * // Get one ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ShopUpdateRequestFindUniqueArgs>(args: SelectSubset<T, ShopUpdateRequestFindUniqueArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ShopUpdateRequest that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ShopUpdateRequestFindUniqueOrThrowArgs} args - Arguments to find a ShopUpdateRequest
+     * @example
+     * // Get one ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ShopUpdateRequestFindUniqueOrThrowArgs>(args: SelectSubset<T, ShopUpdateRequestFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ShopUpdateRequest that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestFindFirstArgs} args - Arguments to find a ShopUpdateRequest
+     * @example
+     * // Get one ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ShopUpdateRequestFindFirstArgs>(args?: SelectSubset<T, ShopUpdateRequestFindFirstArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ShopUpdateRequest that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestFindFirstOrThrowArgs} args - Arguments to find a ShopUpdateRequest
+     * @example
+     * // Get one ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ShopUpdateRequestFindFirstOrThrowArgs>(args?: SelectSubset<T, ShopUpdateRequestFindFirstOrThrowArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ShopUpdateRequests that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ShopUpdateRequests
+     * const shopUpdateRequests = await prisma.shopUpdateRequest.findMany()
+     * 
+     * // Get first 10 ShopUpdateRequests
+     * const shopUpdateRequests = await prisma.shopUpdateRequest.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const shopUpdateRequestWithIdOnly = await prisma.shopUpdateRequest.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ShopUpdateRequestFindManyArgs>(args?: SelectSubset<T, ShopUpdateRequestFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ShopUpdateRequest.
+     * @param {ShopUpdateRequestCreateArgs} args - Arguments to create a ShopUpdateRequest.
+     * @example
+     * // Create one ShopUpdateRequest
+     * const ShopUpdateRequest = await prisma.shopUpdateRequest.create({
+     *   data: {
+     *     // ... data to create a ShopUpdateRequest
+     *   }
+     * })
+     * 
+     */
+    create<T extends ShopUpdateRequestCreateArgs>(args: SelectSubset<T, ShopUpdateRequestCreateArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ShopUpdateRequests.
+     * @param {ShopUpdateRequestCreateManyArgs} args - Arguments to create many ShopUpdateRequests.
+     * @example
+     * // Create many ShopUpdateRequests
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ShopUpdateRequestCreateManyArgs>(args?: SelectSubset<T, ShopUpdateRequestCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ShopUpdateRequests and returns the data saved in the database.
+     * @param {ShopUpdateRequestCreateManyAndReturnArgs} args - Arguments to create many ShopUpdateRequests.
+     * @example
+     * // Create many ShopUpdateRequests
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ShopUpdateRequests and only return the `id`
+     * const shopUpdateRequestWithIdOnly = await prisma.shopUpdateRequest.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ShopUpdateRequestCreateManyAndReturnArgs>(args?: SelectSubset<T, ShopUpdateRequestCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ShopUpdateRequest.
+     * @param {ShopUpdateRequestDeleteArgs} args - Arguments to delete one ShopUpdateRequest.
+     * @example
+     * // Delete one ShopUpdateRequest
+     * const ShopUpdateRequest = await prisma.shopUpdateRequest.delete({
+     *   where: {
+     *     // ... filter to delete one ShopUpdateRequest
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ShopUpdateRequestDeleteArgs>(args: SelectSubset<T, ShopUpdateRequestDeleteArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ShopUpdateRequest.
+     * @param {ShopUpdateRequestUpdateArgs} args - Arguments to update one ShopUpdateRequest.
+     * @example
+     * // Update one ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ShopUpdateRequestUpdateArgs>(args: SelectSubset<T, ShopUpdateRequestUpdateArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ShopUpdateRequests.
+     * @param {ShopUpdateRequestDeleteManyArgs} args - Arguments to filter ShopUpdateRequests to delete.
+     * @example
+     * // Delete a few ShopUpdateRequests
+     * const { count } = await prisma.shopUpdateRequest.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ShopUpdateRequestDeleteManyArgs>(args?: SelectSubset<T, ShopUpdateRequestDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ShopUpdateRequests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ShopUpdateRequests
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ShopUpdateRequestUpdateManyArgs>(args: SelectSubset<T, ShopUpdateRequestUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ShopUpdateRequests and returns the data updated in the database.
+     * @param {ShopUpdateRequestUpdateManyAndReturnArgs} args - Arguments to update many ShopUpdateRequests.
+     * @example
+     * // Update many ShopUpdateRequests
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ShopUpdateRequests and only return the `id`
+     * const shopUpdateRequestWithIdOnly = await prisma.shopUpdateRequest.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ShopUpdateRequestUpdateManyAndReturnArgs>(args: SelectSubset<T, ShopUpdateRequestUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ShopUpdateRequest.
+     * @param {ShopUpdateRequestUpsertArgs} args - Arguments to update or create a ShopUpdateRequest.
+     * @example
+     * // Update or create a ShopUpdateRequest
+     * const shopUpdateRequest = await prisma.shopUpdateRequest.upsert({
+     *   create: {
+     *     // ... data to create a ShopUpdateRequest
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ShopUpdateRequest we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ShopUpdateRequestUpsertArgs>(args: SelectSubset<T, ShopUpdateRequestUpsertArgs<ExtArgs>>): Prisma__ShopUpdateRequestClient<$Result.GetResult<Prisma.$ShopUpdateRequestPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ShopUpdateRequests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestCountArgs} args - Arguments to filter ShopUpdateRequests to count.
+     * @example
+     * // Count the number of ShopUpdateRequests
+     * const count = await prisma.shopUpdateRequest.count({
+     *   where: {
+     *     // ... the filter for the ShopUpdateRequests we want to count
+     *   }
+     * })
+    **/
+    count<T extends ShopUpdateRequestCountArgs>(
+      args?: Subset<T, ShopUpdateRequestCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ShopUpdateRequestCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ShopUpdateRequest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ShopUpdateRequestAggregateArgs>(args: Subset<T, ShopUpdateRequestAggregateArgs>): Prisma.PrismaPromise<GetShopUpdateRequestAggregateType<T>>
+
+    /**
+     * Group by ShopUpdateRequest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ShopUpdateRequestGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ShopUpdateRequestGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ShopUpdateRequestGroupByArgs['orderBy'] }
+        : { orderBy?: ShopUpdateRequestGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ShopUpdateRequestGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetShopUpdateRequestGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ShopUpdateRequest model
+   */
+  readonly fields: ShopUpdateRequestFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ShopUpdateRequest.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ShopUpdateRequestClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    shop<T extends ShopDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ShopDefaultArgs<ExtArgs>>): Prisma__ShopClient<$Result.GetResult<Prisma.$ShopPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ShopUpdateRequest model
+   */
+  interface ShopUpdateRequestFieldRefs {
+    readonly id: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly shopId: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly oldData: FieldRef<"ShopUpdateRequest", 'Json'>
+    readonly newData: FieldRef<"ShopUpdateRequest", 'Json'>
+    readonly reason: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly status: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly rejectionReason: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly reviewedBy: FieldRef<"ShopUpdateRequest", 'String'>
+    readonly reviewedAt: FieldRef<"ShopUpdateRequest", 'DateTime'>
+    readonly createdAt: FieldRef<"ShopUpdateRequest", 'DateTime'>
+    readonly updatedAt: FieldRef<"ShopUpdateRequest", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ShopUpdateRequest findUnique
+   */
+  export type ShopUpdateRequestFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which ShopUpdateRequest to fetch.
+     */
+    where: ShopUpdateRequestWhereUniqueInput
+  }
+
+  /**
+   * ShopUpdateRequest findUniqueOrThrow
+   */
+  export type ShopUpdateRequestFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which ShopUpdateRequest to fetch.
+     */
+    where: ShopUpdateRequestWhereUniqueInput
+  }
+
+  /**
+   * ShopUpdateRequest findFirst
+   */
+  export type ShopUpdateRequestFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which ShopUpdateRequest to fetch.
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ShopUpdateRequests to fetch.
+     */
+    orderBy?: ShopUpdateRequestOrderByWithRelationInput | ShopUpdateRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ShopUpdateRequests.
+     */
+    cursor?: ShopUpdateRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ShopUpdateRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ShopUpdateRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ShopUpdateRequests.
+     */
+    distinct?: ShopUpdateRequestScalarFieldEnum | ShopUpdateRequestScalarFieldEnum[]
+  }
+
+  /**
+   * ShopUpdateRequest findFirstOrThrow
+   */
+  export type ShopUpdateRequestFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which ShopUpdateRequest to fetch.
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ShopUpdateRequests to fetch.
+     */
+    orderBy?: ShopUpdateRequestOrderByWithRelationInput | ShopUpdateRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ShopUpdateRequests.
+     */
+    cursor?: ShopUpdateRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ShopUpdateRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ShopUpdateRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ShopUpdateRequests.
+     */
+    distinct?: ShopUpdateRequestScalarFieldEnum | ShopUpdateRequestScalarFieldEnum[]
+  }
+
+  /**
+   * ShopUpdateRequest findMany
+   */
+  export type ShopUpdateRequestFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which ShopUpdateRequests to fetch.
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ShopUpdateRequests to fetch.
+     */
+    orderBy?: ShopUpdateRequestOrderByWithRelationInput | ShopUpdateRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ShopUpdateRequests.
+     */
+    cursor?: ShopUpdateRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ShopUpdateRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ShopUpdateRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ShopUpdateRequests.
+     */
+    distinct?: ShopUpdateRequestScalarFieldEnum | ShopUpdateRequestScalarFieldEnum[]
+  }
+
+  /**
+   * ShopUpdateRequest create
+   */
+  export type ShopUpdateRequestCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ShopUpdateRequest.
+     */
+    data: XOR<ShopUpdateRequestCreateInput, ShopUpdateRequestUncheckedCreateInput>
+  }
+
+  /**
+   * ShopUpdateRequest createMany
+   */
+  export type ShopUpdateRequestCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ShopUpdateRequests.
+     */
+    data: ShopUpdateRequestCreateManyInput | ShopUpdateRequestCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ShopUpdateRequest createManyAndReturn
+   */
+  export type ShopUpdateRequestCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * The data used to create many ShopUpdateRequests.
+     */
+    data: ShopUpdateRequestCreateManyInput | ShopUpdateRequestCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ShopUpdateRequest update
+   */
+  export type ShopUpdateRequestUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ShopUpdateRequest.
+     */
+    data: XOR<ShopUpdateRequestUpdateInput, ShopUpdateRequestUncheckedUpdateInput>
+    /**
+     * Choose, which ShopUpdateRequest to update.
+     */
+    where: ShopUpdateRequestWhereUniqueInput
+  }
+
+  /**
+   * ShopUpdateRequest updateMany
+   */
+  export type ShopUpdateRequestUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ShopUpdateRequests.
+     */
+    data: XOR<ShopUpdateRequestUpdateManyMutationInput, ShopUpdateRequestUncheckedUpdateManyInput>
+    /**
+     * Filter which ShopUpdateRequests to update
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * Limit how many ShopUpdateRequests to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ShopUpdateRequest updateManyAndReturn
+   */
+  export type ShopUpdateRequestUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * The data used to update ShopUpdateRequests.
+     */
+    data: XOR<ShopUpdateRequestUpdateManyMutationInput, ShopUpdateRequestUncheckedUpdateManyInput>
+    /**
+     * Filter which ShopUpdateRequests to update
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * Limit how many ShopUpdateRequests to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ShopUpdateRequest upsert
+   */
+  export type ShopUpdateRequestUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ShopUpdateRequest to update in case it exists.
+     */
+    where: ShopUpdateRequestWhereUniqueInput
+    /**
+     * In case the ShopUpdateRequest found by the `where` argument doesn't exist, create a new ShopUpdateRequest with this data.
+     */
+    create: XOR<ShopUpdateRequestCreateInput, ShopUpdateRequestUncheckedCreateInput>
+    /**
+     * In case the ShopUpdateRequest was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ShopUpdateRequestUpdateInput, ShopUpdateRequestUncheckedUpdateInput>
+  }
+
+  /**
+   * ShopUpdateRequest delete
+   */
+  export type ShopUpdateRequestDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+    /**
+     * Filter which ShopUpdateRequest to delete.
+     */
+    where: ShopUpdateRequestWhereUniqueInput
+  }
+
+  /**
+   * ShopUpdateRequest deleteMany
+   */
+  export type ShopUpdateRequestDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ShopUpdateRequests to delete
+     */
+    where?: ShopUpdateRequestWhereInput
+    /**
+     * Limit how many ShopUpdateRequests to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ShopUpdateRequest without action
+   */
+  export type ShopUpdateRequestDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ShopUpdateRequest
+     */
+    select?: ShopUpdateRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ShopUpdateRequest
+     */
+    omit?: ShopUpdateRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ShopUpdateRequestInclude<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -7334,12 +8595,36 @@ export namespace Prisma {
   export type UserAddressScalarFieldEnum = (typeof UserAddressScalarFieldEnum)[keyof typeof UserAddressScalarFieldEnum]
 
 
+  export const ShopUpdateRequestScalarFieldEnum: {
+    id: 'id',
+    shopId: 'shopId',
+    oldData: 'oldData',
+    newData: 'newData',
+    reason: 'reason',
+    status: 'status',
+    rejectionReason: 'rejectionReason',
+    reviewedBy: 'reviewedBy',
+    reviewedAt: 'reviewedAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type ShopUpdateRequestScalarFieldEnum = (typeof ShopUpdateRequestScalarFieldEnum)[keyof typeof ShopUpdateRequestScalarFieldEnum]
+
+
   export const SortOrder: {
     asc: 'asc',
     desc: 'desc'
   };
 
   export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+  export const JsonNullValueInput: {
+    JsonNull: typeof JsonNull
+  };
+
+  export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
 
 
   export const QueryMode: {
@@ -7356,6 +8641,15 @@ export namespace Prisma {
   };
 
   export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+  export const JsonNullValueFilter: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull,
+    AnyNull: typeof AnyNull
+  };
+
+  export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 
 
   /**
@@ -7423,6 +8717,20 @@ export namespace Prisma {
    * Reference to a field of type 'Float[]'
    */
   export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Json'
+   */
+  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+  /**
+   * Reference to a field of type 'QueryMode'
+   */
+  export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
     
   /**
    * Deep Input Types
@@ -7566,6 +8874,7 @@ export namespace Prisma {
     owner?: XOR<UserScalarRelationFilter, UserWhereInput>
     staff?: UserListRelationFilter
     followers?: ShopFollowListRelationFilter
+    updateRequests?: ShopUpdateRequestListRelationFilter
   }
 
   export type ShopOrderByWithRelationInput = {
@@ -7588,6 +8897,7 @@ export namespace Prisma {
     owner?: UserOrderByWithRelationInput
     staff?: UserOrderByRelationAggregateInput
     followers?: ShopFollowOrderByRelationAggregateInput
+    updateRequests?: ShopUpdateRequestOrderByRelationAggregateInput
   }
 
   export type ShopWhereUniqueInput = Prisma.AtLeast<{
@@ -7613,6 +8923,7 @@ export namespace Prisma {
     owner?: XOR<UserScalarRelationFilter, UserWhereInput>
     staff?: UserListRelationFilter
     followers?: ShopFollowListRelationFilter
+    updateRequests?: ShopUpdateRequestListRelationFilter
   }, "id" | "ownerId">
 
   export type ShopOrderByWithAggregationInput = {
@@ -7889,6 +9200,91 @@ export namespace Prisma {
     updatedAt?: DateTimeWithAggregatesFilter<"UserAddress"> | Date | string
   }
 
+  export type ShopUpdateRequestWhereInput = {
+    AND?: ShopUpdateRequestWhereInput | ShopUpdateRequestWhereInput[]
+    OR?: ShopUpdateRequestWhereInput[]
+    NOT?: ShopUpdateRequestWhereInput | ShopUpdateRequestWhereInput[]
+    id?: StringFilter<"ShopUpdateRequest"> | string
+    shopId?: StringFilter<"ShopUpdateRequest"> | string
+    oldData?: JsonFilter<"ShopUpdateRequest">
+    newData?: JsonFilter<"ShopUpdateRequest">
+    reason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    status?: StringFilter<"ShopUpdateRequest"> | string
+    rejectionReason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedBy?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedAt?: DateTimeNullableFilter<"ShopUpdateRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+    updatedAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
+  }
+
+  export type ShopUpdateRequestOrderByWithRelationInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    oldData?: SortOrder
+    newData?: SortOrder
+    reason?: SortOrderInput | SortOrder
+    status?: SortOrder
+    rejectionReason?: SortOrderInput | SortOrder
+    reviewedBy?: SortOrderInput | SortOrder
+    reviewedAt?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    shop?: ShopOrderByWithRelationInput
+  }
+
+  export type ShopUpdateRequestWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ShopUpdateRequestWhereInput | ShopUpdateRequestWhereInput[]
+    OR?: ShopUpdateRequestWhereInput[]
+    NOT?: ShopUpdateRequestWhereInput | ShopUpdateRequestWhereInput[]
+    shopId?: StringFilter<"ShopUpdateRequest"> | string
+    oldData?: JsonFilter<"ShopUpdateRequest">
+    newData?: JsonFilter<"ShopUpdateRequest">
+    reason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    status?: StringFilter<"ShopUpdateRequest"> | string
+    rejectionReason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedBy?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedAt?: DateTimeNullableFilter<"ShopUpdateRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+    updatedAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+    shop?: XOR<ShopScalarRelationFilter, ShopWhereInput>
+  }, "id">
+
+  export type ShopUpdateRequestOrderByWithAggregationInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    oldData?: SortOrder
+    newData?: SortOrder
+    reason?: SortOrderInput | SortOrder
+    status?: SortOrder
+    rejectionReason?: SortOrderInput | SortOrder
+    reviewedBy?: SortOrderInput | SortOrder
+    reviewedAt?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: ShopUpdateRequestCountOrderByAggregateInput
+    _max?: ShopUpdateRequestMaxOrderByAggregateInput
+    _min?: ShopUpdateRequestMinOrderByAggregateInput
+  }
+
+  export type ShopUpdateRequestScalarWhereWithAggregatesInput = {
+    AND?: ShopUpdateRequestScalarWhereWithAggregatesInput | ShopUpdateRequestScalarWhereWithAggregatesInput[]
+    OR?: ShopUpdateRequestScalarWhereWithAggregatesInput[]
+    NOT?: ShopUpdateRequestScalarWhereWithAggregatesInput | ShopUpdateRequestScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ShopUpdateRequest"> | string
+    shopId?: StringWithAggregatesFilter<"ShopUpdateRequest"> | string
+    oldData?: JsonWithAggregatesFilter<"ShopUpdateRequest">
+    newData?: JsonWithAggregatesFilter<"ShopUpdateRequest">
+    reason?: StringNullableWithAggregatesFilter<"ShopUpdateRequest"> | string | null
+    status?: StringWithAggregatesFilter<"ShopUpdateRequest"> | string
+    rejectionReason?: StringNullableWithAggregatesFilter<"ShopUpdateRequest"> | string | null
+    reviewedBy?: StringNullableWithAggregatesFilter<"ShopUpdateRequest"> | string | null
+    reviewedAt?: DateTimeNullableWithAggregatesFilter<"ShopUpdateRequest"> | Date | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"ShopUpdateRequest"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"ShopUpdateRequest"> | Date | string
+  }
+
   export type UserCreateInput = {
     id?: string
     email: string
@@ -8045,6 +9441,7 @@ export namespace Prisma {
     owner: UserCreateNestedOneWithoutOwnedShopInput
     staff?: UserCreateNestedManyWithoutShopInput
     followers?: ShopFollowCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestCreateNestedManyWithoutShopInput
   }
 
   export type ShopUncheckedCreateInput = {
@@ -8066,6 +9463,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     staff?: UserUncheckedCreateNestedManyWithoutShopInput
     followers?: ShopFollowUncheckedCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestUncheckedCreateNestedManyWithoutShopInput
   }
 
   export type ShopUpdateInput = {
@@ -8087,6 +9485,7 @@ export namespace Prisma {
     owner?: UserUpdateOneRequiredWithoutOwnedShopNestedInput
     staff?: UserUpdateManyWithoutShopNestedInput
     followers?: ShopFollowUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUpdateManyWithoutShopNestedInput
   }
 
   export type ShopUncheckedUpdateInput = {
@@ -8108,6 +9507,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     staff?: UserUncheckedUpdateManyWithoutShopNestedInput
     followers?: ShopFollowUncheckedUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type ShopCreateManyInput = {
@@ -8415,6 +9815,103 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type ShopUpdateRequestCreateInput = {
+    id?: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    shop: ShopCreateNestedOneWithoutUpdateRequestsInput
+  }
+
+  export type ShopUpdateRequestUncheckedCreateInput = {
+    id?: string
+    shopId: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShopUpdateRequestUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    shop?: ShopUpdateOneRequiredWithoutUpdateRequestsNestedInput
+  }
+
+  export type ShopUpdateRequestUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShopUpdateRequestCreateManyInput = {
+    id?: string
+    shopId: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShopUpdateRequestUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShopUpdateRequestUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type StringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -8637,7 +10134,17 @@ export namespace Prisma {
     none?: UserWhereInput
   }
 
+  export type ShopUpdateRequestListRelationFilter = {
+    every?: ShopUpdateRequestWhereInput
+    some?: ShopUpdateRequestWhereInput
+    none?: ShopUpdateRequestWhereInput
+  }
+
   export type UserOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ShopUpdateRequestOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -8918,6 +10425,93 @@ export namespace Prisma {
     _min?: NestedIntNullableFilter<$PrismaModel>
     _max?: NestedIntNullableFilter<$PrismaModel>
   }
+  export type JsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
+  export type ShopUpdateRequestCountOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    oldData?: SortOrder
+    newData?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    rejectionReason?: SortOrder
+    reviewedBy?: SortOrder
+    reviewedAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ShopUpdateRequestMaxOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    rejectionReason?: SortOrder
+    reviewedBy?: SortOrder
+    reviewedAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ShopUpdateRequestMinOrderByAggregateInput = {
+    id?: SortOrder
+    shopId?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    rejectionReason?: SortOrder
+    reviewedBy?: SortOrder
+    reviewedAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+  export type JsonWithAggregatesFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonWithAggregatesFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedJsonFilter<$PrismaModel>
+    _max?: NestedJsonFilter<$PrismaModel>
+  }
 
   export type ShopCreateNestedOneWithoutStaffInput = {
     create?: XOR<ShopCreateWithoutStaffInput, ShopUncheckedCreateWithoutStaffInput>
@@ -9087,6 +10681,13 @@ export namespace Prisma {
     connect?: ShopFollowWhereUniqueInput | ShopFollowWhereUniqueInput[]
   }
 
+  export type ShopUpdateRequestCreateNestedManyWithoutShopInput = {
+    create?: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput> | ShopUpdateRequestCreateWithoutShopInput[] | ShopUpdateRequestUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: ShopUpdateRequestCreateOrConnectWithoutShopInput | ShopUpdateRequestCreateOrConnectWithoutShopInput[]
+    createMany?: ShopUpdateRequestCreateManyShopInputEnvelope
+    connect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+  }
+
   export type UserUncheckedCreateNestedManyWithoutShopInput = {
     create?: XOR<UserCreateWithoutShopInput, UserUncheckedCreateWithoutShopInput> | UserCreateWithoutShopInput[] | UserUncheckedCreateWithoutShopInput[]
     connectOrCreate?: UserCreateOrConnectWithoutShopInput | UserCreateOrConnectWithoutShopInput[]
@@ -9099,6 +10700,13 @@ export namespace Prisma {
     connectOrCreate?: ShopFollowCreateOrConnectWithoutShopInput | ShopFollowCreateOrConnectWithoutShopInput[]
     createMany?: ShopFollowCreateManyShopInputEnvelope
     connect?: ShopFollowWhereUniqueInput | ShopFollowWhereUniqueInput[]
+  }
+
+  export type ShopUpdateRequestUncheckedCreateNestedManyWithoutShopInput = {
+    create?: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput> | ShopUpdateRequestCreateWithoutShopInput[] | ShopUpdateRequestUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: ShopUpdateRequestCreateOrConnectWithoutShopInput | ShopUpdateRequestCreateOrConnectWithoutShopInput[]
+    createMany?: ShopUpdateRequestCreateManyShopInputEnvelope
+    connect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
   }
 
   export type IntFieldUpdateOperationsInput = {
@@ -9145,6 +10753,20 @@ export namespace Prisma {
     deleteMany?: ShopFollowScalarWhereInput | ShopFollowScalarWhereInput[]
   }
 
+  export type ShopUpdateRequestUpdateManyWithoutShopNestedInput = {
+    create?: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput> | ShopUpdateRequestCreateWithoutShopInput[] | ShopUpdateRequestUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: ShopUpdateRequestCreateOrConnectWithoutShopInput | ShopUpdateRequestCreateOrConnectWithoutShopInput[]
+    upsert?: ShopUpdateRequestUpsertWithWhereUniqueWithoutShopInput | ShopUpdateRequestUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: ShopUpdateRequestCreateManyShopInputEnvelope
+    set?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    disconnect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    delete?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    connect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    update?: ShopUpdateRequestUpdateWithWhereUniqueWithoutShopInput | ShopUpdateRequestUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: ShopUpdateRequestUpdateManyWithWhereWithoutShopInput | ShopUpdateRequestUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: ShopUpdateRequestScalarWhereInput | ShopUpdateRequestScalarWhereInput[]
+  }
+
   export type UserUncheckedUpdateManyWithoutShopNestedInput = {
     create?: XOR<UserCreateWithoutShopInput, UserUncheckedCreateWithoutShopInput> | UserCreateWithoutShopInput[] | UserUncheckedCreateWithoutShopInput[]
     connectOrCreate?: UserCreateOrConnectWithoutShopInput | UserCreateOrConnectWithoutShopInput[]
@@ -9171,6 +10793,20 @@ export namespace Prisma {
     update?: ShopFollowUpdateWithWhereUniqueWithoutShopInput | ShopFollowUpdateWithWhereUniqueWithoutShopInput[]
     updateMany?: ShopFollowUpdateManyWithWhereWithoutShopInput | ShopFollowUpdateManyWithWhereWithoutShopInput[]
     deleteMany?: ShopFollowScalarWhereInput | ShopFollowScalarWhereInput[]
+  }
+
+  export type ShopUpdateRequestUncheckedUpdateManyWithoutShopNestedInput = {
+    create?: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput> | ShopUpdateRequestCreateWithoutShopInput[] | ShopUpdateRequestUncheckedCreateWithoutShopInput[]
+    connectOrCreate?: ShopUpdateRequestCreateOrConnectWithoutShopInput | ShopUpdateRequestCreateOrConnectWithoutShopInput[]
+    upsert?: ShopUpdateRequestUpsertWithWhereUniqueWithoutShopInput | ShopUpdateRequestUpsertWithWhereUniqueWithoutShopInput[]
+    createMany?: ShopUpdateRequestCreateManyShopInputEnvelope
+    set?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    disconnect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    delete?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    connect?: ShopUpdateRequestWhereUniqueInput | ShopUpdateRequestWhereUniqueInput[]
+    update?: ShopUpdateRequestUpdateWithWhereUniqueWithoutShopInput | ShopUpdateRequestUpdateWithWhereUniqueWithoutShopInput[]
+    updateMany?: ShopUpdateRequestUpdateManyWithWhereWithoutShopInput | ShopUpdateRequestUpdateManyWithWhereWithoutShopInput[]
+    deleteMany?: ShopUpdateRequestScalarWhereInput | ShopUpdateRequestScalarWhereInput[]
   }
 
   export type UserCreateNestedOneWithoutFollowsInput = {
@@ -9233,6 +10869,20 @@ export namespace Prisma {
     upsert?: UserUpsertWithoutAddressesInput
     connect?: UserWhereUniqueInput
     update?: XOR<XOR<UserUpdateToOneWithWhereWithoutAddressesInput, UserUpdateWithoutAddressesInput>, UserUncheckedUpdateWithoutAddressesInput>
+  }
+
+  export type ShopCreateNestedOneWithoutUpdateRequestsInput = {
+    create?: XOR<ShopCreateWithoutUpdateRequestsInput, ShopUncheckedCreateWithoutUpdateRequestsInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutUpdateRequestsInput
+    connect?: ShopWhereUniqueInput
+  }
+
+  export type ShopUpdateOneRequiredWithoutUpdateRequestsNestedInput = {
+    create?: XOR<ShopCreateWithoutUpdateRequestsInput, ShopUncheckedCreateWithoutUpdateRequestsInput>
+    connectOrCreate?: ShopCreateOrConnectWithoutUpdateRequestsInput
+    upsert?: ShopUpsertWithoutUpdateRequestsInput
+    connect?: ShopWhereUniqueInput
+    update?: XOR<XOR<ShopUpdateToOneWithWhereWithoutUpdateRequestsInput, ShopUpdateWithoutUpdateRequestsInput>, ShopUncheckedUpdateWithoutUpdateRequestsInput>
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -9451,6 +11101,29 @@ export namespace Prisma {
     _min?: NestedIntNullableFilter<$PrismaModel>
     _max?: NestedIntNullableFilter<$PrismaModel>
   }
+  export type NestedJsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<NestedJsonFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<NestedJsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type NestedJsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
 
   export type ShopCreateWithoutStaffInput = {
     id?: string
@@ -9470,6 +11143,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     owner: UserCreateNestedOneWithoutOwnedShopInput
     followers?: ShopFollowCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestCreateNestedManyWithoutShopInput
   }
 
   export type ShopUncheckedCreateWithoutStaffInput = {
@@ -9490,6 +11164,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     followers?: ShopFollowUncheckedCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestUncheckedCreateNestedManyWithoutShopInput
   }
 
   export type ShopCreateOrConnectWithoutStaffInput = {
@@ -9515,6 +11190,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     staff?: UserCreateNestedManyWithoutShopInput
     followers?: ShopFollowCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestCreateNestedManyWithoutShopInput
   }
 
   export type ShopUncheckedCreateWithoutOwnerInput = {
@@ -9535,6 +11211,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     staff?: UserUncheckedCreateNestedManyWithoutShopInput
     followers?: ShopFollowUncheckedCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestUncheckedCreateNestedManyWithoutShopInput
   }
 
   export type ShopCreateOrConnectWithoutOwnerInput = {
@@ -9633,6 +11310,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     owner?: UserUpdateOneRequiredWithoutOwnedShopNestedInput
     followers?: ShopFollowUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUpdateManyWithoutShopNestedInput
   }
 
   export type ShopUncheckedUpdateWithoutStaffInput = {
@@ -9653,6 +11331,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     followers?: ShopFollowUncheckedUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type ShopUpsertWithoutOwnerInput = {
@@ -9684,6 +11363,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     staff?: UserUpdateManyWithoutShopNestedInput
     followers?: ShopFollowUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUpdateManyWithoutShopNestedInput
   }
 
   export type ShopUncheckedUpdateWithoutOwnerInput = {
@@ -9704,6 +11384,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     staff?: UserUncheckedUpdateManyWithoutShopNestedInput
     followers?: ShopFollowUncheckedUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type ShopFollowUpsertWithWhereUniqueWithoutUserInput = {
@@ -9884,6 +11565,42 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
+  export type ShopUpdateRequestCreateWithoutShopInput = {
+    id?: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShopUpdateRequestUncheckedCreateWithoutShopInput = {
+    id?: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ShopUpdateRequestCreateOrConnectWithoutShopInput = {
+    where: ShopUpdateRequestWhereUniqueInput
+    create: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput>
+  }
+
+  export type ShopUpdateRequestCreateManyShopInputEnvelope = {
+    data: ShopUpdateRequestCreateManyShopInput | ShopUpdateRequestCreateManyShopInput[]
+    skipDuplicates?: boolean
+  }
+
   export type UserUpsertWithoutOwnedShopInput = {
     update: XOR<UserUpdateWithoutOwnedShopInput, UserUncheckedUpdateWithoutOwnedShopInput>
     create: XOR<UserCreateWithoutOwnedShopInput, UserUncheckedCreateWithoutOwnedShopInput>
@@ -9988,6 +11705,39 @@ export namespace Prisma {
     data: XOR<ShopFollowUpdateManyMutationInput, ShopFollowUncheckedUpdateManyWithoutShopInput>
   }
 
+  export type ShopUpdateRequestUpsertWithWhereUniqueWithoutShopInput = {
+    where: ShopUpdateRequestWhereUniqueInput
+    update: XOR<ShopUpdateRequestUpdateWithoutShopInput, ShopUpdateRequestUncheckedUpdateWithoutShopInput>
+    create: XOR<ShopUpdateRequestCreateWithoutShopInput, ShopUpdateRequestUncheckedCreateWithoutShopInput>
+  }
+
+  export type ShopUpdateRequestUpdateWithWhereUniqueWithoutShopInput = {
+    where: ShopUpdateRequestWhereUniqueInput
+    data: XOR<ShopUpdateRequestUpdateWithoutShopInput, ShopUpdateRequestUncheckedUpdateWithoutShopInput>
+  }
+
+  export type ShopUpdateRequestUpdateManyWithWhereWithoutShopInput = {
+    where: ShopUpdateRequestScalarWhereInput
+    data: XOR<ShopUpdateRequestUpdateManyMutationInput, ShopUpdateRequestUncheckedUpdateManyWithoutShopInput>
+  }
+
+  export type ShopUpdateRequestScalarWhereInput = {
+    AND?: ShopUpdateRequestScalarWhereInput | ShopUpdateRequestScalarWhereInput[]
+    OR?: ShopUpdateRequestScalarWhereInput[]
+    NOT?: ShopUpdateRequestScalarWhereInput | ShopUpdateRequestScalarWhereInput[]
+    id?: StringFilter<"ShopUpdateRequest"> | string
+    shopId?: StringFilter<"ShopUpdateRequest"> | string
+    oldData?: JsonFilter<"ShopUpdateRequest">
+    newData?: JsonFilter<"ShopUpdateRequest">
+    reason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    status?: StringFilter<"ShopUpdateRequest"> | string
+    rejectionReason?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedBy?: StringNullableFilter<"ShopUpdateRequest"> | string | null
+    reviewedAt?: DateTimeNullableFilter<"ShopUpdateRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+    updatedAt?: DateTimeFilter<"ShopUpdateRequest"> | Date | string
+  }
+
   export type UserCreateWithoutFollowsInput = {
     id?: string
     email: string
@@ -10051,6 +11801,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     owner: UserCreateNestedOneWithoutOwnedShopInput
     staff?: UserCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestCreateNestedManyWithoutShopInput
   }
 
   export type ShopUncheckedCreateWithoutFollowersInput = {
@@ -10071,6 +11822,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     staff?: UserUncheckedCreateNestedManyWithoutShopInput
+    updateRequests?: ShopUpdateRequestUncheckedCreateNestedManyWithoutShopInput
   }
 
   export type ShopCreateOrConnectWithoutFollowersInput = {
@@ -10158,6 +11910,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     owner?: UserUpdateOneRequiredWithoutOwnedShopNestedInput
     staff?: UserUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUpdateManyWithoutShopNestedInput
   }
 
   export type ShopUncheckedUpdateWithoutFollowersInput = {
@@ -10178,6 +11931,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     staff?: UserUncheckedUpdateManyWithoutShopNestedInput
+    updateRequests?: ShopUpdateRequestUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type UserCreateWithoutAddressesInput = {
@@ -10274,6 +12028,106 @@ export namespace Prisma {
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUncheckedUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUncheckedUpdateManyWithoutUserNestedInput
+  }
+
+  export type ShopCreateWithoutUpdateRequestsInput = {
+    id?: string
+    name: string
+    logo?: string | null
+    description?: string | null
+    responseRate?: number
+    responseTime?: string
+    status?: string
+    blockedUntil?: Date | string | null
+    blockReason?: string | null
+    email?: string | null
+    phoneNumber?: string | null
+    pickupAddress?: string | null
+    shippingSettings?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    owner: UserCreateNestedOneWithoutOwnedShopInput
+    staff?: UserCreateNestedManyWithoutShopInput
+    followers?: ShopFollowCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopUncheckedCreateWithoutUpdateRequestsInput = {
+    id?: string
+    name: string
+    logo?: string | null
+    description?: string | null
+    ownerId: string
+    responseRate?: number
+    responseTime?: string
+    status?: string
+    blockedUntil?: Date | string | null
+    blockReason?: string | null
+    email?: string | null
+    phoneNumber?: string | null
+    pickupAddress?: string | null
+    shippingSettings?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    staff?: UserUncheckedCreateNestedManyWithoutShopInput
+    followers?: ShopFollowUncheckedCreateNestedManyWithoutShopInput
+  }
+
+  export type ShopCreateOrConnectWithoutUpdateRequestsInput = {
+    where: ShopWhereUniqueInput
+    create: XOR<ShopCreateWithoutUpdateRequestsInput, ShopUncheckedCreateWithoutUpdateRequestsInput>
+  }
+
+  export type ShopUpsertWithoutUpdateRequestsInput = {
+    update: XOR<ShopUpdateWithoutUpdateRequestsInput, ShopUncheckedUpdateWithoutUpdateRequestsInput>
+    create: XOR<ShopCreateWithoutUpdateRequestsInput, ShopUncheckedCreateWithoutUpdateRequestsInput>
+    where?: ShopWhereInput
+  }
+
+  export type ShopUpdateToOneWithWhereWithoutUpdateRequestsInput = {
+    where?: ShopWhereInput
+    data: XOR<ShopUpdateWithoutUpdateRequestsInput, ShopUncheckedUpdateWithoutUpdateRequestsInput>
+  }
+
+  export type ShopUpdateWithoutUpdateRequestsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    logo?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    responseRate?: IntFieldUpdateOperationsInput | number
+    responseTime?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    blockedUntil?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    blockReason?: NullableStringFieldUpdateOperationsInput | string | null
+    email?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    shippingSettings?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    owner?: UserUpdateOneRequiredWithoutOwnedShopNestedInput
+    staff?: UserUpdateManyWithoutShopNestedInput
+    followers?: ShopFollowUpdateManyWithoutShopNestedInput
+  }
+
+  export type ShopUncheckedUpdateWithoutUpdateRequestsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    logo?: NullableStringFieldUpdateOperationsInput | string | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    ownerId?: StringFieldUpdateOperationsInput | string
+    responseRate?: IntFieldUpdateOperationsInput | number
+    responseTime?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    blockedUntil?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    blockReason?: NullableStringFieldUpdateOperationsInput | string | null
+    email?: NullableStringFieldUpdateOperationsInput | string | null
+    phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupAddress?: NullableStringFieldUpdateOperationsInput | string | null
+    shippingSettings?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    staff?: UserUncheckedUpdateManyWithoutShopNestedInput
+    followers?: ShopFollowUncheckedUpdateManyWithoutShopNestedInput
   }
 
   export type ShopFollowCreateManyUserInput = {
@@ -10383,6 +12237,19 @@ export namespace Prisma {
     createdAt?: Date | string
   }
 
+  export type ShopUpdateRequestCreateManyShopInput = {
+    id?: string
+    oldData: JsonNullValueInput | InputJsonValue
+    newData: JsonNullValueInput | InputJsonValue
+    reason?: string | null
+    status?: string
+    rejectionReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: Date | string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
   export type UserUpdateWithoutShopInput = {
     id?: StringFieldUpdateOperationsInput | string
     email?: StringFieldUpdateOperationsInput | string
@@ -10456,6 +12323,45 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     userId?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShopUpdateRequestUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShopUpdateRequestUncheckedUpdateWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ShopUpdateRequestUncheckedUpdateManyWithoutShopInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    oldData?: JsonNullValueInput | InputJsonValue
+    newData?: JsonNullValueInput | InputJsonValue
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: StringFieldUpdateOperationsInput | string
+    rejectionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
 

@@ -59,7 +59,8 @@ model Shop {
   updatedAt        DateTime  @updatedAt
 
   // Người dùng theo dõi shop này
-  followers ShopFollow[]
+  followers      ShopFollow[]
+  updateRequests ShopUpdateRequest[]
 }
 
 model ShopFollow {
@@ -103,4 +104,22 @@ model UserAddress {
   updatedAt     DateTime @updatedAt
 
   @@index([userId])
+}
+
+model ShopUpdateRequest {
+  id              String    @id @default(uuid())
+  shopId          String
+  shop            Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  oldData         Json
+  newData         Json
+  reason          String?
+  status          String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+  rejectionReason String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([status])
 }

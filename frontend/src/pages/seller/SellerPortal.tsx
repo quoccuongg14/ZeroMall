@@ -20,6 +20,7 @@ import { ShopLogisticsManager } from '../../components/seller/ShopLogisticsManag
 import { ShopFreeshipXtraTab } from '../../components/seller/ShopFreeshipXtraTab'
 import PriceManagement from '../../components/seller/PriceManagement'
 import { ShopReturnsTab } from '../../components/seller/ShopReturnsTab'
+import { ShopProfileSettings } from '../../components/seller/ShopProfileSettings'
 import { NotificationPopover } from '../../components/common/NotificationPopover'
 import { orderService } from '../../services/order.service'
 import { safeParseJson } from '../../utils/formatters'
@@ -75,7 +76,8 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
     activeMenu === 'products' ? 'all-products' :
     activeMenu === 'orders' ? 'all-orders' :
     activeMenu === 'marketing' ? 'shop-flashsale' :
-    activeMenu === 'finance' ? 'revenue' : 'chat-mgmt'
+    activeMenu === 'finance' ? 'revenue' :
+    activeMenu === 'settings' ? 'profile' : 'chat-mgmt'
   )
 
   // Products list and loading states
@@ -332,6 +334,14 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
         { id: 'balance', title: 'Số Dư Ví ZeroMall' },
         { id: 'bank-accounts', title: 'Tài Khoản Ngân Hàng' }
       ]
+    },
+    {
+      id: 'settings',
+      title: 'Thiết Lập Shop',
+      icon: '⚙️',
+      subMenus: [
+        { id: 'profile', title: 'Hồ Sơ Shop' }
+      ]
     }
   ]
 
@@ -560,6 +570,11 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
             <SellerChatManager user={user} shopId={shopDetails?.id} />
           ) : activeSubMenu === 'reviews-mgmt' ? (
             <ShopReviews user={user} shopId={shopDetails?.id} />
+          ) : activeMenu === 'settings' ? (
+            <ShopProfileSettings
+              shop={shopDetails}
+              onRefreshShop={fetchShopDetails}
+            />
           ) : (
             <div className="w-full bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm min-h-[450px]">
               {activeMenu === 'dashboard' && (() => {

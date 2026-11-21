@@ -139,6 +139,8 @@ export class AuthService {
       select: {
         id: true,
         name: true,
+        logo: true,
+        description: true,
         responseRate: true,
         responseTime: true,
         status: true,
@@ -943,5 +945,242 @@ export class AuthService {
     ]);
 
     return { success: true };
+  }
+
+  // ==========================================
+  // SHOP PROFILE UPDATE REQUEST & APPROVAL (CSKH Xét Duyệt)
+  // ==========================================
+  async createShopUpdateRequest(shopId: string, newData: any, reason?: string) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+    });
+    if (!shop) {
+      throw new NotFoundException(`Cửa hàng với ID ${shopId} không tồn tại`);
+    }
+
+    const oldData = {
+      name: shop.name,
+      logo: shop.logo || '',
+      description: shop.description || '',
+      phoneNumber: shop.phoneNumber || '',
+      email: shop.email || '',
+      pickupAddress: shop.pickupAddress || '',
+    };
+
+    // Kiểm tra xem shop đã có request đang chờ duyệt (PENDING) chưa
+    const existingPending = await this.prisma.shopUpdateRequest.findFirst({
+      where: { shopId, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingPending) {
+      // Cập nhật lại yêu cầu đang chờ
+      return this.prisma.shopUpdateRequest.update({
+        where: { id: existingPending.id },
+        data: {
+          newData: newData || {},
+          reason: reason || existingPending.reason,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // Tạo yêu cầu mới
+    return this.prisma.shopUpdateRequest.create({
+      data: {
+        shopId,
+        oldData,
+        newData: newData || {},
+        reason: reason || 'Cập nhật thông tin cửa hàng',
+        status: 'PENDING',
+      },
+    });
+  }
+
+  async getShopLatestUpdateRequest(shopId: string) {
+    return this.prisma.shopUpdateRequest.findFirst({
+      where: { shopId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async cancelShopUpdateRequest(shopId: string) {
+    const pendingReq = await this.prisma.shopUpdateRequest.findFirst({
+      where: { shopId, status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!pendingReq) {
+      throw new NotFoundException('Không có yêu cầu cập nhật nào đang chờ duyệt để hủy');
+    }
+
+    return this.prisma.shopUpdateRequest.update({
+      where: { id: pendingReq.id },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+  }
+
+  async getShopUpdateRequests(status?: string, search?: string) {
+    const where: any = {};
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+    if (search && search.trim()) {
+      where.shop = {
+        name: { contains: search.trim(), mode: 'insensitive' },
+      };
+    }
+
+    return this.prisma.shopUpdateRequest.findMany({
+      where,
+      include: {
+        shop: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            status: true,
+            email: true,
+            phoneNumber: true,
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async reviewShopUpdateRequest(
+    requestId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+    operatorEmail?: string,
+    operatorRole?: string,
+    clientIp?: string,
+  ) {
+    const req = await this.prisma.shopUpdateRequest.findUnique({
+      where: { id: requestId },
+      include: { shop: true },
+    });
+    if (!req) {
+      throw new NotFoundException(`Không tìm thấy yêu cầu cập nhật với ID ${requestId}`);
+    }
+
+    if (req.status !== 'PENDING') {
+      throw new BadRequestException(`Yêu cầu này đã được xử lý trước đó với trạng thái ${req.status}`);
+    }
+
+    const reviewedAt = new Date();
+    const reviewer = operatorEmail || 'CSKH ZeroMall';
+
+    if (action === 'APPROVE') {
+      const newData: any = req.newData || {};
+      const updateData: any = {};
+
+      if (newData.name && typeof newData.name === 'string' && newData.name.trim()) {
+        updateData.name = newData.name.trim();
+      }
+      if (newData.logo !== undefined) {
+        updateData.logo = newData.logo;
+      }
+      if (newData.description !== undefined) {
+        updateData.description = newData.description;
+      }
+      if (newData.phoneNumber !== undefined) {
+        updateData.phoneNumber = newData.phoneNumber;
+      }
+      if (newData.email !== undefined) {
+        updateData.email = newData.email;
+      }
+      if (newData.pickupAddress !== undefined) {
+        updateData.pickupAddress = typeof newData.pickupAddress === 'string' 
+          ? newData.pickupAddress 
+          : JSON.stringify(newData.pickupAddress);
+      }
+
+      // Cập nhật thông tin vào bảng Shop
+      const updatedShop = await this.prisma.shop.update({
+        where: { id: req.shopId },
+        data: updateData,
+      });
+
+      // Cập nhật trạng thái Request
+      const updatedReq = await this.prisma.shopUpdateRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'APPROVED',
+          reviewedBy: reviewer,
+          reviewedAt,
+        },
+      });
+
+      // Ghi AuditLog
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            user: reviewer,
+            action: `CSKH đã phê duyệt thay đổi thông tin cửa hàng: ${req.shop.name} -> ${updatedShop.name}`,
+            module: 'SHOP_MANAGEMENT',
+            actionType: 'APPROVE_PROFILE_UPDATE',
+            targetId: req.shopId,
+            targetName: updatedShop.name,
+            ipAddress: clientIp || '127.0.0.1',
+            metadata: JSON.stringify({
+              requestId,
+              oldData: req.oldData,
+              newData: req.newData,
+              operatorRole: operatorRole || 'PLATFORM_SUPPORT',
+            }),
+          },
+        });
+      } catch (logErr) {
+        console.error('Failed to log audit review shop profile:', logErr);
+      }
+
+      return { success: true, status: 'APPROVED', shop: updatedShop, request: updatedReq };
+    } else {
+      // Từ chối (REJECT)
+      const reason = rejectionReason || 'Thông tin thay đổi chưa đáp ứng tiêu chuẩn của sàn ZeroMall';
+      const updatedReq = await this.prisma.shopUpdateRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'REJECTED',
+          rejectionReason: reason,
+          reviewedBy: reviewer,
+          reviewedAt,
+        },
+      });
+
+      // Ghi AuditLog
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            user: reviewer,
+            action: `CSKH từ chối yêu cầu thay đổi thông tin cửa hàng: ${req.shop.name}. Lý do: ${reason}`,
+            module: 'SHOP_MANAGEMENT',
+            actionType: 'REJECT_PROFILE_UPDATE',
+            targetId: req.shopId,
+            targetName: req.shop.name,
+            ipAddress: clientIp || '127.0.0.1',
+            metadata: JSON.stringify({
+              requestId,
+              reason,
+              operatorRole: operatorRole || 'PLATFORM_SUPPORT',
+            }),
+          },
+        });
+      } catch (logErr) {
+        console.error('Failed to log audit reject shop profile:', logErr);
+      }
+
+      return { success: true, status: 'REJECTED', request: updatedReq };
+    }
   }
 }

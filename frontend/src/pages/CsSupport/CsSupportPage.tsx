@@ -9,6 +9,7 @@ import { CsLiveChatTab } from '../../components/admin/CsLiveChatTab'
 import { CsCategoryAuditTab } from '../../components/cs-support/CsCategoryAuditTab'
 import { CsUsersTab } from '../../components/cs-support/CsUsersTab'
 import { CsPriceAuditTab } from '../../components/cs-support/compliance/CsPriceAuditTab'
+import { CsShopProfileAuditsTab } from '../../components/cs-support/CsShopProfileAuditsTab'
 import { subscribeDisputeChanges } from '../../services/supabase-realtime.service'
 
 interface CsSupportPageProps {
@@ -51,6 +52,9 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'moderation': return 'CATEGORY_AUDIT';
       case 'price-audit':
       case 'price-analytics': return 'PRICE_AUDIT';
+      case 'shop-audits':
+      case 'profile-audits':
+      case 'shop-profiles': return 'SHOP_PROFILE_AUDITS';
       default: return null;
     }
   }
@@ -65,12 +69,13 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       case 'LIVE_CHAT': return 'live-chat';
       case 'CATEGORY_AUDIT': return 'category-audit';
       case 'PRICE_AUDIT': return 'price-audit';
+      case 'SHOP_PROFILE_AUDITS': return 'shop-profiles';
       default: return 'shops';
     }
   }
 
   const [activePortalTab, setActivePortalTab] = useState<
-    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT' | 'USERS' | 'PRICE_AUDIT'
+    'SHOPS' | 'WITHDRAWALS' | 'DISPUTES' | 'ORDERS' | 'LIVE_CHAT' | 'CATEGORY_AUDIT' | 'USERS' | 'PRICE_AUDIT' | 'SHOP_PROFILE_AUDITS'
   >(() => {
     const searchParamsLocal = new URLSearchParams(window.location.search);
     const param = searchParamsLocal.get('tab');
@@ -334,6 +339,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
 
   const menuItems = [
     { id: 'SHOPS', label: 'Quản Lý & Khóa Shop', icon: '🏪' },
+    { id: 'SHOP_PROFILE_AUDITS', label: 'Xét Duyệt Hồ Sơ Shop', icon: '📝' },
     { id: 'CATEGORY_AUDIT', label: 'Kiểm Duyệt Sản Phẩm (Trust & Safety)', icon: '🛡️' },
     { id: 'PRICE_AUDIT', label: 'Giám Sát Giá & Chống Gian Lận', icon: '📈' },
     { id: 'USERS', label: 'Quản Lý & Khóa User', icon: '👥' },
@@ -438,6 +444,13 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
               fetchShops={fetchShops}
               triggerAuditLog={triggerAuditLog}
               loading={loading}
+            />
+          )}
+
+          {activePortalTab === 'SHOP_PROFILE_AUDITS' && (
+            <CsShopProfileAuditsTab
+              user={user}
+              triggerAuditLog={triggerAuditLog}
             />
           )}
 

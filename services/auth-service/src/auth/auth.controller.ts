@@ -267,5 +267,58 @@ export class AuthController {
   ) {
     return this.authService.setDefaultUserAddress(userId, addressId);
   }
+
+  // ==========================================
+  // SHOP PROFILE UPDATE REQUEST & APPROVAL (CSKH Xét Duyệt)
+  // ==========================================
+  @Post('shops/:id/profile-update-request')
+  async createShopUpdateRequest(
+    @Param('id') id: string,
+    @Body() body: { newData: any; reason?: string },
+  ) {
+    return this.authService.createShopUpdateRequest(id, body.newData, body.reason);
+  }
+
+  @Get('shops/:id/profile-update-request')
+  async getShopLatestUpdateRequest(@Param('id') id: string) {
+    return this.authService.getShopLatestUpdateRequest(id);
+  }
+
+  @Delete('shops/:id/profile-update-request')
+  async cancelShopUpdateRequest(@Param('id') id: string) {
+    return this.authService.cancelShopUpdateRequest(id);
+  }
+
+  @Get('shop-update-requests')
+  async getShopUpdateRequests(
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.authService.getShopUpdateRequests(status, search);
+  }
+
+  @Put('shop-update-requests/:id/review')
+  async reviewShopUpdateRequest(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      action: 'APPROVE' | 'REJECT';
+      rejectionReason?: string;
+      operatorEmail?: string;
+      operatorRole?: string;
+      ipAddress?: string;
+    },
+    @Request() req,
+  ) {
+    const clientIp = body.ipAddress || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    return this.authService.reviewShopUpdateRequest(
+      id,
+      body.action,
+      body.rejectionReason,
+      body.operatorEmail,
+      body.operatorRole,
+      clientIp,
+    );
+  }
 }
 
