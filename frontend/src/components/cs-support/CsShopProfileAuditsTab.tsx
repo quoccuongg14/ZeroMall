@@ -6,6 +6,31 @@ interface CsShopProfileAuditsTabProps {
   triggerAuditLog: (action: string) => Promise<void>
 }
 
+const formatAddress = (addr: any): string => {
+  if (!addr) return ''
+  let obj: any = null
+  if (typeof addr === 'object' && addr !== null) {
+    obj = addr
+  } else if (typeof addr === 'string') {
+    const trimmed = addr.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        obj = JSON.parse(trimmed)
+      } catch {
+        obj = null
+      }
+    }
+  }
+
+  if (obj && typeof obj === 'object') {
+    const namePart = obj.fullName ? `[${obj.fullName}${obj.phoneNumber ? ` - ${obj.phoneNumber}` : ''}] ` : ''
+    const parts = [obj.detailAddress, obj.ward, obj.district, obj.province].filter(Boolean)
+    return `${namePart}${parts.join(', ')}`
+  }
+
+  return typeof addr === 'string' ? addr : ''
+}
+
 export const CsShopProfileAuditsTab: React.FC<CsShopProfileAuditsTabProps> = ({
   user,
   triggerAuditLog
@@ -319,9 +344,13 @@ export const CsShopProfileAuditsTab: React.FC<CsShopProfileAuditsTabProps> = ({
                   {/* DIFF HIGHLIGHTS */}
                   <div className="space-y-2.5">
                     {renderFieldDiff('Tên hiển thị Shop', oldData.name, newData.name)}
-                    {renderFieldDiff('Số điện thoại liên hệ', oldData.phone, newData.phone)}
+                    {renderFieldDiff('Số điện thoại liên hệ', oldData.phoneNumber || oldData.phone, newData.phoneNumber || newData.phone)}
                     {renderFieldDiff('Email đại diện', oldData.email, newData.email)}
-                    {renderFieldDiff('Địa chỉ kho / Lấy hàng ZMX', oldData.pickupAddress, newData.pickupAddress)}
+                    {renderFieldDiff(
+                      'Địa chỉ kho / Lấy hàng ZMX',
+                      formatAddress(oldData.pickupAddress),
+                      formatAddress(newData.pickupAddress)
+                    )}
                     {renderFieldDiff('Mô tả giới thiệu Shop', oldData.description, newData.description)}
 
                     {/* LOGO DIFF */}

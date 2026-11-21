@@ -284,6 +284,11 @@ export class AuthController {
     return this.authService.getShopLatestUpdateRequest(id);
   }
 
+  @Get('shops/:id/profile-update-history')
+  async getShopUpdateHistory(@Param('id') id: string) {
+    return this.authService.getShopUpdateHistory(id);
+  }
+
   @Delete('shops/:id/profile-update-request')
   async cancelShopUpdateRequest(@Param('id') id: string) {
     return this.authService.cancelShopUpdateRequest(id);
@@ -319,6 +324,34 @@ export class AuthController {
       body.operatorRole,
       clientIp,
     );
+  }
+
+  @Post('hub-operators/upsert')
+  async upsertHubOperator(
+    @Body()
+    dto: {
+      email: string;
+      password?: string;
+      name: string;
+      hubId: string;
+      role?: string;
+    },
+  ) {
+    return this.authService.upsertHubOperator(dto);
+  }
+
+  @Post('drivers/upsert')
+  async upsertDriverUser(
+    @Body()
+    dto: {
+      email: string;
+      password?: string;
+      name: string;
+      phoneNumber?: string;
+      hubId?: string;
+    },
+  ) {
+    return this.authService.upsertDriverUser(dto);
   }
 }
 

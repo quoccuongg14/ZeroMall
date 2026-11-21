@@ -1004,6 +1004,14 @@ export class AuthService {
     });
   }
 
+  async getShopUpdateHistory(shopId: string) {
+    return this.prisma.shopUpdateRequest.findMany({
+      where: { shopId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+  }
+
   async cancelShopUpdateRequest(shopId: string) {
     const pendingReq = await this.prisma.shopUpdateRequest.findFirst({
       where: { shopId, status: 'PENDING' },
@@ -1182,5 +1190,102 @@ export class AuthService {
 
       return { success: true, status: 'REJECTED', request: updatedReq };
     }
+  }
+
+  // ==========================================
+  // LOGISTICS HUBS & DRIVERS ACCOUNT PROVISIONING
+  // ==========================================
+  async upsertHubOperator(dto: {
+    email: string;
+    password?: string;
+    name: string;
+    hubId: string;
+    role?: string;
+  }) {
+    const cleanEmail = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    let passwordHash: string | undefined;
+    if (dto.password && dto.password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      passwordHash = await bcrypt.hash(dto.password.trim(), salt);
+    }
+
+    if (existing) {
+      return this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          role: dto.role || 'HUB_OPERATOR',
+          hubId: dto.hubId,
+          status: 'ACTIVE',
+          ...(passwordHash && { password: passwordHash }),
+        },
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const pwd = passwordHash || (await bcrypt.hash('123456', salt));
+
+    return this.prisma.user.create({
+      data: {
+        email: cleanEmail,
+        password: pwd,
+        name: dto.name,
+        role: dto.role || 'HUB_OPERATOR',
+        hubId: dto.hubId,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  async upsertDriverUser(dto: {
+    email: string;
+    password?: string;
+    name: string;
+    phoneNumber?: string;
+    hubId?: string;
+  }) {
+    const cleanEmail = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    let passwordHash: string | undefined;
+    if (dto.password && dto.password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      passwordHash = await bcrypt.hash(dto.password.trim(), salt);
+    }
+
+    if (existing) {
+      return this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          role: 'DRIVER',
+          phoneNumber: dto.phoneNumber,
+          hubId: dto.hubId,
+          status: 'ACTIVE',
+          ...(passwordHash && { password: passwordHash }),
+        },
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const pwd = passwordHash || (await bcrypt.hash('123456', salt));
+
+    return this.prisma.user.create({
+      data: {
+        email: cleanEmail,
+        password: pwd,
+        name: dto.name,
+        role: 'DRIVER',
+        phoneNumber: dto.phoneNumber,
+        hubId: dto.hubId,
+        status: 'ACTIVE',
+      },
+    });
   }
 }
