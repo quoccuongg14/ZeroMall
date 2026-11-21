@@ -152,6 +152,11 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   const [frozenSellerIds, setFrozenSellerIds] = useState<string[]>([])
   const [sellerSearch, setSellerSearch] = useState('')
 
+  // Bộ lọc thời gian (Ngày / Tháng / Năm / Khoảng tùy chọn)
+  const [timePreset, setTimePreset] = useState<'ALL' | 'TODAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL')
+  const [customStartDate, setCustomStartDate] = useState<string>('')
+  const [customEndDate, setCustomEndDate] = useState<string>('')
+
   useEffect(() => {
     fetch(`${API_BASE_URL}/auth/shops`)
       .then((res) => (res.ok ? res.json() : []))
@@ -170,10 +175,48 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
     return map
   }, [shops])
 
-  // Lọc chỉ lấy các đơn có thu COD và không bị hủy
+  // 1. Lọc đơn hàng theo mốc thời gian thực tế (createdAt)
+  const timeFilteredShipments = useMemo(() => {
+    if (timePreset === 'ALL') return shipments
+
+    const now = new Date()
+    return shipments.filter((s) => {
+      if (!s.createdAt) return true
+      const d = new Date(s.createdAt)
+      if (isNaN(d.getTime())) return true
+
+      if (timePreset === 'TODAY') {
+        return (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate()
+        )
+      }
+      if (timePreset === 'LAST_7_DAYS') {
+        const past7 = new Date(now)
+        past7.setDate(past7.getDate() - 7)
+        return d >= past7 && d <= now
+      }
+      if (timePreset === 'THIS_MONTH') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      }
+      if (timePreset === 'CUSTOM') {
+        if (customStartDate && d < new Date(customStartDate)) return false
+        if (customEndDate) {
+          const end = new Date(customEndDate)
+          end.setHours(23, 59, 59, 999)
+          if (d > end) return false
+        }
+        return true
+      }
+      return true
+    })
+  }, [shipments, timePreset, customStartDate, customEndDate])
+
+  // Lọc chỉ lấy các đơn có thu COD và không bị hủy trong khoảng thời gian đã chọn
   const codShipments = useMemo(() => {
-    return shipments.filter((s) => s.status !== 'CANCELLED' && (s.codAmount || 0) > 0)
-  }, [shipments])
+    return timeFilteredShipments.filter((s) => s.status !== 'CANCELLED' && (s.codAmount || 0) > 0)
+  }, [timeFilteredShipments])
 
   // Phân loại dòng tiền 3 chặng thời gian thực
   const { collectingShipments, vaultShipments, settledShipments, totalCollecting, totalVault, totalSettled, totalCodAll } = useMemo(() => {
@@ -531,35 +574,90 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   return (
     <div className="space-y-6">
       {/* 1. Header Điều Hành Dòng Tiền Thu Hộ COD Chuẩn Enterprise */}
-      <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-3xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <span className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl text-emerald-700 shadow-3xs">
-              💵
-            </span>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>Đối Soát & Ký Quỹ Thu Hộ COD</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  Escrow Central
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                Kiểm soát dòng tiền mặt 3 chặng thời gian thực: Shipper ngoài đường ➔ Két sắt Bưu cục ➔ Tài khoản Ký quỹ Sàn & Trả ví Shop.
-              </p>
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-3xs space-y-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl text-emerald-700 shadow-3xs">
+                💵
+              </span>
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>Đối Soát & Ký Quỹ Thu Hộ COD</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Escrow Central
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Kiểm soát dòng tiền mặt 3 chặng thời gian thực: Shipper ngoài đường ➔ Két sắt Bưu cục ➔ Tài khoản Ký quỹ Sàn & Trả ví Shop.
+                </p>
+              </div>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-3xs cursor-pointer"
+              title="Xuất bảng đối soát số liệu các Bưu cục ra tệp Excel CSV"
+            >
+              <span>📊</span> Xuất Báo Cáo Sổ Quỹ (CSV)
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-3xs cursor-pointer"
-            title="Xuất bảng đối soát số liệu các Bưu cục ra tệp Excel CSV"
-          >
-            <span>📊</span> Xuất Báo Cáo Sổ Quỹ (CSV)
-          </button>
+        {/* Thanh Bộ Lọc Thời Gian (Ngày, Tháng, Năm) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-1">
+              <span>📅</span> Kỳ Đối Soát:
+            </span>
+            {[
+              { id: 'ALL', label: 'Tất cả' },
+              { id: 'TODAY', label: 'Hôm nay' },
+              { id: 'LAST_7_DAYS', label: '7 ngày qua' },
+              { id: 'THIS_MONTH', label: 'Tháng này' },
+              { id: 'CUSTOM', label: 'Tùy chọn ngày' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTimePreset(p.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  timePreset === p.id
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Nếu chọn Tùy chọn ngày thì hiện 2 input date */}
+          {timePreset === 'CUSTOM' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Từ:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs focus:outline-emerald-500"
+              />
+              <span className="text-slate-500 font-medium">Đến:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs focus:outline-emerald-500"
+              />
+            </div>
+          )}
+
+          <div className="text-[11px] text-slate-400 font-medium">
+            Đang hiển thị <b>{codShipments.length}</b> kiện COD trong kỳ
+          </div>
         </div>
       </div>
 
