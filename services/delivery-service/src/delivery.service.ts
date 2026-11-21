@@ -1021,6 +1021,14 @@ export class DeliveryService {
     return this.prisma.hub.findMany({
       include: {
         drivers: true,
+        parentSoc: true,
+        childHubs: {
+          include: {
+            drivers: true,
+            _count: { select: { shipments: true, drivers: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         _count: { select: { shipments: true, drivers: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -1037,6 +1045,9 @@ export class DeliveryService {
     type?: string;
     latitude?: number;
     longitude?: number;
+    email?: string;
+    password?: string;
+    parentSocId?: string;
   }) {
     const cleanCode = data.code.toUpperCase().trim();
     const existing = await this.prisma.hub.findUnique({ where: { code: cleanCode } });
@@ -1044,7 +1055,35 @@ export class DeliveryService {
       throw new BadRequestException(`Mã bưu cục ${cleanCode} đã tồn tại trên hệ thống`);
     }
 
-    return this.prisma.hub.create({
+    const hubType = data.type || 'DESTINATION_HUB';
+    let parentSocId = hubType === 'SORTING_CENTER' ? null : (data.parentSocId || null);
+
+    // Tự động tìm SOC chủ quản nếu là Hub con và chưa gán parentSocId
+    if (hubType !== 'SORTING_CENTER' && !parentSocId) {
+      const p = (data.province || '').toLowerCase();
+      let socCode = 'HCM01';
+      if (p.includes('hồ chí minh') || p.includes('đồng nai') || p.includes('bình dương') || p.includes('tây ninh') || p.includes('bà rịa')) {
+        socCode = 'HCM01';
+      } else if (p.includes('hải phòng') || p.includes('quảng ninh')) {
+        socCode = 'HUB692'; // SOC HẢI PHÒNG
+      } else if (p.includes('hà nội') || p.includes('hòa bình') || p.includes('hoà bình') || p.includes('bắc ninh') || p.includes('vĩnh phúc') || p.includes('hưng yên') || p.includes('hải dương')) {
+        socCode = 'HN01';
+      } else if (p.includes('đà nẵng') || p.includes('quảng nam') || p.includes('huế') || p.includes('quảng ngãi')) {
+        socCode = 'DNG01';
+      } else if (p.includes('cần thơ') || p.includes('hậu giang') || p.includes('vĩnh long') || p.includes('sóc trăng') || p.includes('an giang') || p.includes('kiên giang')) {
+        socCode = 'CT01';
+      }
+      const matchedSoc = await this.prisma.hub.findFirst({
+        where: { code: socCode, type: 'SORTING_CENTER' },
+      });
+      if (matchedSoc) {
+        parentSocId = matchedSoc.id;
+      }
+    }
+
+    const cleanEmail = data.email ? data.email.toLowerCase().trim() : null;
+
+    const createdHub = await this.prisma.hub.create({
       data: {
         code: cleanCode,
         name: data.name.trim(),
@@ -1052,20 +1091,52 @@ export class DeliveryService {
         province: data.province.trim(),
         district: data.district.trim(),
         ward: data.ward?.trim() || null,
-        type: data.type || 'DESTINATION_HUB',
+        type: hubType,
         latitude: data.latitude ? Number(data.latitude) : null,
         longitude: data.longitude ? Number(data.longitude) : null,
         status: 'ACTIVE',
+        email: cleanEmail,
+        parentSocId,
       },
-      include: { drivers: true, _count: { select: { shipments: true, drivers: true } } },
+      include: {
+        drivers: true,
+        parentSoc: true,
+        childHubs: true,
+        _count: { select: { shipments: true, drivers: true } },
+      },
     });
+
+    // Đồng bộ tạo tài khoản HUB_OPERATOR bên auth-service nếu có cung cấp email
+    if (cleanEmail) {
+      try {
+        const authUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001';
+        await fetch(`${authUrl}/auth/hub-operators/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            password: data.password || '123456',
+            name: `${hubType === 'SORTING_CENTER' ? 'Điều Phối Viên SOC' : 'Trưởng Bưu Cục'} (${createdHub.name})`,
+            hubId: createdHub.id,
+            role: 'HUB_OPERATOR',
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to sync hub operator account with auth-service:', err);
+      }
+    }
+
+    return createdHub;
   }
 
   async updateHub(id: string, data: any) {
     const hub = await this.prisma.hub.findUnique({ where: { id } });
     if (!hub) throw new NotFoundException('Không tìm thấy Bưu cục');
 
-    return this.prisma.hub.update({
+    const cleanEmail = data.email !== undefined ? (data.email ? data.email.toLowerCase().trim() : null) : undefined;
+    const parentSocId = data.type === 'SORTING_CENTER' ? null : (data.parentSocId !== undefined ? data.parentSocId : undefined);
+
+    const updatedHub = await this.prisma.hub.update({
       where: { id },
       data: {
         ...(data.name && { name: data.name.trim() }),
@@ -1077,9 +1148,39 @@ export class DeliveryService {
         ...(data.status && { status: data.status }),
         ...(data.latitude !== undefined && { latitude: data.latitude ? Number(data.latitude) : null }),
         ...(data.longitude !== undefined && { longitude: data.longitude ? Number(data.longitude) : null }),
+        ...(cleanEmail !== undefined && { email: cleanEmail }),
+        ...(parentSocId !== undefined && { parentSocId }),
       },
-      include: { drivers: true, _count: { select: { shipments: true, drivers: true } } },
+      include: {
+        drivers: true,
+        parentSoc: true,
+        childHubs: true,
+        _count: { select: { shipments: true, drivers: true } },
+      },
     });
+
+    // Đồng bộ tài khoản sang auth-service nếu có email hoặc mật khẩu mới
+    const targetEmail = cleanEmail || hub.email;
+    if (targetEmail && (cleanEmail !== undefined || data.password)) {
+      try {
+        const authUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001';
+        await fetch(`${authUrl}/auth/hub-operators/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: targetEmail,
+            password: data.password || undefined,
+            name: `${updatedHub.type === 'SORTING_CENTER' ? 'Điều Phối Viên SOC' : 'Trưởng Bưu Cục'} (${updatedHub.name})`,
+            hubId: updatedHub.id,
+            role: 'HUB_OPERATOR',
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to update hub operator account with auth-service:', err);
+      }
+    }
+
+    return updatedHub;
   }
 
   async deleteHub(id: string) {
@@ -1130,12 +1231,39 @@ export class DeliveryService {
     operatingArea?: string;
     assignedDistrict?: string;
     assignedProvince?: string;
+    email?: string;
+    password?: string;
   }) {
     const hub = await this.prisma.hub.findUnique({ where: { id: data.hubId } });
     if (!hub) throw new NotFoundException('Không tìm thấy Bưu cục chỉ định');
 
     const assignedProvince = data.assignedProvince || hub.province;
     const assignedDistrict = data.assignedDistrict || hub.district;
+
+    let userId: string | null = null;
+    const driverEmail = data.email ? data.email.toLowerCase().trim() : `shipper_${data.phone.replace(/[^0-9]/g, '')}@spx.zeromall.vn`;
+
+    // Cấp tài khoản đăng nhập cho tài xế bên auth-service
+    try {
+      const authUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:3001';
+      const userRes = await fetch(`${authUrl}/auth/drivers/upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: driverEmail,
+          password: data.password || '123456',
+          name: data.name.trim(),
+          phoneNumber: data.phone.trim(),
+          hubId: data.hubId,
+        }),
+      });
+      if (userRes.ok) {
+        const userObj: any = await userRes.json();
+        userId = userObj.id || null;
+      }
+    } catch (err) {
+      console.error('Failed to sync driver user account:', err);
+    }
 
     return this.prisma.driver.create({
       data: {
@@ -1144,6 +1272,7 @@ export class DeliveryService {
         vehicleNumber: data.vehicleNumber.trim().toUpperCase(),
         vehicleType: data.vehicleType || 'MOTORBIKE',
         hubId: data.hubId,
+        userId,
         operatingArea: data.operatingArea?.trim() || `${assignedDistrict}, ${assignedProvince}`,
         assignedDistrict,
         assignedProvince,

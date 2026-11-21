@@ -1435,6 +1435,7 @@ export namespace Prisma {
     birthday: string | null
     phoneNumber: string | null
     shopId: string | null
+    hubId: string | null
   }
 
   export type UserMaxAggregateOutputType = {
@@ -1453,6 +1454,7 @@ export namespace Prisma {
     birthday: string | null
     phoneNumber: string | null
     shopId: string | null
+    hubId: string | null
   }
 
   export type UserCountAggregateOutputType = {
@@ -1471,6 +1473,7 @@ export namespace Prisma {
     birthday: number
     phoneNumber: number
     shopId: number
+    hubId: number
     _all: number
   }
 
@@ -1491,6 +1494,7 @@ export namespace Prisma {
     birthday?: true
     phoneNumber?: true
     shopId?: true
+    hubId?: true
   }
 
   export type UserMaxAggregateInputType = {
@@ -1509,6 +1513,7 @@ export namespace Prisma {
     birthday?: true
     phoneNumber?: true
     shopId?: true
+    hubId?: true
   }
 
   export type UserCountAggregateInputType = {
@@ -1527,6 +1532,7 @@ export namespace Prisma {
     birthday?: true
     phoneNumber?: true
     shopId?: true
+    hubId?: true
     _all?: true
   }
 
@@ -1618,6 +1624,7 @@ export namespace Prisma {
     birthday: string | null
     phoneNumber: string | null
     shopId: string | null
+    hubId: string | null
     _count: UserCountAggregateOutputType | null
     _min: UserMinAggregateOutputType | null
     _max: UserMaxAggregateOutputType | null
@@ -1653,6 +1660,7 @@ export namespace Prisma {
     birthday?: boolean
     phoneNumber?: boolean
     shopId?: boolean
+    hubId?: boolean
     shop?: boolean | User$shopArgs<ExtArgs>
     ownedShop?: boolean | User$ownedShopArgs<ExtArgs>
     follows?: boolean | User$followsArgs<ExtArgs>
@@ -1676,6 +1684,7 @@ export namespace Prisma {
     birthday?: boolean
     phoneNumber?: boolean
     shopId?: boolean
+    hubId?: boolean
     shop?: boolean | User$shopArgs<ExtArgs>
   }, ExtArgs["result"]["user"]>
 
@@ -1695,6 +1704,7 @@ export namespace Prisma {
     birthday?: boolean
     phoneNumber?: boolean
     shopId?: boolean
+    hubId?: boolean
     shop?: boolean | User$shopArgs<ExtArgs>
   }, ExtArgs["result"]["user"]>
 
@@ -1714,9 +1724,10 @@ export namespace Prisma {
     birthday?: boolean
     phoneNumber?: boolean
     shopId?: boolean
+    hubId?: boolean
   }
 
-  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "password" | "name" | "role" | "status" | "blockedUntil" | "blockReason" | "createdAt" | "updatedAt" | "avatar" | "gender" | "birthday" | "phoneNumber" | "shopId", ExtArgs["result"]["user"]>
+  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "email" | "password" | "name" | "role" | "status" | "blockedUntil" | "blockReason" | "createdAt" | "updatedAt" | "avatar" | "gender" | "birthday" | "phoneNumber" | "shopId" | "hubId", ExtArgs["result"]["user"]>
   export type UserInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     shop?: boolean | User$shopArgs<ExtArgs>
     ownedShop?: boolean | User$ownedShopArgs<ExtArgs>
@@ -1755,6 +1766,7 @@ export namespace Prisma {
       birthday: string | null
       phoneNumber: string | null
       shopId: string | null
+      hubId: string | null
     }, ExtArgs["result"]["user"]>
     composites: {}
   }
@@ -2197,6 +2209,7 @@ export namespace Prisma {
     readonly birthday: FieldRef<"User", 'String'>
     readonly phoneNumber: FieldRef<"User", 'String'>
     readonly shopId: FieldRef<"User", 'String'>
+    readonly hubId: FieldRef<"User", 'String'>
   }
     
 
@@ -8522,7 +8535,8 @@ export namespace Prisma {
     gender: 'gender',
     birthday: 'birthday',
     phoneNumber: 'phoneNumber',
-    shopId: 'shopId'
+    shopId: 'shopId',
+    hubId: 'hubId'
   };
 
   export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
@@ -8756,6 +8770,7 @@ export namespace Prisma {
     birthday?: StringNullableFilter<"User"> | string | null
     phoneNumber?: StringNullableFilter<"User"> | string | null
     shopId?: StringNullableFilter<"User"> | string | null
+    hubId?: StringNullableFilter<"User"> | string | null
     shop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
     ownedShop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
     follows?: ShopFollowListRelationFilter
@@ -8778,6 +8793,7 @@ export namespace Prisma {
     birthday?: SortOrderInput | SortOrder
     phoneNumber?: SortOrderInput | SortOrder
     shopId?: SortOrderInput | SortOrder
+    hubId?: SortOrderInput | SortOrder
     shop?: ShopOrderByWithRelationInput
     ownedShop?: ShopOrderByWithRelationInput
     follows?: ShopFollowOrderByRelationAggregateInput
@@ -8803,6 +8819,7 @@ export namespace Prisma {
     birthday?: StringNullableFilter<"User"> | string | null
     phoneNumber?: StringNullableFilter<"User"> | string | null
     shopId?: StringNullableFilter<"User"> | string | null
+    hubId?: StringNullableFilter<"User"> | string | null
     shop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
     ownedShop?: XOR<ShopNullableScalarRelationFilter, ShopWhereInput> | null
     follows?: ShopFollowListRelationFilter
@@ -8825,6 +8842,7 @@ export namespace Prisma {
     birthday?: SortOrderInput | SortOrder
     phoneNumber?: SortOrderInput | SortOrder
     shopId?: SortOrderInput | SortOrder
+    hubId?: SortOrderInput | SortOrder
     _count?: UserCountOrderByAggregateInput
     _max?: UserMaxOrderByAggregateInput
     _min?: UserMinOrderByAggregateInput
@@ -8849,6 +8867,7 @@ export namespace Prisma {
     birthday?: StringNullableWithAggregatesFilter<"User"> | string | null
     phoneNumber?: StringNullableWithAggregatesFilter<"User"> | string | null
     shopId?: StringNullableWithAggregatesFilter<"User"> | string | null
+    hubId?: StringNullableWithAggregatesFilter<"User"> | string | null
   }
 
   export type ShopWhereInput = {
@@ -9300,6 +9319,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     shop?: ShopCreateNestedOneWithoutStaffInput
     ownedShop?: ShopCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowCreateNestedManyWithoutUserInput
@@ -9322,6 +9342,7 @@ export namespace Prisma {
     birthday?: string | null
     phoneNumber?: string | null
     shopId?: string | null
+    hubId?: string | null
     ownedShop?: ShopUncheckedCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowUncheckedCreateNestedManyWithoutUserInput
     addresses?: UserAddressUncheckedCreateNestedManyWithoutUserInput
@@ -9342,6 +9363,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     shop?: ShopUpdateOneWithoutStaffNestedInput
     ownedShop?: ShopUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUpdateManyWithoutUserNestedInput
@@ -9364,6 +9386,7 @@ export namespace Prisma {
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUncheckedUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUncheckedUpdateManyWithoutUserNestedInput
     addresses?: UserAddressUncheckedUpdateManyWithoutUserNestedInput
@@ -9385,6 +9408,7 @@ export namespace Prisma {
     birthday?: string | null
     phoneNumber?: string | null
     shopId?: string | null
+    hubId?: string | null
   }
 
   export type UserUpdateManyMutationInput = {
@@ -9402,6 +9426,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type UserUncheckedUpdateManyInput = {
@@ -9420,6 +9445,7 @@ export namespace Prisma {
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ShopCreateInput = {
@@ -10010,6 +10036,7 @@ export namespace Prisma {
     birthday?: SortOrder
     phoneNumber?: SortOrder
     shopId?: SortOrder
+    hubId?: SortOrder
   }
 
   export type UserMaxOrderByAggregateInput = {
@@ -10028,6 +10055,7 @@ export namespace Prisma {
     birthday?: SortOrder
     phoneNumber?: SortOrder
     shopId?: SortOrder
+    hubId?: SortOrder
   }
 
   export type UserMinOrderByAggregateInput = {
@@ -10046,6 +10074,7 @@ export namespace Prisma {
     birthday?: SortOrder
     phoneNumber?: SortOrder
     shopId?: SortOrder
+    hubId?: SortOrder
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
@@ -11463,6 +11492,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     shop?: ShopCreateNestedOneWithoutStaffInput
     follows?: ShopFollowCreateNestedManyWithoutUserInput
     addresses?: UserAddressCreateNestedManyWithoutUserInput
@@ -11484,6 +11514,7 @@ export namespace Prisma {
     birthday?: string | null
     phoneNumber?: string | null
     shopId?: string | null
+    hubId?: string | null
     follows?: ShopFollowUncheckedCreateNestedManyWithoutUserInput
     addresses?: UserAddressUncheckedCreateNestedManyWithoutUserInput
   }
@@ -11508,6 +11539,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     ownedShop?: ShopCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowCreateNestedManyWithoutUserInput
     addresses?: UserAddressCreateNestedManyWithoutUserInput
@@ -11528,6 +11560,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     ownedShop?: ShopUncheckedCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowUncheckedCreateNestedManyWithoutUserInput
     addresses?: UserAddressUncheckedCreateNestedManyWithoutUserInput
@@ -11627,6 +11660,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     shop?: ShopUpdateOneWithoutStaffNestedInput
     follows?: ShopFollowUpdateManyWithoutUserNestedInput
     addresses?: UserAddressUpdateManyWithoutUserNestedInput
@@ -11648,6 +11682,7 @@ export namespace Prisma {
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     follows?: ShopFollowUncheckedUpdateManyWithoutUserNestedInput
     addresses?: UserAddressUncheckedUpdateManyWithoutUserNestedInput
   }
@@ -11687,6 +11722,7 @@ export namespace Prisma {
     birthday?: StringNullableFilter<"User"> | string | null
     phoneNumber?: StringNullableFilter<"User"> | string | null
     shopId?: StringNullableFilter<"User"> | string | null
+    hubId?: StringNullableFilter<"User"> | string | null
   }
 
   export type ShopFollowUpsertWithWhereUniqueWithoutShopInput = {
@@ -11753,6 +11789,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     shop?: ShopCreateNestedOneWithoutStaffInput
     ownedShop?: ShopCreateNestedOneWithoutOwnerInput
     addresses?: UserAddressCreateNestedManyWithoutUserInput
@@ -11774,6 +11811,7 @@ export namespace Prisma {
     birthday?: string | null
     phoneNumber?: string | null
     shopId?: string | null
+    hubId?: string | null
     ownedShop?: ShopUncheckedCreateNestedOneWithoutOwnerInput
     addresses?: UserAddressUncheckedCreateNestedManyWithoutUserInput
   }
@@ -11856,6 +11894,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     shop?: ShopUpdateOneWithoutStaffNestedInput
     ownedShop?: ShopUpdateOneWithoutOwnerNestedInput
     addresses?: UserAddressUpdateManyWithoutUserNestedInput
@@ -11877,6 +11916,7 @@ export namespace Prisma {
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUncheckedUpdateOneWithoutOwnerNestedInput
     addresses?: UserAddressUncheckedUpdateManyWithoutUserNestedInput
   }
@@ -11949,6 +11989,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
     shop?: ShopCreateNestedOneWithoutStaffInput
     ownedShop?: ShopCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowCreateNestedManyWithoutUserInput
@@ -11970,6 +12011,7 @@ export namespace Prisma {
     birthday?: string | null
     phoneNumber?: string | null
     shopId?: string | null
+    hubId?: string | null
     ownedShop?: ShopUncheckedCreateNestedOneWithoutOwnerInput
     follows?: ShopFollowUncheckedCreateNestedManyWithoutUserInput
   }
@@ -12005,6 +12047,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     shop?: ShopUpdateOneWithoutStaffNestedInput
     ownedShop?: ShopUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUpdateManyWithoutUserNestedInput
@@ -12026,6 +12069,7 @@ export namespace Prisma {
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUncheckedUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUncheckedUpdateManyWithoutUserNestedInput
   }
@@ -12229,6 +12273,7 @@ export namespace Prisma {
     gender?: string | null
     birthday?: string | null
     phoneNumber?: string | null
+    hubId?: string | null
   }
 
   export type ShopFollowCreateManyShopInput = {
@@ -12265,6 +12310,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUpdateManyWithoutUserNestedInput
     addresses?: UserAddressUpdateManyWithoutUserNestedInput
@@ -12285,6 +12331,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
     ownedShop?: ShopUncheckedUpdateOneWithoutOwnerNestedInput
     follows?: ShopFollowUncheckedUpdateManyWithoutUserNestedInput
     addresses?: UserAddressUncheckedUpdateManyWithoutUserNestedInput
@@ -12305,6 +12352,7 @@ export namespace Prisma {
     gender?: NullableStringFieldUpdateOperationsInput | string | null
     birthday?: NullableStringFieldUpdateOperationsInput | string | null
     phoneNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    hubId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ShopFollowUpdateWithoutShopInput = {

@@ -20,6 +20,10 @@ model Hub {
   longitude   Float?
   type        String    @default("ORIGIN_HUB") // ORIGIN_HUB, DESTINATION_HUB, SORTING_CENTER
   status      String    @default("ACTIVE")    // ACTIVE, INACTIVE
+  email       String?
+  parentSocId String?
+  parentSoc   Hub?      @relation("SocToHubs", fields: [parentSocId], references: [id], onDelete: SetNull)
+  childHubs   Hub[]     @relation("SocToHubs")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

@@ -25,6 +25,7 @@ import { DockTruckQuickSealModal } from './hub/DockTruckQuickSealModal'
 import { HubParcelTable } from './hub/HubParcelTable'
 import { HubCashierDesk } from './hub/HubCashierDesk'
 import { SocDashboard } from './hub/SocDashboard'
+import { HubCreateEditModal } from './HubCreateEditModal'
 
 export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   currentUser,
@@ -77,15 +78,18 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
     }
   }, [isSoc, currentHub?.id])
 
-  // Modal Tuyển / Thêm tài xế mới cho Bưu cục
+  // Modal Tuyển / Thêm tài xế mới cho Bưu cục hoặc Xe tải cho SOC
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState(false)
+  const [isAddHubModalOpen, setIsAddHubModalOpen] = useState(false)
   const [addingDriver, setAddingDriver] = useState(false)
   const [driverForm, setDriverForm] = useState({
     name: '',
     phone: '',
     vehicleNumber: '',
     vehicleType: 'MOTORBIKE',
-    operatingArea: ''
+    operatingArea: '',
+    email: '',
+    password: '123456',
   })
 
   const handleCreateDriver = async (e: React.FormEvent) => {
@@ -114,14 +118,16 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         throw new Error(errJson.message || 'Không thể thêm tài xế')
       }
 
-      alert(`Tuyển / Thêm tài xế ${driverForm.name} cho bưu cục ${currentHub?.name} thành công!`)
+      alert(`Tuyển / Thêm tài xế ${driverForm.name} cho ${isSoc ? 'Kho Tổng SOC' : 'Bưu cục'} ${currentHub?.name} thành công!`)
       setIsAddDriverModalOpen(false)
       setDriverForm({
         name: '',
         phone: '',
         vehicleNumber: '',
-        vehicleType: 'MOTORBIKE',
-        operatingArea: ''
+        vehicleType: isSoc ? 'TRUCK' : 'MOTORBIKE',
+        operatingArea: '',
+        email: '',
+        password: '123456',
       })
       onRefresh()
     } catch (err: any) {
@@ -597,15 +603,40 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         </div>
 
         {isSoc ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsAddHubModalOpen(true)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              title="Thiết lập thêm bưu cục giao hàng vệ tinh trực thuộc SOC này"
+            >
+              <span>🏢</span> + Thêm Hub Con
+            </button>
+            <button
+              onClick={() => {
+                setDriverForm({
+                  name: '',
+                  phone: '',
+                  vehicleNumber: '',
+                  vehicleType: 'TRUCK',
+                  operatingArea: `Tuyến xe tải xuất phát từ ${currentHub?.name}`,
+                  email: '',
+                  password: '123456',
+                })
+                setIsAddDriverModalOpen(true)
+              }}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              title="Đăng ký thêm xe tải tuyến đường dài cho kho tổng SOC"
+            >
+              <span>🚛</span> + Tuyển Xe Tải
+            </button>
             <button
               onClick={() => {
                 setStationTab('SORTING_LINEHAUL')
                 handleOpenDispatchBatch()
               }}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
-              <span>🚛</span> Đóng Xe Tải Tuyến Mới
+              <span>⚡</span> Đóng Xe Tải Tuyến Mới
             </button>
           </div>
         ) : (
@@ -617,6 +648,8 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
                 vehicleNumber: '',
                 vehicleType: 'MOTORBIKE',
                 operatingArea: `${currentHub?.district || ''}, ${currentHub?.province || ''}`,
+                email: '',
+                password: '123456',
               })
               setIsAddDriverModalOpen(true)
             }}
@@ -650,11 +683,25 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         <SocDashboard
           currentHub={currentHub}
           hubs={hubs}
+          drivers={drivers}
           sortingList={sortingList}
           inTransitList={inTransitList}
           linehaulTrips={linehaulTrips}
           dockTrucks={dockTrucks}
           onRefresh={onRefresh}
+          onAddChildHub={() => setIsAddHubModalOpen(true)}
+          onAddTruckDriver={() => {
+            setDriverForm({
+              name: '',
+              phone: '',
+              vehicleNumber: '',
+              vehicleType: 'TRUCK',
+              operatingArea: `Tuyến xe tải xuất phát từ ${currentHub?.name}`,
+              email: '',
+              password: '123456',
+            })
+            setIsAddDriverModalOpen(true)
+          }}
         />
       ) : stationTab === 'HUB_CASHIER' ? (
         <HubCashierDesk
@@ -901,6 +948,34 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Email / Gmail Đăng Nhập:
+                  </label>
+                  <input
+                    type="email"
+                    value={driverForm.email}
+                    onChange={(e) => setDriverForm({ ...driverForm, email: e.target.value })}
+                    placeholder="tài-xế@gmail.com"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Mật Khẩu Đăng Nhập:
+                  </label>
+                  <input
+                    type="password"
+                    value={driverForm.password}
+                    onChange={(e) => setDriverForm({ ...driverForm, password: e.target.value })}
+                    placeholder="Mặc định: 123456"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   Tuyến Giao Nhận Phụ Trách:
@@ -937,6 +1012,17 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           </div>
         </div>
       )}
+      {/* MODAL THIẾT LẬP BƯU CỤC CON (DÀNH CHO ĐIỀU PHỐI VIÊN SOC) */}
+      <HubCreateEditModal
+        isOpen={isAddHubModalOpen}
+        onClose={() => setIsAddHubModalOpen(false)}
+        editingHub={null}
+        onSuccess={() => {
+          onRefresh()
+          setIsAddHubModalOpen(false)
+        }}
+        initialParentSocId={currentHub?.id}
+      />
     </div>
   )
 }

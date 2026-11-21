@@ -28,6 +28,9 @@ model User {
   shopId String?
   shop   Shop?   @relation("ShopStaff", fields: [shopId], references: [id], onDelete: SetNull)
 
+  // Mối quan hệ Bưu cục / Trạm Vận chuyển (Hub / SOC)
+  hubId String?
+
   // Mối quan hệ Chủ shop (1 chủ shop sở hữu tối đa 1 Shop)
   ownedShop Shop? @relation("ShopOwner")
 
@@ -36,6 +39,7 @@ model User {
   addresses UserAddress[]
 
   @@index([shopId])
+  @@index([hubId])
 }
 
 model Shop {

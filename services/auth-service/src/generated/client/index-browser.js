@@ -135,7 +135,8 @@ exports.Prisma.UserScalarFieldEnum = {
   gender: 'gender',
   birthday: 'birthday',
   phoneNumber: 'phoneNumber',
-  shopId: 'shopId'
+  shopId: 'shopId',
+  hubId: 'hubId'
 };
 
 exports.Prisma.ShopScalarFieldEnum = {

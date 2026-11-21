@@ -4,22 +4,42 @@ import type { Hub, Shipment, LinehaulTrip, DockTruck } from './types'
 interface SocDashboardProps {
   currentHub: Hub
   hubs: Hub[]
+  drivers?: any[]
   sortingList: Shipment[]
   inTransitList: Shipment[]
   linehaulTrips: LinehaulTrip[]
   dockTrucks: DockTruck[]
   onRefresh: () => void
+  onAddChildHub?: () => void
+  onAddTruckDriver?: () => void
 }
 
 export const SocDashboard: React.FC<SocDashboardProps> = ({
   currentHub,
   hubs,
+  drivers = [],
   sortingList,
   inTransitList,
   linehaulTrips,
   dockTrucks,
   onRefresh,
+  onAddChildHub,
+  onAddTruckDriver,
 }) => {
+  // Danh sách các Bưu Cục Con (Hub Phát) trực thuộc SOC này
+  const childHubs = useMemo(() => {
+    return hubs.filter(
+      (h) => (h.parentSocId === currentHub.id || (h as any).parentSoc?.id === currentHub.id) && h.type !== 'SORTING_CENTER'
+    )
+  }, [hubs, currentHub.id])
+
+  // Danh sách đội xe tải tuyến đường dài trực thuộc SOC này
+  const socTruckDrivers = useMemo(() => {
+    return (drivers || []).filter(
+      (d) => (d.hubId === currentHub.id || d.hub?.id === currentHub.id) && d.vehicleType === 'TRUCK'
+    )
+  }, [drivers, currentHub.id])
+
   // 1. Phân luồng kiện theo Hub đích
   const routeDistribution = useMemo(() => {
     const map = new Map<string, { hub: Hub; count: number; totalWeight: number }>()
@@ -38,11 +58,13 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
         matchedHub = hubs.find((h) => h.id !== currentHub.id && h.type === 'SORTING_CENTER') || hubs[0]
       }
 
-      const key = matchedHub.id
-      const current = map.get(key) || { hub: matchedHub, count: 0, totalWeight: 0 }
-      current.count += 1
-      current.totalWeight += s.package?.weight || 0.5
-      map.set(key, current)
+      if (matchedHub) {
+        const key = matchedHub.id
+        const current = map.get(key) || { hub: matchedHub, count: 0, totalWeight: 0 }
+        current.count += 1
+        current.totalWeight += s.package?.weight || 0.5
+        map.set(key, current)
+      }
     })
 
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
@@ -68,7 +90,7 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
       {/* HEADER BANNER SOC */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-900/40 p-6 rounded-3xl text-white shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               Trung Tâm Vận Hành & Băng Chuyền SOC
             </span>
@@ -84,12 +106,30 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onRefresh}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-2 shrink-0 cursor-pointer"
-        >
-          <span>🔄</span> Cập Nhật Dữ Liệu Phân Loại
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {onAddChildHub && (
+            <button
+              onClick={onAddChildHub}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🏢</span> + Thêm Hub Con
+            </button>
+          )}
+          {onAddTruckDriver && (
+            <button
+              onClick={onAddTruckDriver}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🚛</span> + Tuyển Xe Tải
+            </button>
+          )}
+          <button
+            onClick={onRefresh}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-xs rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>🔄</span> Làm Mới
+          </button>
+        </div>
       </div>
 
       {/* METRIC CARDS */}
@@ -154,7 +194,180 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
         </div>
       </div>
 
-      {/* TWO COLUMNS: DOCK DOORS & ROUTING MATRIX */}
+      {/* ============================================================== */}
+      {/* 2 PHÂN HỆ QUẢN TRỊ ĐẶC THÙ CỦA SOC: HUB CON VỆ TINH & XE TẢI TUYẾN */}
+      {/* ============================================================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* PHÂN HỆ 1: MẠNG LƯỚI BƯU CỤC CON (HUB PHÁT) TRỰC THUỘC SOC */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-base">🏢</span>
+                <h3 className="text-sm font-black text-slate-900">
+                  Mạng Lưới Bưu Cục Con Trực Thuộc ({childHubs.length} Hub Phát)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Các trạm vệ tinh phụ trách giao hàng chặng cuối (Last-mile) cho khách
+              </p>
+            </div>
+            {onAddChildHub && (
+              <button
+                onClick={onAddChildHub}
+                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>➕</span> Thêm Hub
+              </button>
+            )}
+          </div>
+
+          {childHubs.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 space-y-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              <span className="text-3xl block">📭</span>
+              <p className="text-xs font-bold text-slate-600">Chưa có Bưu Cục Con nào trực thuộc SOC này</p>
+              <p className="text-[11px] text-slate-400">
+                Hãy bấm &ldquo;Thêm Hub Con&rdquo; để thiết lập bưu cục vệ tinh và cấp tài khoản cho Trưởng bưu cục.
+              </p>
+              {onAddChildHub && (
+                <button
+                  onClick={onAddChildHub}
+                  className="mt-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-700 transition cursor-pointer"
+                >
+                  ➕ Thiết Lập Hub Con Đầu Tiên
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              {childHubs.map((ch) => {
+                const chShippers = (drivers || []).filter(
+                  (d) => (d.hubId === ch.id || d.hub?.id === ch.id) && d.vehicleType !== 'TRUCK'
+                )
+
+                return (
+                  <div
+                    key={ch.id}
+                    className="p-3.5 rounded-2xl bg-slate-50 hover:bg-emerald-50/40 border border-slate-200 hover:border-emerald-200 transition"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                          🏢
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-900">{ch.name}</span>
+                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {ch.code}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                            📍 {ch.address ? `${ch.address}, ` : ''}{ch.district}, {ch.province}
+                          </p>
+                          {ch.email && (
+                            <p className="text-[10px] text-amber-800 font-semibold mt-0.5 flex items-center gap-1">
+                              <span>📧 Tài khoản trạm:</span>
+                              <span className="font-mono bg-amber-50 px-1 rounded border border-amber-200">{ch.email}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          🛵 {chShippers.length} Shipper
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* PHÂN HỆ 2: ĐỘI XE TẢI TUYẾN LINEHAUL TRỰC THUỘC SOC */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-base">🚛</span>
+                <h3 className="text-sm font-black text-slate-900">
+                  Đội Xe Tải Tuyến Đường Dài ({socTruckDrivers.length} Xe Tuyến Linehaul)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Đội xe chuyên trách vận tải liên tỉnh và gom hàng từ các Hub về kho tổng
+              </p>
+            </div>
+            {onAddTruckDriver && (
+              <button
+                onClick={onAddTruckDriver}
+                className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>➕</span> Tuyển Xe Tải
+              </button>
+            )}
+          </div>
+
+          {socTruckDrivers.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 space-y-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              <span className="text-3xl block">🚛</span>
+              <p className="text-xs font-bold text-slate-600">Chưa có xe tải tuyến nào trực thuộc SOC này</p>
+              <p className="text-[11px] text-slate-400">
+                Hãy đăng ký tài xế và biển số xe tải tuyến để vận hành vận chuyển liên tỉnh.
+              </p>
+              {onAddTruckDriver && (
+                <button
+                  onClick={onAddTruckDriver}
+                  className="mt-2 px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-sky-700 transition cursor-pointer"
+                >
+                  🚛 + Đăng Ký Xe Tải Đầu Tiên
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              {socTruckDrivers.map((truck) => (
+                <div
+                  key={truck.id}
+                  className="p-3.5 rounded-2xl bg-slate-50 hover:bg-sky-50/40 border border-slate-200 hover:border-sky-200 transition"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-sm shrink-0">
+                        🚛
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-900">{truck.name}</span>
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-white text-slate-700 border border-slate-200">
+                            {truck.vehicleNumber}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                          📞 {truck.phone} • Tuyến: <b>{truck.operatingArea || currentHub.province}</b>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        SẴN SÀNG
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* CỬA DOCK & MA TRẬN LUỒNG HÀNG XUẤT ĐI CÁC TRẠM */}
+      {/* ============================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CỬA DOCK TIẾP NHẬN & XUẤT HÀNG */}
         <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">

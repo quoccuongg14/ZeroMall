@@ -148,6 +148,7 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
               <LogisticsHubsFleetTab
                 initialSubView="HUBS"
                 shipments={shipments}
+                onRefresh={onRefresh}
                 onViewStation={(hub) => setInspectingStationHub(hub as any)}
                 onViewShipments={(hub) => {
                   setSelectedHubId(hub.id)
@@ -249,7 +250,11 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 text-left">
               <HubOperatorStation
                 currentUser={currentUser}
-                hubs={hubs as any}
+                hubs={
+                  hubs.some((h) => h.id === inspectingStationHub.id)
+                    ? (hubs as any)
+                    : [inspectingStationHub as any, ...(hubs as any)]
+                }
                 drivers={drivers as any}
                 shipments={shipments as any}
                 returns={[]}
@@ -260,6 +265,7 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
                   }
                 }}
                 actionLoading={loading}
+                assignedHub={inspectingStationHub as any}
                 assignedHubId={inspectingStationHub.id}
               />
             </div>
