@@ -6,7 +6,7 @@ interface AdminSidebarProps {
   onChangeNav: (nav: AdminActiveNav) => void
   totalShipments: number
   totalHubs: number
-  totalDrivers: number
+  totalDrivers?: number
   currentUser: any
   onLogout: () => void
   onBackToHome?: () => void
@@ -19,7 +19,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onChangeNav,
   totalShipments,
   totalHubs,
-  totalDrivers,
+  totalDrivers: _totalDrivers,
   currentUser,
   onLogout,
   onBackToHome,
@@ -54,14 +54,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: '🚛',
       label: 'Đội Xe Tải Tuyến',
       sublabel: 'Linehaul Fleet',
-    },
-    {
-      id: 'DRIVERS' as AdminActiveNav,
-      icon: '🛵',
-      label: 'Đội Ngũ Shipper',
-      sublabel: 'Last-Mile Fleet',
-      badge: totalDrivers.toString(),
-      badgeColor: 'bg-indigo-500/20 text-indigo-300',
     },
     {
       id: 'COD' as AdminActiveNav,

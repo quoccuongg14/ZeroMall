@@ -166,20 +166,6 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
             />
           )}
 
-          {activeNav === 'DRIVERS' && (
-            <div className="space-y-4">
-              <LogisticsHubsFleetTab
-                initialSubView="DRIVERS"
-                shipments={shipments}
-                onViewStation={(hub) => setInspectingStationHub(hub as any)}
-                onViewShipments={(hub) => {
-                  setSelectedHubId(hub.id)
-                  setActiveNav('SHIPMENTS')
-                }}
-              />
-            </div>
-          )}
-
           {activeNav === 'COD' && (
             <LogisticsCodReconciliationTab
               shipments={hubFilteredShipments}

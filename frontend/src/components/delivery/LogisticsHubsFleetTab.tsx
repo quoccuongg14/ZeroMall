@@ -575,7 +575,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>🛵</span> Quản Lý Đội Ngũ Vận Tải ({allDrivers.length})
+              <span>🔍</span> Tra Cứu Nhân Sự Toàn Mạng Lưới ({allDrivers.length})
             </button>
           </div>
 
@@ -1409,46 +1409,90 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {allDrivers.filter(d => d.hubId === selectedHubForDrivers.id).map((driver) => {
                     const isTruck = driver.vehicleType === 'TRUCK'
+                    const info = getDriverOperationalInfo(driver)
                     return (
                       <div
                         key={driver.id}
                         className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex justify-between items-start text-xs shadow-3xs hover:border-slate-300 transition"
                       >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
+                        <div className="space-y-1.5 flex-1 pr-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black text-slate-900 text-sm">{driver.name}</span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              {driver.status === 'AVAILABLE' ? 'SẴN SÀNG' : driver.status}
+                            {info.operationalStatus === 'BUSY' ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                                🟢 Đang Đi Giao ({info.activeShipments.length} đơn)
+                              </span>
+                            ) : driver.status === 'AVAILABLE' ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                🟡 Sẵn Sàng
+                              </span>
+                            ) : driver.status === 'OFFLINE' ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                ⚪ Ngoại Tuyến
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                🔴 Tạm Khóa
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 text-slate-600 font-medium">
+                            <span>📞 <b className="text-slate-900">{driver.phone}</b></span>
+                            <span>
+                              {isTruck ? '🚛' : '🛵'} Biển số: <b className="font-mono text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200">{driver.vehicleNumber}</b>
                             </span>
                           </div>
-                          <p className="text-slate-600 font-medium">📞 SĐT: <b className="text-slate-900">{driver.phone}</b></p>
-                          <p className="text-slate-600 font-medium">
-                            {isTruck ? '🚛' : '🚗'} Biển số: <span className="font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200">{driver.vehicleNumber}</span> ({
-                              isTruck ? 'Xe Tải Tuyến' : driver.vehicleType === 'VAN' ? 'Xe Bán Tải' : 'Xe Máy Giao Hàng'
-                            })
-                          </p>
+
                           {driver.operatingArea && (
                             <p className="text-[11px] text-slate-500 font-medium">
-                              📍 Tuyến phụ trách: {driver.operatingArea}
+                              📍 Tuyến: {driver.operatingArea}
                             </p>
                           )}
+
+                          <div className="flex items-center gap-3 pt-1 text-[11px]">
+                            {info.activeShipments.length > 0 && (
+                              <span className="font-black text-emerald-800">
+                                📦 {info.activeShipments.length} đơn đang giao
+                              </span>
+                            )}
+                            {info.codInHand > 0 && (
+                              <span className="font-black text-amber-950 font-mono">
+                                💰 COD: {formatMoney(info.codInHand)}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => openEditDriverModal(driver)}
-                            className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition cursor-pointer text-xs font-bold"
-                            title="Sửa thông tin tài xế"
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <select
+                            value={driver.status}
+                            disabled={updatingDriverId === driver.id}
+                            onChange={(e) => handleUpdateDriverStatus(driver, e.target.value)}
+                            className="text-[10px] font-bold px-2 py-1 bg-white border border-slate-200 rounded-lg shadow-3xs cursor-pointer focus:outline-none"
+                            title="Đổi trạng thái ca trực"
                           >
-                            ✏️ Sửa
-                          </button>
-                          <button
-                            onClick={() => handleDeleteDriver(driver)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer text-xs font-bold"
-                            title="Xóa tài xế"
-                          >
-                            🗑️ Xóa
-                          </button>
+                            <option value="AVAILABLE">🟡 Sẵn sàng</option>
+                            <option value="OFFLINE">⚪ Ngoại tuyến</option>
+                            <option value="SUSPENDED">🔴 Tạm khóa</option>
+                          </select>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => openEditDriverModal(driver)}
+                              className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition cursor-pointer text-xs font-bold"
+                              title="Sửa thông tin tài xế"
+                            >
+                              ✏️ Sửa
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDriver(driver)}
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer text-xs font-bold"
+                              title="Xóa tài xế"
+                            >
+                              🗑️ Xóa
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )
