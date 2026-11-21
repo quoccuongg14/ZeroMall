@@ -116,6 +116,15 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   hubs = [],
   drivers = [],
 }) => {
+  // Bộ lọc thời gian (Ngày / Tháng / Năm / Khoảng tùy chọn)
+  const [timePreset, setTimePreset] = useState<'ALL' | 'TODAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL')
+  const [customStartDate, setCustomStartDate] = useState<string>('')
+  const [customEndDate, setCustomEndDate] = useState<string>('')
+
+  // Trạng thái mở Modal xem bóc tách chi tiết từng thẻ
+  const [detailModal, setDetailModal] = useState<'FREIGHT' | 'COURIER' | 'LINEHAUL' | 'EBITDA' | null>(null)
+
+  // Bộ lọc bảng và chế độ xem
   const [filterStatus, setFilterStatus] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [showOnlyActiveHubs, setShowOnlyActiveHubs] = useState<boolean>(true)
@@ -126,8 +135,49 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
     return 'OVERVIEW'
   })
 
-  // Đơn hợp lệ (không tính đơn hủy)
-  const validShipments = useMemo(() => shipments.filter((s) => s.status !== 'CANCELLED'), [shipments])
+  // 1. Lọc đơn hàng theo mốc thời gian thực tế (createdAt)
+  const timeFilteredShipments = useMemo(() => {
+    if (timePreset === 'ALL') return shipments
+
+    const now = new Date()
+    return shipments.filter((s) => {
+      if (!s.createdAt) return true
+      const d = new Date(s.createdAt)
+      if (isNaN(d.getTime())) return true
+
+      if (timePreset === 'TODAY') {
+        return (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate()
+        )
+      }
+      if (timePreset === 'LAST_7_DAYS') {
+        const past7 = new Date(now)
+        past7.setDate(past7.getDate() - 7)
+        return d >= past7 && d <= now
+      }
+      if (timePreset === 'THIS_MONTH') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      }
+      if (timePreset === 'CUSTOM') {
+        if (customStartDate && d < new Date(customStartDate)) return false
+        if (customEndDate) {
+          const end = new Date(customEndDate)
+          end.setHours(23, 59, 59, 999)
+          if (d > end) return false
+        }
+        return true
+      }
+      return true
+    })
+  }, [shipments, timePreset, customStartDate, customEndDate])
+
+  // Đơn hợp lệ trong khoảng thời gian đã chọn (không tính đơn hủy)
+  const validShipments = useMemo(
+    () => timeFilteredShipments.filter((s) => s.status !== 'CANCELLED'),
+    [timeFilteredShipments]
+  )
 
   // Phân nhóm đơn theo trạng thái thực tế
   const deliveredShipments = useMemo(
@@ -147,18 +197,20 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   // 2. CHI PHÍ VẬN TẢI THỰC TẾ THEO 3 CHẶNG
   // - First Mile (Lấy hàng): Áp dụng cho các đơn đã qua khâu lấy hàng
   const allPickedShipments = useMemo(
-    () => validShipments.filter((s) =>
-      ['PICKED_UP', 'AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
-    ),
+    () =>
+      validShipments.filter((s) =>
+        ['PICKED_UP', 'AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
+      ),
     [validShipments]
   )
   const totalFirstMileCost = allPickedShipments.length * 8000
 
   // - Middle Mile (Xe tải liên tỉnh & Kho SOC): Áp dụng cho đơn qua trung chuyển
   const middleMileShipments = useMemo(
-    () => validShipments.filter((s) =>
-      ['AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
-    ),
+    () =>
+      validShipments.filter((s) =>
+        ['AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
+      ),
     [validShipments]
   )
   const totalMiddleMileCost = middleMileShipments.length * 7000
@@ -180,9 +232,8 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
 
   // 3. LỢI NHUẬN RÒNG VẬN TẢI (Net Logistics EBITDA Margin)
   const netLogisticsProfit = totalShippingFeeCollected - totalLogisticsCost
-  const netProfitMarginPercent = totalShippingFeeCollected > 0
-    ? Math.round((netLogisticsProfit / totalShippingFeeCollected) * 100)
-    : 0
+  const netProfitMarginPercent =
+    totalShippingFeeCollected > 0 ? Math.round((netLogisticsProfit / totalShippingFeeCollected) * 100) : 0
 
   // Chỉ số trung bình trên mỗi bưu kiện (Unit Economics per Parcel)
   const avgRevenuePerParcel = validShipments.length > 0 ? Math.round(totalShippingFeeCollected / validShipments.length) : 0
@@ -192,39 +243,41 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   // Danh sách các Hub bưu cục vệ tinh và tính toán P&L từng chi nhánh
   const destinationHubs = useMemo(() => hubs.filter((h) => h.type !== 'SORTING_CENTER'), [hubs])
   const branchPerformance = useMemo(() => {
-    return destinationHubs.map((hub) => {
-      const parentSoc = getParentSoc(hub)
-      const hubDrivers = drivers.filter((d) => d.hubId === hub.id)
-      const hubShipments = validShipments.filter((s) => {
-        const matched = matchShipmentToHub(s, hubs)
-        return matched?.id === hub.id
+    return destinationHubs
+      .map((hub) => {
+        const parentSoc = getParentSoc(hub)
+        const hubDrivers = drivers.filter((d) => d.hubId === hub.id)
+        const hubShipments = validShipments.filter((s) => {
+          const matched = matchShipmentToHub(s, hubs)
+          return matched?.id === hub.id
+        })
+
+        const hubDelivered = hubShipments.filter((s) => ['DELIVERED', 'COMPLETED'].includes(s.status))
+        const hubPicked = hubShipments.filter((s) =>
+          ['PICKED_UP', 'AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
+        )
+
+        // Doanh thu cước tại Hub
+        const hubRevenue = hubShipments.reduce((sum, s) => sum + (s.shippingFee > 0 ? s.shippingFee : 25000), 0)
+
+        // Chi phí hoạt động của Hub: Công lấy + Công giao + Xe tải phân bổ
+        const hubCost = hubPicked.length * 8000 + hubDelivered.length * 9500 + hubShipments.length * 5000
+        const hubProfit = hubRevenue - hubCost
+        const hubMargin = hubRevenue > 0 ? Math.round((hubProfit / hubRevenue) * 100) : 0
+
+        return {
+          hub,
+          parentSoc,
+          driverCount: hubDrivers.length,
+          shipmentCount: hubShipments.length,
+          deliveredCount: hubDelivered.length,
+          revenue: hubRevenue,
+          cost: hubCost,
+          profit: hubProfit,
+          margin: hubMargin,
+        }
       })
-
-      const hubDelivered = hubShipments.filter((s) => ['DELIVERED', 'COMPLETED'].includes(s.status))
-      const hubPicked = hubShipments.filter((s) =>
-        ['PICKED_UP', 'AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
-      )
-
-      // Doanh thu cước tại Hub
-      const hubRevenue = hubShipments.reduce((sum, s) => sum + (s.shippingFee > 0 ? s.shippingFee : 25000), 0)
-      
-      // Chi phí hoạt động của Hub: Công lấy + Công giao + Xe tải phân bổ
-      const hubCost = (hubPicked.length * 8000) + (hubDelivered.length * 9500) + (hubShipments.length * 5000)
-      const hubProfit = hubRevenue - hubCost
-      const hubMargin = hubRevenue > 0 ? Math.round((hubProfit / hubRevenue) * 100) : 0
-
-      return {
-        hub,
-        parentSoc,
-        driverCount: hubDrivers.length,
-        shipmentCount: hubShipments.length,
-        deliveredCount: hubDelivered.length,
-        revenue: hubRevenue,
-        cost: hubCost,
-        profit: hubProfit,
-        margin: hubMargin,
-      }
-    }).sort((a, b) => b.revenue - a.revenue) // Ưu tiên các Hub có doanh thu cao nhất
+      .sort((a, b) => b.revenue - a.revenue) // Ưu tiên các Hub có doanh thu cao nhất
   }, [destinationHubs, drivers, validShipments, hubs])
 
   const visibleBranches = useMemo(() => {
@@ -252,9 +305,94 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
     })
   }, [validShipments, filterStatus, searchTerm])
 
+  // Dữ liệu bóc tách thù lao từng Shipper (phục vụ Modal COURIER)
+  const driverBreakdown = useMemo(() => {
+    return drivers
+      .map((d) => {
+        const assignedShipments = validShipments.filter((s) => {
+          const matchId = s.assignments?.some((a) => a.driver?.id === d.id)
+          const matchName = s.assignments?.some((a) => a.driver?.name?.toLowerCase() === d.name.toLowerCase())
+          return matchId || matchName
+        })
+
+        const picked = assignedShipments.filter((s) =>
+          ['PICKED_UP', 'AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
+        ).length
+
+        const delivered = assignedShipments.filter((s) => ['DELIVERED', 'COMPLETED'].includes(s.status)).length
+
+        const totalPayable = picked * 8000 + delivered * 9500
+        const driverHub = hubs.find((h) => h.id === d.hubId) || d.hub
+
+        return {
+          driver: d,
+          hub: driverHub,
+          assignedCount: assignedShipments.length,
+          pickedCount: picked,
+          deliveredCount: delivered,
+          totalPayable,
+        }
+      })
+      .sort((a, b) => b.totalPayable - a.totalPayable)
+  }, [drivers, validShipments, hubs])
+
+  // Dữ liệu bóc tách 4 cụm Mega SOC (phục vụ Modal LINEHAUL)
+  const socBreakdown = useMemo(() => {
+    const socList = [
+      { id: 'hub-hcm-01', code: 'HCM01', name: 'Trung Tâm Phân Loại Bắc Củ Chi SOC', region: 'Miền Nam' },
+      { id: 'hub-hn-01', code: 'HN01', name: 'Trung Tâm Phân Loại Mê Linh SOC', region: 'Miền Bắc' },
+      { id: 'hub-dng-soc', code: 'DNG01', name: 'Trung Tâm Phân Loại Hòa Cầm SOC', region: 'Miền Trung' },
+      { id: 'hub-ct-soc', code: 'CT01', name: 'Trung Tâm Phân Loại Trà Nóc SOC', region: 'Tây Nam Bộ' },
+    ]
+
+    return socList.map((soc) => {
+      const memberHubs = destinationHubs.filter((h) => getParentSoc(h).id === soc.id)
+      const memberHubIds = memberHubs.map((h) => h.id)
+
+      const socShipments = validShipments.filter((s) => {
+        const matched = matchShipmentToHub(s, hubs)
+        return matched && memberHubIds.includes(matched.id)
+      })
+
+      const transitCount = socShipments.filter((s) =>
+        ['AT_ORIGIN_HUB', 'SORTING', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(s.status)
+      ).length
+
+      const returnCount = socShipments.filter((s) =>
+        ['DELIVERY_FAILED', 'RETURNING', 'RETURNED'].includes(s.status)
+      ).length
+
+      const linehaulCost = transitCount * 7000
+      const returnCost = returnCount * 10000
+      const totalCost = linehaulCost + returnCost
+
+      return {
+        soc,
+        memberHubCount: memberHubs.length,
+        shipmentCount: socShipments.length,
+        transitCount,
+        returnCount,
+        linehaulCost,
+        returnCost,
+        totalCost,
+      }
+    })
+  }, [destinationHubs, validShipments, hubs])
+
   // Xuất file CSV báo cáo tài chính P&L
   const handleExportCSV = () => {
-    const headers = ['Mã Vận Đơn', 'Mã Đơn Hàng', 'Bưu Cục Hub', 'Cước Vận Chuyển', 'Công Lấy First-Mile', 'Công Giao Last-Mile', 'Phí Linehaul SOC', 'Lợi Nhuận Sàn', 'Trạng Thái']
+    const headers = [
+      'Mã Vận Đơn',
+      'Mã Đơn Hàng',
+      'Bưu Cục Hub',
+      'Cước Vận Chuyển',
+      'Công Lấy First-Mile',
+      'Công Giao Last-Mile',
+      'Phí Linehaul SOC',
+      'Lợi Nhuận Sàn',
+      'Trạng Thái',
+      'Ngày Tạo',
+    ]
     const rows = filteredShipments.map((s) => {
       const fee = s.shippingFee > 0 ? s.shippingFee : 25000
       const isPicked = allPickedShipments.some((p) => p.id === s.id)
@@ -276,6 +414,7 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
         middleMile,
         profit,
         s.status,
+        s.createdAt ? new Date(s.createdAt).toLocaleDateString('vi-VN') : '',
       ].join(',')
     })
 
@@ -291,57 +430,126 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150 text-left">
-      {/* 1. Header Tinh Gọn Chuẩn Enterprise */}
-      <div className="bg-white border border-slate-200/90 p-5 rounded-3xl shadow-3xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xl">📊</span>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
-              Tài Chính Vận Tải & P&L Logistics (Unit Economics)
-            </h2>
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
-              Chuẩn Quản Trị ZeroExpress
-            </span>
+      {/* 1. Header Tinh Gọn & Bộ Lọc Thời Gian Chuẩn Enterprise */}
+      <div className="bg-white border border-slate-200/90 p-5 rounded-3xl shadow-3xs space-y-4">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xl">📊</span>
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                Tài Chính Vận Tải & P&L Logistics (Unit Economics)
+              </h2>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
+                Chuẩn Quản Trị ZeroExpress
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Hạch toán dòng tiền cước vận chuyển, công nợ lương bưu tá lấy/giao, chi phí xe tải tuyến liên tỉnh và biên lợi nhuận ròng vận tải.
+            </p>
           </div>
-          <p className="text-xs text-slate-500">
-            Hạch toán dòng tiền cước vận chuyển, công nợ lương bưu tá lấy/giao, chi phí xe tải tuyến liên tỉnh và biên lợi nhuận ròng vận tải.
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
+            <button
+              onClick={handleExportCSV}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+            >
+              <span>📥</span> Xuất Báo Cáo P&L (CSV)
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <span>📥</span> Xuất Báo Cáo P&L (CSV)
-          </button>
+        {/* Thanh Bộ Lọc Thời Gian (Ngày, Tháng, Năm) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-1">
+              <span>📅</span> Kỳ Báo Cáo:
+            </span>
+            {[
+              { id: 'ALL', label: 'Tất cả' },
+              { id: 'TODAY', label: 'Hôm nay' },
+              { id: 'LAST_7_DAYS', label: '7 ngày qua' },
+              { id: 'THIS_MONTH', label: 'Tháng này' },
+              { id: 'CUSTOM', label: 'Tùy chọn ngày' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTimePreset(p.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  timePreset === p.id
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Nếu chọn Tùy chọn ngày thì hiện 2 input date */}
+          {timePreset === 'CUSTOM' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Từ:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs focus:outline-emerald-500"
+              />
+              <span className="text-slate-500 font-medium">Đến:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs focus:outline-emerald-500"
+              />
+            </div>
+          )}
+
+          <div className="text-[11px] text-slate-400 font-medium">
+            Đang hiển thị <b>{validShipments.length}</b> bưu kiện hợp lệ
+          </div>
         </div>
       </div>
 
-      {/* 2. 4 Thẻ Chỉ Số Tài Chính Cốt Lõi Dành Cho Admin Giao Hàng */}
+      {/* 2. 4 Thẻ Chỉ Số Tài Chính Cốt Lõi (Click để xem chi tiết bóc tách) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Doanh thu cước */}
-        <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-bold">
-            <span className="flex items-center gap-1.5"><span>🚚</span> 1. Tổng Cước Vận Chuyển</span>
-            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">Thu Vào</span>
+        {/* Thẻ 1: Doanh thu cước */}
+        <div
+          onClick={() => setDetailModal('FREIGHT')}
+          className="bg-white border border-slate-200/90 hover:border-emerald-500 hover:shadow-md transition-all duration-150 p-4 rounded-2xl shadow-3xs space-y-2 cursor-pointer group relative select-none"
+        >
+          <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
+            <span className="flex items-center gap-1.5">
+              <span>🚚</span> 1. Tổng Cước Vận Chuyển
+            </span>
+            <span className="text-[10px] bg-slate-100 group-hover:bg-emerald-50 group-hover:text-emerald-700 text-slate-600 px-1.5 py-0.5 rounded font-bold transition">
+              Bấm xem ↗
+            </span>
           </div>
-          <p className="text-2xl font-black text-slate-900 font-mono">
+          <p className="text-2xl font-black text-slate-900 font-mono group-hover:text-emerald-700 transition">
             {formatMoney(totalShippingFeeCollected)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
-            <span>Sản lượng toàn mạng:</span>
+            <span>Sản lượng kỳ này:</span>
             <b className="text-slate-800 font-mono">{validShipments.length} bưu kiện</b>
           </div>
         </div>
 
-        {/* Lương & công nợ bưu tá */}
-        <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
+        {/* Thẻ 2: Lương & công nợ bưu tá */}
+        <div
+          onClick={() => setDetailModal('COURIER')}
+          className="bg-white border border-slate-200/90 hover:border-amber-500 hover:shadow-md transition-all duration-150 p-4 rounded-2xl shadow-3xs space-y-2 cursor-pointer group relative select-none"
+        >
           <div className="flex items-center justify-between text-xs text-amber-700 font-bold">
-            <span className="flex items-center gap-1.5"><span>🛵</span> 2. Lương & Công Nợ Bưu Tá</span>
-            <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-bold">Phải Trả Shipper</span>
+            <span className="flex items-center gap-1.5">
+              <span>🛵</span> 2. Lương & Công Nợ Bưu Tá
+            </span>
+            <span className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold transition">
+              Bấm xem ↗
+            </span>
           </div>
-          <p className="text-2xl font-black text-amber-800 font-mono">
+          <p className="text-2xl font-black text-amber-800 font-mono group-hover:text-amber-900 transition">
             {formatMoney(totalDriverPayables)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
@@ -350,13 +558,20 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
           </div>
         </div>
 
-        {/* Chi phí xe tải Linehaul & Mega SOC */}
-        <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
+        {/* Thẻ 3: Chi phí xe tải Linehaul & Mega SOC */}
+        <div
+          onClick={() => setDetailModal('LINEHAUL')}
+          className="bg-white border border-slate-200/90 hover:border-sky-500 hover:shadow-md transition-all duration-150 p-4 rounded-2xl shadow-3xs space-y-2 cursor-pointer group relative select-none"
+        >
           <div className="flex items-center justify-between text-xs text-sky-700 font-bold">
-            <span className="flex items-center gap-1.5"><span>🚛</span> 3. Xe Tải Linehaul & Kho SOC</span>
-            <span className="text-[10px] bg-sky-50 text-sky-800 border border-sky-200 px-1.5 py-0.5 rounded font-bold">Vận Chuyển Tuyến</span>
+            <span className="flex items-center gap-1.5">
+              <span>🚛</span> 3. Xe Tải Linehaul & Kho SOC
+            </span>
+            <span className="text-[10px] bg-sky-50 border border-sky-200 text-sky-800 px-1.5 py-0.5 rounded font-bold transition">
+              Bấm xem ↗
+            </span>
           </div>
-          <p className="text-2xl font-black text-sky-800 font-mono">
+          <p className="text-2xl font-black text-sky-800 font-mono group-hover:text-sky-900 transition">
             {formatMoney(totalFleetAndSocCost)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
@@ -365,13 +580,20 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
           </div>
         </div>
 
-        {/* Lợi nhuận ròng vận tải */}
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50/80 border border-emerald-200 p-4 rounded-2xl shadow-3xs space-y-2">
+        {/* Thẻ 4: Lợi nhuận ròng vận tải */}
+        <div
+          onClick={() => setDetailModal('EBITDA')}
+          className="bg-gradient-to-br from-emerald-50 to-teal-50/80 border border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all duration-150 p-4 rounded-2xl shadow-3xs space-y-2 cursor-pointer group relative select-none"
+        >
           <div className="flex items-center justify-between text-xs text-emerald-800 font-bold">
-            <span className="flex items-center gap-1.5"><span>🏆</span> 4. Lợi Nhuận Ròng (EBITDA)</span>
-            <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">Margin: {netProfitMarginPercent}%</span>
+            <span className="flex items-center gap-1.5">
+              <span>🏆</span> 4. Lợi Nhuận Ròng (EBITDA)
+            </span>
+            <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">
+              Margin: {netProfitMarginPercent}% ↗
+            </span>
           </div>
-          <p className="text-2xl font-black text-emerald-700 font-mono">
+          <p className="text-2xl font-black text-emerald-700 font-mono group-hover:text-emerald-900 transition">
             {formatMoney(netLogisticsProfit)}
           </p>
           <div className="text-[11px] text-emerald-800 flex justify-between border-t border-emerald-200/60 pt-2 font-medium">
@@ -436,7 +658,7 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
                   <span>📐</span> Chỉ Số Kinh Tế Đơn Vị Bình Quân (Unit Economics Per Parcel)
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Tính toán dựa trên {validShipments.length} bưu kiện đang lưu thông thực tế trên toàn mạng lưới
+                  Tính toán dựa trên {validShipments.length} bưu kiện đang lưu thông thực tế trong kỳ báo cáo
                 </p>
               </div>
               <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
@@ -448,7 +670,7 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                 <span className="text-[11px] text-slate-500 font-bold uppercase block">Doanh Thu Cước Bình Quân / Đơn</span>
                 <p className="text-xl font-black text-slate-900 font-mono">{formatMoney(avgRevenuePerParcel)}</p>
-                <p className="text-[10px] text-slate-400">Doanh thu thu về từ người mua hoặc tài trợ cước</p>
+                <p className="text-[10px] text-slate-400">Doanh thu thu về từ người mua hoặc hợp đồng cước sàn</p>
               </div>
 
               <div className="p-4 bg-rose-50/50 border border-rose-200/80 rounded-xl space-y-1">
@@ -791,17 +1013,19 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
                       </td>
 
                       <td className="text-center p-3">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          s.status === 'DELIVERED' || s.status === 'COMPLETED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : s.status === 'IN_TRANSIT' || s.status === 'SORTING'
-                            ? 'bg-sky-100 text-sky-800'
-                            : s.status === 'PICKED_UP' || s.status === 'AT_ORIGIN_HUB'
-                            ? 'bg-amber-100 text-amber-800'
-                            : s.status.includes('FAIL') || s.status.includes('RETURN')
-                            ? 'bg-rose-100 text-rose-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            s.status === 'DELIVERED' || s.status === 'COMPLETED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : s.status === 'IN_TRANSIT' || s.status === 'SORTING'
+                              ? 'bg-sky-100 text-sky-800'
+                              : s.status === 'PICKED_UP' || s.status === 'AT_ORIGIN_HUB'
+                              ? 'bg-amber-100 text-amber-800'
+                              : s.status.includes('FAIL') || s.status.includes('RETURN')
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
                           {s.status}
                         </span>
                       </td>
@@ -810,6 +1034,281 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4 MODALS BÓC TÁCH CHI TIẾT KHI CLICK VÀO 4 THẺ CHỈ SỐ */}
+      {/* ========================================================================= */}
+      {detailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-100">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col border border-slate-200 overflow-hidden text-left">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">
+                  {detailModal === 'FREIGHT' && '🚚'}
+                  {detailModal === 'COURIER' && '🛵'}
+                  {detailModal === 'LINEHAUL' && '🚛'}
+                  {detailModal === 'EBITDA' && '🏆'}
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">
+                    {detailModal === 'FREIGHT' && 'Chi Tiết Hạch Toán Cước Vận Chuyển'}
+                    {detailModal === 'COURIER' && 'Bóc Tách Lương & Thù Lao Bưu Tá (Shipper Payables)'}
+                    {detailModal === 'LINEHAUL' && 'Chi Phí Tuyến Xe Tải Linehaul & Cụm Kho Mega SOC'}
+                    {detailModal === 'EBITDA' && 'Báo Cáo Cân Đối Lợi Nhuận Ròng Vận Tải (EBITDA)'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Dữ liệu bóc tách thời gian thực ({validShipments.length} bưu kiện trong kỳ)
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDetailModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center text-sm font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* MODAL 1: FREIGHT DETAIL */}
+              {detailModal === 'FREIGHT' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                      <span className="text-[11px] text-slate-500 font-bold uppercase block">Tổng Cước Đã Hạch Toán</span>
+                      <p className="text-xl font-black text-slate-900 font-mono mt-1">
+                        {formatMoney(totalShippingFeeCollected)}
+                      </p>
+                    </div>
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                      <span className="text-[11px] text-emerald-800 font-bold uppercase block">Đơn Đã Giao Thành Công</span>
+                      <p className="text-xl font-black text-emerald-700 font-mono mt-1">
+                        {deliveredShipments.length} / {validShipments.length} đơn
+                      </p>
+                    </div>
+                    <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl">
+                      <span className="text-[11px] text-sky-800 font-bold uppercase block">Cước Bình Quân / Bưu Kiện</span>
+                      <p className="text-xl font-black text-sky-700 font-mono mt-1">
+                        {formatMoney(avgRevenuePerParcel)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[350px] overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 font-bold text-slate-600">
+                        <tr>
+                          <th className="p-3">Mã Vận Đơn</th>
+                          <th className="p-3">Người Nhận & Địa Chỉ</th>
+                          <th className="p-3 text-right">Cước Phí</th>
+                          <th className="p-3 text-center">Trạng Thái</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {validShipments.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50">
+                            <td className="p-3 font-mono font-bold text-emerald-700">
+                              {s.trackingNumber}
+                              <div className="text-[10px] text-slate-400 font-sans font-normal">#{s.orderId}</div>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-bold text-slate-800">{s.buyerName}</span>
+                              <div className="text-[11px] text-slate-400 line-clamp-1">{s.deliveryAddress}</div>
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-900">
+                              {formatMoney(s.shippingFee > 0 ? s.shippingFee : 25000)}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                                {s.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 2: COURIER DETAIL */}
+              {detailModal === 'COURIER' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
+                    <div>
+                      <span className="text-xs font-bold text-amber-900 block">
+                        Định mức chi trả thù lao Shipper:
+                      </span>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        • Công lấy hàng (First-Mile): <b>8.000đ/đơn</b> | • Công giao tận tay (Last-Mile): <b>9.500đ/đơn</b>
+                      </p>
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="text-[10px] text-amber-700 font-bold uppercase block">Tổng Tiền Công Phải Trả</span>
+                      <b className="text-lg font-black text-amber-900">{formatMoney(totalDriverPayables)}</b>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[350px] overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 font-bold text-slate-600">
+                        <tr>
+                          <th className="p-3">Bưu Tá & SĐT</th>
+                          <th className="p-3">Bưu Cục Trực Thuộc</th>
+                          <th className="p-3 text-center">Đơn Lấy (8k)</th>
+                          <th className="p-3 text-center">Đơn Giao (9.5k)</th>
+                          <th className="p-3 text-right">Tổng Thù Lao</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {driverBreakdown.map((item) => (
+                          <tr key={item.driver.id} className="hover:bg-slate-50">
+                            <td className="p-3">
+                              <span className="font-bold text-slate-900">{item.driver.name}</span>
+                              <div className="text-[11px] text-slate-400 font-mono">
+                                {item.driver.phone} • {item.driver.vehicleNumber || 'Xe máy'}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-medium text-slate-700">{item.hub?.name || 'Chưa gán Hub'}</span>
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-amber-700">
+                              {item.pickedCount} đơn
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-orange-700">
+                              {item.deliveredCount} đơn
+                            </td>
+                            <td className="p-3 text-right font-mono font-black text-slate-900 text-sm">
+                              {formatMoney(item.totalPayable)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 3: LINEHAUL DETAIL */}
+              {detailModal === 'LINEHAUL' && (
+                <div className="space-y-4">
+                  <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl flex justify-between items-center">
+                    <div>
+                      <span className="text-xs font-bold text-sky-900 block">
+                        Phân bổ chi phí xe tải liên tỉnh & cụm phân loại tự động:
+                      </span>
+                      <p className="text-[11px] text-sky-800 mt-0.5">
+                        • Xe tải Linehaul + Kho Mega SOC: <b>7.000đ/bưu kiện</b> | • Xử lý hoàn bưu kiện (RTO): <b>10.000đ/đơn</b>
+                      </p>
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="text-[10px] text-sky-700 font-bold uppercase block">Tổng Chi Phí Tuyến</span>
+                      <b className="text-lg font-black text-sky-900">{formatMoney(totalFleetAndSocCost)}</b>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
+                        <tr>
+                          <th className="p-3">Cụm Mega SOC & Vùng</th>
+                          <th className="p-3 text-center">Bưu Cục Vệ Tinh</th>
+                          <th className="p-3 text-center">Bưu Kiện Trung Chuyển</th>
+                          <th className="p-3 text-center">Đơn Hoàn / RTO</th>
+                          <th className="p-3 text-right">Tổng Chi Phí Phân Bổ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {socBreakdown.map((item) => (
+                          <tr key={item.soc.id} className="hover:bg-slate-50">
+                            <td className="p-3">
+                              <span className="font-bold text-slate-900">{item.soc.name}</span>
+                              <div className="text-[11px] text-sky-700 font-medium">{item.soc.region}</div>
+                            </td>
+                            <td className="p-3 text-center font-mono font-medium text-slate-700">
+                              {item.memberHubCount} Hubs
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-sky-800">
+                              {item.transitCount} kiện
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-rose-600">
+                              {item.returnCount} kiện
+                            </td>
+                            <td className="p-3 text-right font-mono font-black text-slate-900 text-sm">
+                              {formatMoney(item.totalCost)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 4: EBITDA DETAIL */}
+              {detailModal === 'EBITDA' && (
+                <div className="space-y-4">
+                  <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2.5">
+                      <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">
+                        Báo Cáo Cân Đối Thu - Chi Vận Tải (Income Statement)
+                      </span>
+                      <span className="text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded">
+                        EBITDA Margin: {netProfitMarginPercent}%
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between items-center text-slate-200">
+                        <span className="font-bold">(+) 1. Tổng Doanh Thu Cước Thực Tế (Gross Revenue)</span>
+                        <b className="font-mono text-emerald-400 text-sm">{formatMoney(totalShippingFeeCollected)}</b>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-300 pl-4">
+                        <span>(-) 2. Chi Phí Lương & Thù Lao Bưu Tá (First + Last Mile)</span>
+                        <b className="font-mono text-rose-400">-{formatMoney(totalDriverPayables)}</b>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-300 pl-4">
+                        <span>(-) 3. Chi Phí Xe Tải Tuyến Linehaul & Trung Tâm Mega SOC</span>
+                        <b className="font-mono text-rose-400">-{formatMoney(totalFleetAndSocCost)}</b>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-slate-800 pt-2.5 text-sm font-black text-white">
+                        <span className="uppercase text-emerald-300">(=) Lợi Nhuận Ròng Vận Tải (Net Logistics Profit)</span>
+                        <b className="font-mono text-emerald-400 text-base">{formatMoney(netLogisticsProfit)}</b>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
+                      <span className="text-slate-500 font-medium">Doanh thu bình quân / đơn:</span>
+                      <p className="font-mono font-bold text-slate-900">{formatMoney(avgRevenuePerParcel)}</p>
+                    </div>
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-0.5">
+                      <span className="text-emerald-800 font-medium">Lợi nhuận ròng bình quân / đơn:</span>
+                      <p className="font-mono font-bold text-emerald-700">+{formatMoney(avgProfitPerParcel)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/40">
+              <button
+                type="button"
+                onClick={() => setDetailModal(null)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
