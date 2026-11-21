@@ -128,10 +128,10 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [showOnlyActiveHubs, setShowOnlyActiveHubs] = useState<boolean>(true)
-  const [activeFinanceView, setActiveFinanceView] = useState<'OVERVIEW' | 'BRANCH_PL' | 'LEDGER'>(() => {
+  const [activeFinanceView, setActiveFinanceView] = useState<'OVERVIEW' | 'BRANCH_PL' | 'LEDGER' | 'CROSS_AUDIT'>(() => {
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     const fview = params?.get('fview') as any
-    if (fview && ['OVERVIEW', 'BRANCH_PL', 'LEDGER'].includes(fview)) return fview
+    if (fview && ['OVERVIEW', 'BRANCH_PL', 'LEDGER', 'CROSS_AUDIT'].includes(fview)) return fview
     return 'OVERVIEW'
   })
 
@@ -239,6 +239,18 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   const avgRevenuePerParcel = validShipments.length > 0 ? Math.round(totalShippingFeeCollected / validShipments.length) : 0
   const avgCostPerParcel = validShipments.length > 0 ? Math.round(totalLogisticsCost / validShipments.length) : 0
   const avgProfitPerParcel = avgRevenuePerParcel - avgCostPerParcel
+
+  // 4. ĐỐI CHIẾU CHÉO (CROSS-AUDIT): TIỀN HÀNG COD VS CƯỚC VẬN CHUYỂN
+  const totalCodAmount = useMemo(() => {
+    return validShipments.reduce((sum, s) => sum + (s.codAmount || 0), 0)
+  }, [validShipments])
+
+  const totalCashCollected = useMemo(() => {
+    return totalCodAmount + totalShippingFeeCollected
+  }, [totalCodAmount, totalShippingFeeCollected])
+
+  const codSharePercent = totalCashCollected > 0 ? Math.round((totalCodAmount / totalCashCollected) * 100) : 0
+  const freightSharePercent = 100 - codSharePercent
 
   // Danh sách các Hub bưu cục vệ tinh và tính toán P&L từng chi nhánh
   const destinationHubs = useMemo(() => hubs.filter((h) => h.type !== 'SORTING_CENTER'), [hubs])
@@ -424,6 +436,53 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
     const link = document.createElement('a')
     link.href = url
     link.download = `Logistics_PL_Report_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Xuất file CSV đối chiếu chéo (Cross-Audit)
+  const handleExportCrossAuditCSV = () => {
+    const headers = [
+      'Mã Vận Đơn',
+      'Mã Đơn Hàng',
+      'Khách Hàng',
+      'Địa Chỉ',
+      'Tiền COD Trả Shop',
+      'Cước Vận Chuyển P&L',
+      'Tổng Tiền Khách Trả',
+      'Trạng Thái Đơn',
+      'Kết Quả Kiểm Toán',
+    ]
+    const rows = filteredShipments.map((s) => {
+      const fee = s.shippingFee > 0 ? s.shippingFee : 25000
+      const cod = s.codAmount || 0
+      const total = cod + fee
+      const auditStatus =
+        s.status === 'DELIVERED' || s.status === 'COMPLETED'
+          ? 'Khớp 100% - Đã Giao'
+          : s.status.includes('FAIL') || s.status.includes('RETURN')
+          ? 'Đơn Hoàn RTO - COD 0đ'
+          : 'Đang Lưu Thông Tuyến'
+
+      return [
+        s.trackingNumber,
+        s.orderId,
+        `"${s.buyerName || ''}"`,
+        `"${s.deliveryAddress || ''}"`,
+        cod,
+        fee,
+        total,
+        s.status,
+        auditStatus,
+      ].join(',')
+    })
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `Logistics_Cross_Audit_Report_${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -637,6 +696,17 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
             }`}
           >
             <span>📋</span> Sổ Cái Tra Cứu Vận Đơn ({filteredShipments.length})
+          </button>
+
+          <button
+            onClick={() => setActiveFinanceView('CROSS_AUDIT')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeFinanceView === 'CROSS_AUDIT'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <span>⚖️</span> Đối Chiếu Chéo COD & Cước ({validShipments.length})
           </button>
         </div>
 
@@ -1034,6 +1104,209 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 4: ĐỐI CHIẾU CHÉO 2 DÒNG TIỀN (COD VS CƯỚC P&L) */}
+      {/* ========================================================================= */}
+      {activeFinanceView === 'CROSS_AUDIT' && (
+        <div className="space-y-5">
+          {/* Banner giải trình đối chiếu chéo */}
+          <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 text-white p-5 rounded-3xl shadow-sm border border-purple-800/40 space-y-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">⚖️</span>
+                <div>
+                  <h3 className="text-sm font-black tracking-tight text-white uppercase">
+                    Bảng Đối Chiếu Chéo Dòng Tiền Thu Hộ (COD) & Doanh Thu Vận Chuyển (P&L)
+                  </h3>
+                  <p className="text-[11px] text-purple-200 mt-0.5">
+                    Kiểm toán tính toàn vẹn: Bóc tách minh bạch <b>Tiền Hàng Của Shop</b> và <b>Tiền Cước Của ZeroExpress</b>. Đảm bảo 100% không trùng lặp, không hạch toán nhầm.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExportCrossAuditCSV}
+                className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+              >
+                <span>📥</span> Xuất File Đối Chiếu (CSV)
+              </button>
+            </div>
+
+            {/* Thanh tỷ trọng minh họa */}
+            <div className="pt-2">
+              <div className="flex justify-between text-[11px] font-bold text-slate-300 mb-1">
+                <span>Tiền Hàng Thu Hộ Shop: {codSharePercent}% ({formatMoney(totalCodAmount)})</span>
+                <span>Cước Vận Chuyển ZeroExpress: {freightSharePercent}% ({formatMoney(totalShippingFeeCollected)})</span>
+              </div>
+              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
+                <div style={{ width: `${codSharePercent}%` }} className="bg-amber-500 transition-all duration-300" title={`Tiền Shop: ${codSharePercent}%`} />
+                <div style={{ width: `${freightSharePercent}%` }} className="bg-emerald-500 transition-all duration-300" title={`Cước VC Sàn: ${freightSharePercent}%`} />
+              </div>
+            </div>
+          </div>
+
+          {/* 3 Thẻ Chỉ Số Đối Chiếu Chéo */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            {/* Tổng tiền mặt shipper thu */}
+            <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
+              <div className="flex items-center justify-between text-slate-500 font-bold">
+                <span className="flex items-center gap-1.5"><span>💵</span> Tổng Tiền Mặt Khách Trả</span>
+                <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">Shipper Thu</span>
+              </div>
+              <p className="text-2xl font-black text-slate-900 font-mono">
+                {formatMoney(totalCashCollected)}
+              </p>
+              <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2 flex justify-between font-medium">
+                <span>Tổng số bưu kiện phát sinh:</span>
+                <b className="text-slate-800 font-mono">{validShipments.length} đơn</b>
+              </div>
+            </div>
+
+            {/* Dòng 1: Tiền hàng COD của Shop */}
+            <div className="bg-white border border-amber-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
+              <div className="flex items-center justify-between text-amber-800 font-bold">
+                <span className="flex items-center gap-1.5"><span>🛒</span> Dòng 1: Tiền Hàng COD (Thu Hộ Shop)</span>
+                <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold">100% Của Shop</span>
+              </div>
+              <p className="text-2xl font-black text-amber-700 font-mono">
+                {formatMoney(totalCodAmount)}
+              </p>
+              <div className="text-[11px] text-amber-900/80 border-t border-amber-100 pt-2 flex justify-between font-medium">
+                <span>Điểm đến dòng tiền:</span>
+                <b className="text-amber-800">Quản lý tại Tab Đối Soát COD ➔ Trả Ví Shop</b>
+              </div>
+            </div>
+
+            {/* Dòng 2: Cước vận chuyển của ZeroExpress */}
+            <div className="bg-white border border-emerald-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
+              <div className="flex items-center justify-between text-emerald-800 font-bold">
+                <span className="flex items-center gap-1.5"><span>🚚</span> Dòng 2: Cước Vận Chuyển (ZeroExpress)</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-bold">Doanh Thu Logistics</span>
+              </div>
+              <p className="text-2xl font-black text-emerald-700 font-mono">
+                {formatMoney(totalShippingFeeCollected)}
+              </p>
+              <div className="text-[11px] text-emerald-900/80 border-t border-emerald-100 pt-2 flex justify-between font-medium">
+                <span>Điểm đến dòng tiền:</span>
+                <b className="text-emerald-800">Quản lý tại Tab P&L ➔ Trừ Chi Phí Xe & Lãi</b>
+              </div>
+            </div>
+          </div>
+
+          {/* Bảng chi tiết đối chiếu chéo từng bưu kiện */}
+          <div className="bg-white border border-slate-200/90 p-5 rounded-2xl shadow-3xs space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Chi Tiết Bóc Tách Từng Vận Đơn ({filteredShipments.length} bưu kiện)
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Đối chiếu song song Tiền COD vs Cước Vận Chuyển trên từng đơn hàng
+                </p>
+              </div>
+
+              {/* Bộ lọc tìm kiếm */}
+              <input
+                type="text"
+                placeholder="Tìm mã ZMX, địa chỉ, người mua..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs w-full sm:w-60 focus:outline-emerald-500"
+              />
+            </div>
+
+            {/* Bảng dữ liệu */}
+            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white max-h-[500px] overflow-y-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 font-bold text-slate-600">
+                  <tr>
+                    <th className="text-left p-3">Mã Vận Đơn & Khách Hàng</th>
+                    <th className="text-left p-3">Bưu Cục Hub</th>
+                    <th className="text-right p-3 text-amber-800">Tiền Hàng COD (Trả Shop)</th>
+                    <th className="text-right p-3 text-emerald-800">Cước VC (Doanh Thu P&L)</th>
+                    <th className="text-right p-3">Tổng Tiền Khách Trả</th>
+                    <th className="text-center p-3">Tỷ Trọng Tiền Shop / Sàn</th>
+                    <th className="text-center p-3">Kết Quả Kiểm Toán</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {filteredShipments.map((s) => {
+                    const fee = s.shippingFee > 0 ? s.shippingFee : 25000
+                    const cod = s.codAmount || 0
+                    const total = cod + fee
+                    const codPercent = total > 0 ? Math.round((cod / total) * 100) : 0
+                    const feePercent = 100 - codPercent
+                    const matchedHub = matchShipmentToHub(s, hubs)
+                    const isDelivered = ['DELIVERED', 'COMPLETED'].includes(s.status)
+                    const isFailed = ['DELIVERY_FAILED', 'RETURNING', 'RETURNED'].includes(s.status)
+
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50/80 transition">
+                        <td className="p-3">
+                          <div className="font-mono font-bold text-slate-900">{s.trackingNumber}</div>
+                          <div className="text-[11px] text-slate-500 font-sans">
+                            {s.buyerName} • #{s.orderId}
+                          </div>
+                        </td>
+
+                        <td className="p-3">
+                          <span className="font-bold text-slate-800">
+                            {matchedHub?.name.replace('Bưu Cục Giao Hàng ', '') || 'Bưu Cục Hub'}
+                          </span>
+                          <div className="text-[10px] text-slate-400 line-clamp-1">{s.deliveryAddress}</div>
+                        </td>
+
+                        <td className="text-right p-3 font-mono font-bold text-amber-700">
+                          {cod > 0 ? formatMoney(cod) : <span className="text-slate-400 font-normal">0đ (Đã TT trước)</span>}
+                        </td>
+
+                        <td className="text-right p-3 font-mono font-bold text-emerald-700">
+                          {formatMoney(fee)}
+                        </td>
+
+                        <td className="text-right p-3 font-mono font-black text-slate-900 text-sm">
+                          {formatMoney(total)}
+                        </td>
+
+                        <td className="text-center p-3">
+                          <div className="w-24 mx-auto">
+                            <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-0.5">
+                              <span className="text-amber-700">{codPercent}%</span>
+                              <span className="text-emerald-700">{feePercent}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                              <div style={{ width: `${codPercent}%` }} className="bg-amber-500" />
+                              <div style={{ width: `${feePercent}%` }} className="bg-emerald-500" />
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="text-center p-3">
+                          {isDelivered ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <span>✅</span> Khớp 100% (Đã Giao)
+                            </span>
+                          ) : isFailed ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                              <span>⚠️</span> Đơn Hoàn (COD 0đ)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                              <span>🔄</span> Lưu Thông ({s.status})
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
