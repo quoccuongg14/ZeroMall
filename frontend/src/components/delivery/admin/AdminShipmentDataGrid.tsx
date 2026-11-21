@@ -12,6 +12,22 @@ const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
 
 type TimePreset = 'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'
 
+// Helper làm sạch và loại bỏ các đoạn địa chỉ bị lặp trùng
+const cleanAddressString = (addr: string): string => {
+  if (!addr) return ''
+  const parts = addr.split(',').map((p) => p.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const part of parts) {
+    const simplified = part.toLowerCase().replace(/^(tỉnh|thành phố|tp\.?|quận|huyện|phường|xã|thị trấn)\s+/i, '').trim()
+    if (!seen.has(simplified)) {
+      seen.add(simplified)
+      result.push(part)
+    }
+  }
+  return result.join(', ')
+}
+
 // Helper trích xuất lộ trình (Kho Gửi ➔ Kho/Khu Vực Nhận)
 const extractRouteInfo = (s: Shipment) => {
   const originProvince = s.pickupAddress?.province || ''
@@ -487,9 +503,9 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
                         {/* Địa chỉ chi tiết */}
                         <div
                           className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed"
-                          title={s.deliveryAddress}
+                          title={cleanAddressString(s.deliveryAddress)}
                         >
-                          {s.deliveryAddress}
+                          {cleanAddressString(s.deliveryAddress)}
                         </div>
                       </td>
 

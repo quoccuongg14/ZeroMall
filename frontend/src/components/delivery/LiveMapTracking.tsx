@@ -22,6 +22,9 @@ const removeVietnameseTones = (str: string): string => {
 // Bảng tọa độ tiêu chuẩn của 63 Tỉnh Thành & các Quận/Huyện trọng điểm tại Việt Nam
 const VIETNAM_COORDS_MAP: { [key: string]: [number, number] } = {
   // Hà Nội & miền Bắc
+  'hoa binh': [20.8167, 105.3333],
+  'tinh hoa binh': [20.8167, 105.3333],
+  'thanh pho hoa binh': [20.8167, 105.3333],
   'ba vi': [21.1500, 105.3800],
   'me linh': [21.1837, 105.7196],
   'quang minh': [21.1837, 105.7196],
@@ -139,11 +142,11 @@ const VIETNAM_COORDS_MAP: { [key: string]: [number, number] } = {
   'phu quoc': [10.2289, 103.9572],
 }
 
-// Bảng thông tin 3 Bưu Cục Hub trọng điểm của ZMX Logistics
+// Bảng thông tin đầy đủ 14 Bưu Cục Hub & Trung Tâm Phân Loại của ZMX Logistics
 const HUBS_CONFIG: { [id: string]: { id: string; name: string; code: string; province: string; district: string; coords: [number, number] } } = {
   'hub-hn-01': {
     id: 'hub-hn-01',
-    name: 'Kho Trung Chuyển Mê Linh SOC',
+    name: 'Trung Tâm Phân Loại Mê Linh SOC',
     code: 'HN01',
     province: 'Hà Nội',
     district: 'Huyện Mê Linh',
@@ -151,11 +154,27 @@ const HUBS_CONFIG: { [id: string]: { id: string; name: string; code: string; pro
   },
   'hub-hcm-01': {
     id: 'hub-hcm-01',
-    name: 'Kho Tổng Tân Bình SOC',
+    name: 'Trung Tâm Phân Loại Bắc Củ Chi SOC',
     code: 'HCM01',
     province: 'Hồ Chí Minh',
-    district: 'Quận Tân Bình',
-    coords: [10.8014, 106.6538],
+    district: 'Huyện Củ Chi',
+    coords: [10.9700, 106.5000],
+  },
+  'hub-dng-soc': {
+    id: 'hub-dng-soc',
+    name: 'Trung Tâm Phân Loại Hòa Cầm SOC',
+    code: 'DNG01',
+    province: 'Đà Nẵng',
+    district: 'Quận Cẩm Lệ',
+    coords: [16.0125, 108.1833],
+  },
+  'hub-ct-soc': {
+    id: 'hub-ct-soc',
+    name: 'Trung Tâm Phân Loại Trà Nóc SOC',
+    code: 'CT01',
+    province: 'Cần Thơ',
+    district: 'Quận Bình Thủy',
+    coords: [10.0833, 105.7167],
   },
   'hub-dn-01': {
     id: 'hub-dn-01',
@@ -164,6 +183,78 @@ const HUBS_CONFIG: { [id: string]: { id: string; name: string; code: string; pro
     province: 'Đồng Nai',
     district: 'TP. Biên Hòa',
     coords: [10.9574, 106.8427],
+  },
+  'hub-hb-01': {
+    id: 'hub-hb-01',
+    name: 'Bưu Cục SPX Hòa Bình Hub',
+    code: 'HB01',
+    province: 'Tỉnh Hoà Bình',
+    district: 'Thành phố Hòa Bình',
+    coords: [20.8167, 105.3333],
+  },
+  'hub-tb-01': {
+    id: 'hub-tb-01',
+    name: 'Bưu Cục Giao Hàng Tân Bình Hub',
+    code: 'TB01',
+    province: 'Hồ Chí Minh',
+    district: 'Quận Tân Bình',
+    coords: [10.8014, 106.6538],
+  },
+  'hub-q1-01': {
+    id: 'hub-q1-01',
+    name: 'Bưu Cục Giao Hàng Quận 1 Hub',
+    code: 'Q01',
+    province: 'Hồ Chí Minh',
+    district: 'Quận 1',
+    coords: [10.7756, 106.7004],
+  },
+  'hub-td-01': {
+    id: 'hub-td-01',
+    name: 'Bưu Cục Giao Hàng Thủ Đức Hub',
+    code: 'TD01',
+    province: 'Hồ Chí Minh',
+    district: 'Thành phố Thủ Đức',
+    coords: [10.8494, 106.7537],
+  },
+  'hub-cg-01': {
+    id: 'hub-cg-01',
+    name: 'Bưu Cục Giao Hàng Cầu Giấy Hub',
+    code: 'CG01',
+    province: 'Hà Nội',
+    district: 'Quận Cầu Giấy',
+    coords: [21.0333, 105.7939],
+  },
+  'hub-dd-01': {
+    id: 'hub-dd-01',
+    name: 'Bưu Cục Giao Hàng Đống Đa Hub',
+    code: 'DD01',
+    province: 'Hà Nội',
+    district: 'Quận Đống Đa',
+    coords: [21.0180, 105.8260],
+  },
+  'hub-tx-01': {
+    id: 'hub-tx-01',
+    name: 'Bưu Cục Giao Hàng Thanh Xuân Hub',
+    code: 'TX01',
+    province: 'Hà Nội',
+    district: 'Quận Thanh Xuân',
+    coords: [20.9950, 105.8050],
+  },
+  'hub-hc-01': {
+    id: 'hub-hc-01',
+    name: 'Bưu Cục Giao Hàng Hải Châu Hub',
+    code: 'HC01',
+    province: 'Đà Nẵng',
+    district: 'Quận Hải Châu',
+    coords: [16.0544, 108.2197],
+  },
+  'hub-nk-01': {
+    id: 'hub-nk-01',
+    name: 'Bưu Cục Giao Hàng Ninh Kiều Hub',
+    code: 'NK01',
+    province: 'Cần Thơ',
+    district: 'Quận Ninh Kiều',
+    coords: [10.0333, 105.7833],
   },
 }
 
@@ -209,10 +300,10 @@ const resolveVietnamCoords = (
   // 1. Nếu có tọa độ GPS lưu sẵn hợp lệ và khớp miền địa lý, sử dụng ngay
   if (savedLat && savedLng && savedLat > 8.0 && savedLat < 24.0 && savedLng > 102.0 && savedLng < 110.0) {
     const normProv = removeVietnameseTones(province)
-    const isNorthern = ['ha noi', 'vinh phuc', 'bac ninh', 'hai phong', 'quang ninh', 'thai nguyen'].some(k => normProv.includes(k))
+    const isNorthern = ['ha noi', 'vinh phuc', 'bac ninh', 'hai phong', 'quang ninh', 'thai nguyen', 'hoa binh'].some(k => normProv.includes(k))
     const isSouthern = ['ho chi minh', 'sai gon', 'dong nai', 'binh duong', 'long an', 'can tho'].some(k => normProv.includes(k))
 
-    // Kiểm tra tính nhất quán (ví dụ: không lấy tọa độ lat 10.x cho Hà Nội)
+    // Kiểm tra tính nhất quán (ví dụ: không lấy tọa độ lat 10.x cho Hà Nội/Hòa Bình)
     if (isNorthern && savedLat > 18.0) return [savedLat, savedLng]
     if (isSouthern && savedLat < 15.0) return [savedLat, savedLng]
     if (!isNorthern && !isSouthern) return [savedLat, savedLng]
@@ -243,8 +334,11 @@ const resolveVietnamCoords = (
   }
 
   // Mặc định fallback theo khu vực
+  if (normProv.includes('hoa binh') || normFull.includes('hoa binh')) return [20.8167, 105.3333]
   if (normProv.includes('ha noi') || normFull.includes('ha noi')) return [21.0285, 105.8542]
   if (normProv.includes('dong nai') || normFull.includes('dong nai')) return [10.9574, 106.8427]
+  if (normProv.includes('da nang') || normFull.includes('da nang')) return [16.0544, 108.2022]
+  if (normProv.includes('can tho') || normFull.includes('can tho')) return [10.0452, 105.7469]
   return [10.7769, 106.7009] // TP.HCM
 }
 
@@ -255,16 +349,28 @@ const resolveHubForProvince = (provinceName: string, preferredHubId?: string) =>
   }
 
   const norm = removeVietnameseTones(provinceName)
-  // Miền Bắc -> Mê Linh SOC
-  if (['ha noi', 'vinh phuc', 'bac ninh', 'hai phong', 'quang ninh', 'hai duong', 'hung yen', 'thai binh', 'nam dinh', 'ninh binh', 'phu tho', 'thai nguyen', 'tuyen quang', 'yen bai', 'bac giang'].some(k => norm.includes(k))) {
-    return HUBS_CONFIG['hub-hn-01']
+  // Tỉnh Hòa Bình
+  if (norm.includes('hoa binh')) {
+    return HUBS_CONFIG['hub-hb-01']
   }
   // Đồng Nai -> Biên Hòa Hub
   if (norm.includes('dong nai') || norm.includes('bien hoa')) {
     return HUBS_CONFIG['hub-dn-01']
   }
-  // TP.HCM & các tỉnh miền Nam -> Tân Bình SOC
-  return HUBS_CONFIG['hub-hcm-01']
+  // Đà Nẵng & miền Trung -> Hòa Cầm SOC hoặc Hải Châu Hub
+  if (['da nang', 'hai chau', 'cam le', 'quang nam', 'hue'].some(k => norm.includes(k))) {
+    return HUBS_CONFIG['hub-dng-soc'] || HUBS_CONFIG['hub-hc-01']
+  }
+  // Cần Thơ & ĐBSCL -> Trà Nóc SOC hoặc Ninh Kiều Hub
+  if (['can tho', 'ninh kieu', 'hau giang', 'vinh long', 'soc trang'].some(k => norm.includes(k))) {
+    return HUBS_CONFIG['hub-ct-soc'] || HUBS_CONFIG['hub-nk-01']
+  }
+  // Miền Bắc -> Mê Linh SOC
+  if (['ha noi', 'vinh phuc', 'bac ninh', 'hai phong', 'quang ninh', 'hai duong', 'hung yen', 'thai binh', 'nam dinh', 'ninh binh', 'phu tho', 'thai nguyen', 'tuyen quang', 'yen bai', 'bac giang'].some(k => norm.includes(k))) {
+    return HUBS_CONFIG['hub-hn-01']
+  }
+  // TP.HCM & các tỉnh miền Nam -> Củ Chi SOC hoặc Tân Bình Hub
+  return HUBS_CONFIG['hub-hcm-01'] || HUBS_CONFIG['hub-tb-01']
 }
 
 export const LiveMapTracking: React.FC<LiveMapTrackingProps> = ({ trackingData, goongApiKey: _goongApiKey }) => {

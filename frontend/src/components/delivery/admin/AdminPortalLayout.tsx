@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { Shipment, Hub, Driver, AdminActiveNav } from './types'
 import { AdminSidebar } from './AdminSidebar'
 import { AdminTopBar } from './AdminTopBar'
@@ -52,6 +52,27 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
     return s.currentHubId === selectedHubId || s.currentHub?.id === selectedHubId
   })
 
+  const dynamicSlaRate = useMemo(() => {
+    const deliveredParcels = shipments.filter((s) => ['DELIVERED', 'COMPLETED'].includes(s.status))
+    if (deliveredParcels.length === 0) return 100
+    const STANDARD_SLA_MS = 72 * 3600 * 1000
+    let onTimeCount = 0
+    let validCount = 0
+
+    deliveredParcels.forEach((s) => {
+      const startTime = new Date((s as any).pickedUpAt || s.createdAt).getTime()
+      const endLog = s.trackingLogs?.find((l) => l.status === 'DELIVERED')?.timestamp
+      const endTime = new Date((s as any).deliveredAt || endLog || (s as any).updatedAt || s.createdAt).getTime()
+      if (!isNaN(startTime) && !isNaN(endTime) && endTime >= startTime) {
+        const duration = endTime - startTime
+        validCount++
+        if (duration <= STANDARD_SLA_MS) onTimeCount++
+      }
+    })
+
+    return validCount > 0 ? Number(((onTimeCount / validCount) * 100).toFixed(1)) : 100
+  }, [shipments])
+
   // Nếu người dùng tìm kiếm trên TopBar
   const handleGlobalSearchSubmit = () => {
     if (searchQuery.trim()) {
@@ -94,7 +115,7 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
           hubs={hubs}
           onRefresh={onRefresh}
           loading={loading}
-          slaRate={97.8}
+          slaRate={dynamicSlaRate}
         />
 
         {/* Dynamic Workspace Content */}
