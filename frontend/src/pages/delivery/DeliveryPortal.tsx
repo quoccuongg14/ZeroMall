@@ -108,7 +108,12 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
       return adminUser
     }
     const saved = localStorage.getItem('delivery_user')
-    return saved ? JSON.parse(saved) : null
+    if (!saved) return null
+    try {
+      return JSON.parse(saved)
+    } catch {
+      return null
+    }
   })
   const [_token, setToken] = useState<string | null>(() => {
     return initialToken || localStorage.getItem('delivery_token') || null
@@ -209,25 +214,9 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
     }
   }
 
-  // If not logged in as delivery staff/driver, show login form
-  if (!currentUser) {
-    return <DeliveryAuthForm onAuthSuccess={handleLoginSuccess} onBackToHome={onBackToHome || (() => {})} />
-  }
+  const isDriver = currentUser?.role === 'DRIVER'
 
-  // Màn hình chờ khi đang đồng bộ dữ liệu trạm từ CSDL thực tế
-  if (loading && hubs.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 text-slate-700">
-        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-        <h3 className="text-sm font-bold text-slate-800">Đang đồng bộ dữ liệu trạm vận hành ZeroExpress...</h3>
-        <p className="text-xs text-slate-400 mt-1">Vui lòng chờ trong giây lát</p>
-      </div>
-    )
-  }
-
-  const isDriver = currentUser.role === 'DRIVER'
-
-  // Tìm Driver profile tương ứng trong CSDL
+  // Tìm Driver profile tương ứng trong CSDL (Hook chạy ở cấp cao nhất trước mọi câu lệnh return)
   const currentDriver = useMemo(() => {
     if (!currentUser) return null
     const cleanUserPhone = (currentUser.phoneNumber || '').replace(/[^0-9]/g, '')
@@ -267,23 +256,40 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
   }, [drivers, currentUser])
 
   // Bộ lọc dữ liệu theo Tab & Vai trò (DRIVER chỉ thấy đơn của mình và các đơn tại Hub của mình, OPERATOR/ADMIN thấy toàn sàn)
-  const roleBaseShipments = isDriver
-    ? shipments.filter((s) => {
-        if (s.status === 'CANCELLED') return false
-        return (
-          // 1. Đơn đã gán cho tài xế này
-          s.assignments?.some((a) => 
-            (a.driver?.phone === currentUser.phoneNumber || 
-            (currentDriver && (a.driver?.phone === currentDriver.phone || (a as any).driverId === currentDriver.id))) &&
-            a.status !== 'CANCELLED'
-          ) ||
-          // 2. Đơn tại bưu cục đích của tài xế này (chờ quét nhận đi giao)
-          (currentDriver && ['AT_DESTINATION_HUB', 'DELIVERY_ASSIGNED', 'IN_TRANSIT'].includes(s.status) && (s.currentHubId === currentDriver.hubId || !s.currentHubId)) ||
-          // 3. Đơn cần lấy hàng thuộc bưu cục của tài xế này
-          (currentDriver && ['CREATED', 'WAITING_PICKUP', 'PICKUP_ASSIGNED'].includes(s.status) && (s.currentHubId === currentDriver.hubId || !s.currentHubId))
-        )
-      })
-    : shipments
+  const roleBaseShipments = useMemo(() => {
+    if (!isDriver) return shipments
+    return shipments.filter((s) => {
+      if (s.status === 'CANCELLED') return false
+      return (
+        // 1. Đơn đã gán cho tài xế này
+        s.assignments?.some((a) => 
+          (a.driver?.phone === currentUser?.phoneNumber || 
+          (currentDriver && (a.driver?.phone === currentDriver.phone || (a as any).driverId === currentDriver.id))) &&
+          a.status !== 'CANCELLED'
+        ) ||
+        // 2. Đơn tại bưu cục đích của tài xế này (chờ quét nhận đi giao)
+        (currentDriver && ['AT_DESTINATION_HUB', 'DELIVERY_ASSIGNED', 'IN_TRANSIT'].includes(s.status) && (s.currentHubId === currentDriver.hubId || !s.currentHubId)) ||
+        // 3. Đơn cần lấy hàng thuộc bưu cục của tài xế này
+        (currentDriver && ['CREATED', 'WAITING_PICKUP', 'PICKUP_ASSIGNED'].includes(s.status) && (s.currentHubId === currentDriver.hubId || !s.currentHubId))
+      )
+    })
+  }, [isDriver, shipments, currentUser, currentDriver])
+
+  // If not logged in as delivery staff/driver, show login form
+  if (!currentUser) {
+    return <DeliveryAuthForm onAuthSuccess={handleLoginSuccess} onBackToHome={onBackToHome || (() => {})} />
+  }
+
+  // Màn hình chờ khi đang đồng bộ dữ liệu trạm từ CSDL thực tế
+  if (loading && hubs.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 text-slate-700">
+        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <h3 className="text-sm font-bold text-slate-800">Đang đồng bộ dữ liệu trạm vận hành ZeroExpress...</h3>
+        <p className="text-xs text-slate-400 mt-1">Vui lòng chờ trong giây lát</p>
+      </div>
+    )
+  }
 
   // 1. NẾU LÀ TÀI XẾ (DRIVER) -> HIỂN THỊ TRỰC TIẾP APP TÀI XẾ MOBILE
   if (currentUser.role === 'DRIVER') {
