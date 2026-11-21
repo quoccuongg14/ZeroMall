@@ -370,9 +370,9 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActivePortalTab(item.id as any)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-extrabold transition cursor-pointer select-none ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-bold transition cursor-pointer select-none ${
                   activePortalTab === item.id 
-                    ? 'bg-emerald-50 text-emerald-660' 
+                    ? 'bg-emerald-50 text-emerald-700 font-extrabold' 
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
                 }`}
               >

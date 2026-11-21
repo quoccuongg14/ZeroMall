@@ -9,6 +9,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeSubTab, setActiveSubTab] = useState<'VIOLATIONS' | 'DELISTED' | 'ACTIVE' | 'ALL'>('VIOLATIONS')
+  const [policyTypeFilter, setPolicyTypeFilter] = useState<'ALL' | 'BUYER_REPORT' | 'PROHIBITED' | 'COUNTERFEIT'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [categories, setCategories] = useState<any[]>([])
@@ -29,6 +30,36 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   const [editStockValue, setEditStockValue] = useState<number>(0)
   const [editSalesValue, setEditSalesValue] = useState<number>(0)
   const [isUpdatingStock, setIsUpdatingStock] = useState<boolean>(false)
+
+  // Phân biệt vi phạm chính sách với lỗi lệch ảnh/ngành hàng AI (thuộc riêng tab Rà Soát AI)
+  const isImageMismatchViolation = (p: any) => {
+    const reason = (p.violationReason || '').toLowerCase()
+    return (
+      reason.startsWith('ảnh hiển thị') ||
+      reason.startsWith('ảnh là') ||
+      reason.includes('không tương thích với ngành hàng') ||
+      reason.includes('quy định hình ảnh hoặc ngành hàng') ||
+      reason.includes('không khớp với sản phẩm')
+    )
+  }
+
+  const isPolicyViolation = (p: any) => {
+    if (p.reportsCount && p.reportsCount > 0) return true
+    if (p.isViolated && !isImageMismatchViolation(p)) return true
+    return false
+  }
+
+  const getPolicyViolationType = (p: any): 'BUYER_REPORT' | 'PROHIBITED' | 'COUNTERFEIT' | 'OTHER' => {
+    const reason = (p.violationReason || '').toLowerCase()
+    if (p.reportsCount && p.reportsCount > 0) return 'BUYER_REPORT'
+    if (reason.includes('hàng giả') || reason.includes('nhái') || reason.includes('sở hữu trí tuệ') || reason.includes('bản quyền')) {
+      return 'COUNTERFEIT'
+    }
+    if (reason.includes('từ cấm') || reason.includes('nguy hiểm') || reason.includes('cấm') || reason.includes('y tế') || reason.includes('quảng cáo')) {
+      return 'PROHIBITED'
+    }
+    return 'OTHER'
+  }
 
   const fetchAllProducts = async () => {
     setLoading(true)
@@ -69,9 +100,16 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
 
   // Filter products
   const filteredProducts = products.filter((p) => {
-    if (activeSubTab === 'ACTIVE' && (p.isViolated || p.status === 'hidden')) return false
-    if (activeSubTab === 'VIOLATIONS' && !p.isViolated && (!p.reportsCount || p.reportsCount === 0)) return false
-    if (activeSubTab === 'DELISTED' && p.status !== 'hidden' && !p.isViolated) return false
+    const isPolViolated = isPolicyViolation(p)
+    if (activeSubTab === 'ACTIVE' && (isPolViolated || p.status === 'hidden')) return false
+    if (activeSubTab === 'VIOLATIONS') {
+      if (!isPolViolated) return false
+      if (policyTypeFilter !== 'ALL') {
+        const pType = getPolicyViolationType(p)
+        if (pType !== policyTypeFilter) return false
+      }
+    }
+    if (activeSubTab === 'DELISTED' && p.status !== 'hidden' && !isPolViolated) return false
 
     if (categoryFilter !== 'ALL') {
       const catMatch = p.category === categoryFilter || p.categoryId === categoryFilter || p.categoryRef?.slug === categoryFilter
@@ -91,9 +129,15 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   })
 
   const countAll = products.length
-  const countActive = products.filter(p => !p.isViolated && p.status !== 'hidden').length
-  const countViolations = products.filter(p => p.isViolated || (p.reportsCount && p.reportsCount > 0)).length
-  const countDelisted = products.filter(p => p.status === 'hidden' || p.isViolated).length
+  const countActive = products.filter(p => !isPolicyViolation(p) && p.status !== 'hidden').length
+  const countViolations = products.filter(p => isPolicyViolation(p)).length
+  const countDelisted = products.filter(p => p.status === 'hidden' || isPolicyViolation(p)).length
+
+  // Sub-counts for Policy Types
+  const policyViolatedProducts = products.filter(p => isPolicyViolation(p))
+  const countBuyerReports = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'BUYER_REPORT').length
+  const countProhibited = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'PROHIBITED').length
+  const countCounterfeit = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'COUNTERFEIT').length
 
   // Xử lý Xóa Vi Phạm Sản Phẩm & Phạt Sao Quả Tạ
   const handleConfirmDeleteViolation = async () => {
@@ -272,6 +316,37 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
             </select>
           </div>
         </div>
+
+        {/* Policy Violation Category Sub-Filter Pills (Chỉ hiện khi xem mục VIOLATIONS) */}
+        {activeSubTab === 'VIOLATIONS' && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-bold text-slate-500 mr-1">Phân loại vi phạm chính sách:</span>
+            {[
+              { id: 'ALL', label: '🚨 Tất Cả Vi Phạm', count: countViolations },
+              { id: 'BUYER_REPORT', label: '📢 Tố Cáo Người Mua', count: countBuyerReports },
+              { id: 'COUNTERFEIT', label: '🛡️ Hàng Giả / Bản Quyền', count: countCounterfeit },
+              { id: 'PROHIBITED', label: '⛔ Từ Cấm / Hàng Cấm', count: countProhibited },
+            ].map((pType) => (
+              <button
+                key={pType.id}
+                type="button"
+                onClick={() => setPolicyTypeFilter(pType.id as any)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  policyTypeFilter === pType.id
+                    ? 'bg-rose-50 text-rose-700 border border-rose-300 shadow-3xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-transparent'
+                }`}
+              >
+                <span>{pType.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  policyTypeFilter === pType.id ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {pType.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main Product Moderation Table */}
@@ -302,7 +377,8 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
               <tbody className="divide-y divide-slate-100">
                 {filteredProducts.map((p) => {
                   const shopName = shopsMap[p.shopId] || p.shopId
-                  const isViolated = p.isViolated || (p.reportsCount && p.reportsCount > 0)
+                  const isPolViolated = isPolicyViolation(p)
+                  const pType = getPolicyViolationType(p)
                   const isHidden = p.status === 'hidden'
 
                   return (
@@ -359,11 +435,23 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
 
                       {/* Cột 5: Trạng thái & Cảnh báo vi phạm */}
                       <td className="py-3.5 px-3 text-center">
-                        <div className="space-y-1 inline-flex flex-col items-center">
-                          {isViolated ? (
-                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black rounded-md flex items-center gap-1 animate-pulse">
-                              <span>⚠️</span> Vi phạm ({p.reportsCount || 1} report)
-                            </span>
+                        <div className="space-y-1.5 inline-flex flex-col items-center">
+                          {isPolViolated ? (
+                            <div className="flex flex-col items-center gap-1">
+                              {p.reportsCount && p.reportsCount > 0 ? (
+                                <span className="px-2 py-0.5 bg-rose-50 border border-rose-300 text-rose-700 text-[10px] font-black rounded-md flex items-center gap-1 shadow-3xs">
+                                  <span>📢</span> {p.reportsCount} tố cáo từ khách
+                                </span>
+                              ) : pType === 'COUNTERFEIT' ? (
+                                <span className="px-2 py-0.5 bg-purple-50 border border-purple-300 text-purple-700 text-[10px] font-black rounded-md flex items-center gap-1 shadow-3xs">
+                                  <span>🛡️</span> Vi phạm bản quyền / Hàng giả
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-black rounded-md flex items-center gap-1 shadow-3xs">
+                                  <span>⛔</span> Vi phạm từ cấm sàn
+                                </span>
+                              )}
+                            </div>
                           ) : isHidden ? (
                             <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold rounded-md">
                               🔒 Đang Tạm Khóa
@@ -374,8 +462,8 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
                             </span>
                           )}
 
-                          {p.violationReason && (
-                            <p className="text-[9px] text-rose-600 max-w-[140px] truncate font-semibold" title={p.violationReason}>
+                          {p.violationReason && !isImageMismatchViolation(p) && (
+                            <p className="text-[10px] text-rose-600 max-w-[210px] line-clamp-2 font-medium leading-tight text-center" title={p.violationReason}>
                               {p.violationReason}
                             </p>
                           )}
@@ -405,7 +493,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
                             📦
                           </button>
 
-                          {isViolated && (
+                          {isPolViolated && (
                             <button
                               onClick={() => handleDismissViolation(p)}
                               className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold transition cursor-pointer"

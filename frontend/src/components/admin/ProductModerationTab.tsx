@@ -68,12 +68,31 @@ export const ProductModerationTab: React.FC<ProductModerationTabProps> = ({ trig
     return num.toLocaleString('vi-VN') + 'đ'
   }
 
+  // Phân biệt vi phạm chính sách với lỗi lệch ảnh/ngành hàng AI
+  const isImageMismatchViolation = (p: any) => {
+    const reason = (p.violationReason || '').toLowerCase()
+    return (
+      reason.startsWith('ảnh hiển thị') ||
+      reason.startsWith('ảnh là') ||
+      reason.includes('không tương thích với ngành hàng') ||
+      reason.includes('quy định hình ảnh hoặc ngành hàng') ||
+      reason.includes('không khớp với sản phẩm')
+    )
+  }
+
+  const isPolicyViolation = (p: any) => {
+    if (p.reportsCount && p.reportsCount > 0) return true
+    if (p.isViolated && !isImageMismatchViolation(p)) return true
+    return false
+  }
+
   // Filter products
   const filteredProducts = products.filter((p) => {
+    const isPolViolated = isPolicyViolation(p)
     // 1. SubTab Filter
-    if (activeSubTab === 'ACTIVE' && (p.isViolated || p.status === 'hidden')) return false
-    if (activeSubTab === 'VIOLATIONS' && !p.isViolated && (!p.reportsCount || p.reportsCount === 0)) return false
-    if (activeSubTab === 'DELISTED' && p.status !== 'hidden' && !p.isViolated) return false
+    if (activeSubTab === 'ACTIVE' && (isPolViolated || p.status === 'hidden')) return false
+    if (activeSubTab === 'VIOLATIONS' && !isPolViolated) return false
+    if (activeSubTab === 'DELISTED' && p.status !== 'hidden' && !isPolViolated) return false
 
     // 2. Category Filter
     if (categoryFilter !== 'ALL') {
@@ -96,9 +115,9 @@ export const ProductModerationTab: React.FC<ProductModerationTabProps> = ({ trig
 
   // Count stats
   const countAll = products.length
-  const countActive = products.filter(p => !p.isViolated && p.status !== 'hidden').length
-  const countViolations = products.filter(p => p.isViolated || (p.reportsCount && p.reportsCount > 0)).length
-  const countDelisted = products.filter(p => p.status === 'hidden' || p.isViolated).length
+  const countActive = products.filter(p => !isPolicyViolation(p) && p.status !== 'hidden').length
+  const countViolations = products.filter(p => isPolicyViolation(p)).length
+  const countDelisted = products.filter(p => p.status === 'hidden' || isPolicyViolation(p)).length
 
   // Xử lý Xóa Vi Phạm Sản Phẩm
   const handleConfirmDeleteViolation = async () => {
@@ -386,9 +405,9 @@ export const ProductModerationTab: React.FC<ProductModerationTabProps> = ({ trig
                       {/* Cột 5: Trạng thái & Cảnh báo vi phạm */}
                       <td className="py-3.5 px-3 text-center">
                         <div className="space-y-1 inline-flex flex-col items-center">
-                          {isViolated ? (
-                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black rounded-md flex items-center gap-1 animate-pulse">
-                              <span>⚠️</span> Vi phạm ({p.reportsCount || 1} report)
+                          {isPolicyViolation(p) ? (
+                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-300 text-rose-700 text-[10px] font-black rounded-md flex items-center gap-1 shadow-3xs">
+                              <span>📢</span> {p.reportsCount > 0 ? `${p.reportsCount} tố cáo` : 'Vi phạm chính sách'}
                             </span>
                           ) : isHidden ? (
                             <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold rounded-md">
@@ -400,8 +419,8 @@ export const ProductModerationTab: React.FC<ProductModerationTabProps> = ({ trig
                             </span>
                           )}
 
-                          {p.violationReason && (
-                            <p className="text-[9px] text-rose-600 max-w-[140px] truncate font-semibold" title={p.violationReason}>
+                          {p.violationReason && !isImageMismatchViolation(p) && (
+                            <p className="text-[10px] text-rose-600 max-w-[180px] line-clamp-2 font-medium text-center" title={p.violationReason}>
                               {p.violationReason}
                             </p>
                           )}
