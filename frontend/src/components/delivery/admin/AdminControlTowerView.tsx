@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { Shipment, Hub, Driver } from './types'
 import { HubWorkloadModal } from './HubWorkloadModal'
 
@@ -48,10 +48,55 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
   const collectingCodAmount = outForDeliveryParcels.reduce((sum, s) => sum + (s.codAmount || 0), 0)
   const settledCodAmount = deliveredParcels.reduce((sum, s) => sum + (s.codAmount || 0), 0)
 
-  // 3. Tỷ lệ hoàn thành (Delivery Success Rate) & SLA
+  // 3. Tỷ lệ hoàn thành (Delivery Success Rate) & SLA động từ CSDL
   const totalFinished = deliveredParcels.length + failedParcels.length
-  const successRate = totalFinished > 0 ? ((deliveredParcels.length / totalFinished) * 100).toFixed(1) : '98.5'
-  const slaRate = 97.8
+  const successRate = totalFinished > 0 ? ((deliveredParcels.length / totalFinished) * 100).toFixed(1) : '100.0'
+
+  // Tính toán SLA và thời gian giao hàng toàn trình (Lead Time) thực tế từ các đơn đã giao
+  const { slaRate, averageLeadTimeText, isSlaTargetMet } = useMemo(() => {
+    if (deliveredParcels.length === 0) {
+      return { slaRate: '100.0', averageLeadTimeText: '0 giờ', isSlaTargetMet: true }
+    }
+
+    let totalMs = 0
+    let validCount = 0
+    let onTimeCount = 0
+    const STANDARD_SLA_MS = 72 * 3600 * 1000 // Tiêu chuẩn SLA cam kết toàn trình 72h (3 ngày)
+
+    deliveredParcels.forEach((s) => {
+      const startTime = new Date((s as any).pickedUpAt || s.createdAt).getTime()
+      const endLog = s.trackingLogs?.find((l) => l.status === 'DELIVERED')?.timestamp
+      const endTime = new Date((s as any).deliveredAt || endLog || (s as any).updatedAt || s.createdAt).getTime()
+
+      if (!isNaN(startTime) && !isNaN(endTime) && endTime >= startTime) {
+        const duration = endTime - startTime
+        totalMs += duration
+        validCount++
+        if (duration <= STANDARD_SLA_MS) {
+          onTimeCount++
+        }
+      }
+    })
+
+    const rate = validCount > 0 ? ((onTimeCount / validCount) * 100).toFixed(1) : '100.0'
+    const avgHours = validCount > 0 ? totalMs / validCount / (3600 * 1000) : 0
+    const timeText =
+      avgHours >= 24
+        ? `${(avgHours / 24).toFixed(1)} ngày`
+        : avgHours >= 1
+        ? `${avgHours.toFixed(1)} giờ`
+        : `${Math.max(1, Math.round(avgHours * 60))} phút`
+
+    return {
+      slaRate: rate,
+      averageLeadTimeText: timeText,
+      isSlaTargetMet: Number(rate) >= 95,
+    }
+  }, [deliveredParcels])
+
+  // Tính tỷ lệ tài xế online / sẵn sàng nhận chuyến thực tế
+  const onlineDriversCount = drivers.filter((d) => d.status === 'AVAILABLE' || d.status === 'BUSY').length
+  const driverOnlineRate = drivers.length > 0 ? Math.round((onlineDriversCount / drivers.length) * 100) : 100
 
   // 4. Danh sách cảnh báo rủi ro vận hành nghiêm trọng (Urgent Operational Alerts)
   const alerts: Array<{ type: 'danger' | 'warning' | 'info'; title: string; desc: string; actionText?: string; onAction?: () => void }> = []
@@ -239,16 +284,24 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
             <span className="flex items-center gap-1.5">
               <span>🎯</span> Tỷ Lệ Giao Đúng Hạn (SLA)
             </span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md text-[10px]">
+            <span
+              className={`font-bold px-2 py-0.5 rounded-md text-[10px] border ${
+                isSlaTargetMet
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                  : 'text-rose-700 bg-rose-50 border-rose-200'
+              }`}
+            >
               Mục tiêu &gt; 95%
             </span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900">{slaRate}%</span>
-            <span className="text-xs font-bold text-emerald-600">🟢 Đạt chuẩn</span>
+            <span className={`text-xs font-bold ${isSlaTargetMet ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {isSlaTargetMet ? '🟢 Đạt chuẩn' : '🔴 Cần xử lý'}
+            </span>
           </div>
           <p className="text-[10px] text-slate-400">
-            Thời gian giao hàng trung bình toàn trình: <b>1.4 ngày</b>
+            Thời gian giao hàng trung bình toàn trình: <b>{averageLeadTimeText}</b>
           </p>
         </div>
 
@@ -314,7 +367,7 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
             <span className="text-2xl font-black text-indigo-600">{drivers.length} Shipper</span>
           </div>
           <p className="text-[10px] text-slate-400">
-            Tỷ lệ tài xế online sẵn sàng nhận chuyến: <b>100%</b>
+            Tỷ lệ tài xế online sẵn sàng nhận chuyến: <b>{driverOnlineRate}%</b> ({onlineDriversCount}/{drivers.length})
           </p>
         </div>
       </div>
