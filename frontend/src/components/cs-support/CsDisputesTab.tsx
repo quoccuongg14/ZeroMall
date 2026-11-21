@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatOrderId } from '../../utils/orderUtils';
 import { returnService, type ReturnData } from '../../services/return.service';
+import { CsReturnAiAnalytics } from './disputes/CsReturnAiAnalytics';
 
 interface CsDisputesTabProps {
   disputesLoading?: boolean;
@@ -25,7 +26,7 @@ export const CsDisputesTab: React.FC<CsDisputesTabProps> = ({
   handleAdminApproveDispute = async () => {},
   handleAdminRejectDispute = async () => {},
 }) => {
-  const [subTab, setSubTab] = useState<'ARBITRATION' | 'ALL_RETURNS' | 'LEGACY'>('ARBITRATION');
+  const [subTab, setSubTab] = useState<'ARBITRATION' | 'AI_INSIGHTS' | 'ALL_RETURNS' | 'LEGACY'>('AI_INSIGHTS');
   const [returnDisputes, setReturnDisputes] = useState<ReturnData[]>([]);
   const [loadingReturns, setLoadingReturns] = useState(false);
   const [arbitrationNotes, setArbitrationNotes] = useState<Record<string, string>>({});
@@ -126,6 +127,20 @@ export const CsDisputesTab: React.FC<CsDisputesTabProps> = ({
           </button>
 
           <button
+            onClick={() => setSubTab('AI_INSIGHTS')}
+            className={`pb-3 px-3 text-xs font-bold transition border-b-2 cursor-pointer flex items-center gap-2 ${
+              subTab === 'AI_INSIGHTS'
+                ? 'border-indigo-600 text-indigo-700 font-black'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>🤖 AI Phân Tích & Bản Đồ Hoàn Hàng</span>
+            <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase bg-indigo-100 text-indigo-700 border border-indigo-200">
+              AI Insight
+            </span>
+          </button>
+
+          <button
             onClick={() => setSubTab('ALL_RETURNS')}
             className={`pb-3 px-3 text-xs font-bold transition border-b-2 cursor-pointer flex items-center gap-2 ${
               subTab === 'ALL_RETURNS'
@@ -148,6 +163,16 @@ export const CsDisputesTab: React.FC<CsDisputesTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* SUB-TAB: AI PHÂN TÍCH LÝ DO & BẢN ĐỒ HOÀN HÀNG */}
+      {subTab === 'AI_INSIGHTS' && (
+        <CsReturnAiAnalytics
+          returnDisputes={returnDisputes}
+          onSelectReturn={(_returnId) => {
+            setSubTab('ALL_RETURNS');
+          }}
+        />
+      )}
 
       {/* SUB-TAB 1: PHÁN XỬ KHẨN CẤP */}
       {subTab === 'ARBITRATION' && (
