@@ -31,6 +31,7 @@ interface HubParcelTableProps {
   onSelectRouteForSorting: (hub: Hub) => void
   onOpenReconciliation: (trip: LinehaulTrip) => void
   onHandoverToSoc?: (shipmentIds: string[]) => Promise<void>
+  onTransferToChildHub?: (shipment: Shipment, childHub: Hub) => Promise<void>
   onUpdateStatus: (
     shipmentId: string,
     status: string,
@@ -93,6 +94,7 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
   onSelectRouteForSorting,
   onOpenReconciliation,
   onHandoverToSoc,
+  onTransferToChildHub,
   onUpdateStatus,
 }) => {
   const isSoc = currentHub?.type === 'SORTING_CENTER'
@@ -165,28 +167,23 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                 .filter((h) => !currentHub?.id || h.id !== currentHub.id)
                 .map((destHub) => {
                   const prov = (destHub.province || '').toLowerCase()
+                  const dist = (destHub.district || '').toLowerCase().replace(/^(quận|huyện|thành phố|tp\.?)\s+/i, '').trim()
+                  const isDestSoc = destHub.type === 'SORTING_CENTER'
                   const loadedIds = new Set(dockTrucks.flatMap((t) => t.shipments.map((item) => item.id)))
                   const matching = sortingList.filter((s) => {
                     if (loadedIds.has(s.id)) return false
                     const addr = (s.deliveryAddress || '').toLowerCase()
+                    if (!isDestSoc) {
+                      // Bưu cục phát lẻ (HUD): Chỉ gom đúng quận/huyện của bưu cục đó
+                      return (dist && addr.includes(dist)) || (destHub.name && addr.includes(destHub.name.toLowerCase()))
+                    }
                     if (prov.includes('hồ chí minh') || prov.includes('hcm')) {
-                      return (
-                        addr.includes('hồ chí minh') ||
-                        addr.includes('tp.hcm') ||
-                        addr.includes('tp hcm') ||
-                        addr.includes('sài gòn') ||
-                        addr.includes('tân bình') ||
-                        addr.includes('gò vấp') ||
-                        addr.includes('bình thạnh') ||
-                        addr.includes('quận 1') ||
-                        addr.includes('bình dương') ||
-                        addr.includes('đồng nai')
-                      )
+                      return addr.includes('hồ chí minh') || addr.includes('tp.hcm') || addr.includes('tp hcm') || addr.includes('sài gòn')
                     }
-                    if (prov.includes('hà nội') || prov.includes('mê linh')) {
-                      return addr.includes('hà nội') || addr.includes('mê linh') || addr.includes('cầu giấy')
+                    if (prov.includes('hà nội') || prov.includes('hn')) {
+                      return addr.includes('hà nội') || addr.includes('mê linh')
                     }
-                    return addr.includes(prov)
+                    return prov && addr.includes(prov)
                   })
 
                   if (matching.length === 0) return null
@@ -535,14 +532,40 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                               </button>
                             )
                           }
+                          const detectedChildHub = hubs.find((h) => {
+                            if (h.type !== 'DESTINATION_HUB') return false
+                            const addr = (s.deliveryAddress || '').toLowerCase()
+                            const dist = (h.district || '').toLowerCase().replace(/^(quận|huyện|thành phố|tp\.?)\s+/i, '').trim()
+                            const name = (h.name || '').toLowerCase()
+                            return (dist && addr.includes(dist)) || (name && addr.includes(name))
+                          })
+
                           return (
-                            <button
-                              onClick={() => onOpenDispatchSingle(s)}
-                              disabled={actionLoading}
-                              className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold rounded-lg text-[11px] transition cursor-pointer shadow-sm disabled:opacity-40 flex items-center gap-1 ml-auto"
-                            >
-                              <span>🚛</span> Đóng Xe Tải
-                            </button>
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              {detectedChildHub && onTransferToChildHub && (
+                                <button
+                                  type="button"
+                                  onClick={() => onTransferToChildHub(s, detectedChildHub)}
+                                  disabled={actionLoading}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg text-[11px] transition cursor-pointer shadow-sm disabled:opacity-40 flex items-center gap-1 shrink-0"
+                                  title={`Bàn giao bưu kiện về ${detectedChildHub.name} để tự động phân công Shipper giao hàng`}
+                                >
+                                  <span>🚚</span> Chuyển Về {detectedChildHub.code}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => onOpenDispatchSingle(s)}
+                                disabled={actionLoading}
+                                className={`px-2.5 py-1.5 font-bold rounded-lg text-[11px] transition cursor-pointer shadow-sm disabled:opacity-40 flex items-center gap-1 ${
+                                  detectedChildHub
+                                    ? 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700'
+                                    : 'bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white'
+                                }`}
+                                title="Đóng xe tải tuyến theo lô"
+                              >
+                                <span>🚛</span> Đóng Xe
+                              </button>
+                            </div>
                           )
                         })())}
 

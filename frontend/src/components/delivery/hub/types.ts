@@ -95,6 +95,7 @@ export interface HubOperatorStationProps {
   actionLoading: boolean
   assignedHubId?: string
   assignedHub?: Hub
+  onSwitchUser?: (user: any, token: string) => void
 }
 
 export type { ReturnData, LinehaulTrip, DockTruck, LinehaulShipment }

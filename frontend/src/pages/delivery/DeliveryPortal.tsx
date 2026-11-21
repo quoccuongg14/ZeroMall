@@ -430,6 +430,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
             actionLoading={actionLoading}
             assignedHub={assignedHub || undefined}
             assignedHubId={assignedHub?.id}
+            onSwitchUser={handleLoginSuccess}
           />
         </main>
 

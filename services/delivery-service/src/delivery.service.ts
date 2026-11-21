@@ -952,6 +952,76 @@ export class DeliveryService {
         });
       }
 
+      // 2.2 Tự động gán Shipper khi bưu kiện về tới Bưu cục phát địa phương (DESTINATION_HUB)
+      let autoAssignedDriver: any = null;
+      if (dto.status === 'AT_DESTINATION_HUB') {
+        const destHubId = dto.hubId || shipment.currentHubId;
+        const targetHub = destHubId ? await tx.hub.findUnique({ where: { id: destHubId } }) : null;
+        if (targetHub && targetHub.type === 'DESTINATION_HUB') {
+          const matchedDriver =
+            (await tx.driver.findFirst({
+              where: {
+                hubId: targetHub.id,
+                vehicleType: 'MOTORBIKE',
+              },
+            })) ||
+            (await tx.driver.findFirst({
+              where: { hubId: targetHub.id },
+            }));
+
+          if (matchedDriver) {
+            const existingAsn = await tx.deliveryAssignment.findFirst({
+              where: { shipmentId, type: 'DELIVERY' },
+            });
+
+            if (!existingAsn) {
+              await tx.deliveryAssignment.create({
+                data: {
+                  shipmentId,
+                  driverId: matchedDriver.id,
+                  type: 'DELIVERY',
+                  status: 'ASSIGNED',
+                },
+              });
+
+              await tx.shipment.update({
+                where: { id: shipmentId },
+                data: { status: 'DELIVERY_ASSIGNED' },
+              });
+
+              await tx.shipmentTracking.create({
+                data: {
+                  shipmentId,
+                  status: 'DELIVERY_ASSIGNED',
+                  driverId: matchedDriver.id,
+                  hubId: targetHub.id,
+                  title: 'Đã phân công Shipper giao hàng',
+                  description: `Bưu cục ${targetHub.name} đã tự động phân tuyến cho Shipper ${matchedDriver.name} (SĐT: ${matchedDriver.phone} - Xe: ${matchedDriver.vehicleNumber}). Bưu kiện đang chờ Shipper nhận lên xe đi phát.`,
+                  location: `${matchedDriver.name} (${matchedDriver.vehicleNumber})`,
+                },
+              });
+
+              autoAssignedDriver = {
+                id: matchedDriver.id,
+                name: matchedDriver.name,
+                phone: matchedDriver.phone,
+                vehicleNumber: matchedDriver.vehicleNumber,
+                hubName: targetHub.name,
+                hubCode: targetHub.code,
+                email:
+                  matchedDriver.phone === '0909888777'
+                    ? 'shipper_govap@zeromall.com'
+                    : matchedDriver.phone === '0909555444'
+                    ? 'shipper_binhthanh@zeromall.com'
+                    : matchedDriver.phone === '0908123456'
+                    ? 'shipper1@zeromall.com'
+                    : `shipper_${matchedDriver.phone.replace(/[^0-9]/g, '')}@spx.zeromall.vn`,
+              };
+            }
+          }
+        }
+      }
+
       // 2.1 Đồng bộ trạng thái đơn hàng hoàn (Return) nếu shipment này gắn với yêu cầu trả hàng
       const linkedReturn = await tx.return.findFirst({
         where: { shipmentId },
@@ -1007,7 +1077,10 @@ export class DeliveryService {
         });
       }
 
-      return updated;
+      return {
+        ...updated,
+        autoAssignedDriver,
+      };
     });
 
     // Đồng bộ trạng thái đơn hàng sang order-service & payment-service

@@ -41,7 +41,20 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   actionLoading,
   assignedHubId,
   assignedHub,
+  onSwitchUser,
 }) => {
+  const [assignedNotification, setAssignedNotification] = useState<{
+    shipmentTrackingNumber: string
+    orderId: string
+    buyerAddress: string
+    hubName: string
+    hubCode: string
+    driverName: string
+    driverPhone: string
+    vehicleNumber: string
+    driverEmail: string
+    driverUserId: string
+  } | null>(null)
   const currentHub = useMemo(() => {
     if (assignedHub) return assignedHub
     if (assignedHubId) {
@@ -246,13 +259,12 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           ['AT_ORIGIN_HUB', 'SORTING'].includes(s.status) &&
           s.currentHubId === currentHub?.id
       ),
-      // Tại SOC: Nếu có đơn đang lưu tại SOC cần đóng xe chuyển tiếp liên tỉnh
+      // Tại SOC: Các đơn bưu kiện đang lưu tại SOC (cả đơn từ xe tải liên tỉnh cập bến AT_DESTINATION_HUB) cần phân luồng đóng xe chuyển tiếp về HUD con hoặc SOC khác
       ...(isSoc
         ? shipments.filter(
             (s) =>
               s.status === 'AT_DESTINATION_HUB' &&
-              s.currentHubId === currentHub?.id &&
-              !isDestinedForCurrentHub(s, currentHub)
+              s.currentHubId === currentHub?.id
           )
         : []),
       ...returnAtHubAsShipments,
@@ -415,6 +427,52 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
       onRefresh()
     } catch (err: any) {
       alert(`Lỗi bàn giao về SOC: ${err.message || 'Lỗi không xác định'}`)
+    }
+  }
+
+  // Điều chuyển bưu kiện từ SOC về Bưu cục phát địa phương (HUD)
+  const handleTransferToChildHub = async (shipment: Shipment, targetChildHub: Hub) => {
+    const confirmMsg = `Xác nhận điều chuyển bưu kiện [${shipment.trackingNumber}] về [${targetChildHub.name}] để phân tuyến cho Shipper giao hàng?`
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      await onUpdateStatus(
+        shipment.id,
+        'AT_DESTINATION_HUB',
+        undefined,
+        targetChildHub.id,
+        `Trung tâm phân loại [${currentHub?.name || 'SOC'}] đã hoàn tất phân luồng và chuyển bưu kiện về [${targetChildHub.name}] để Shipper phát.`
+      )
+
+      const matchedDriver =
+        drivers.find(
+          (d) => d.hubId === targetChildHub.id && d.vehicleType === 'MOTORBIKE'
+        ) || drivers.find((d) => d.hubId === targetChildHub.id)
+
+      const driverEmail =
+        matchedDriver?.phone === '0909888777'
+          ? 'shipper_govap@zeromall.com'
+          : matchedDriver?.phone === '0909555444'
+          ? 'shipper_binhthanh@zeromall.com'
+          : matchedDriver?.phone === '0908123456'
+          ? 'shipper1@zeromall.com'
+          : `shipper_${(matchedDriver?.phone || '').replace(/[^0-9]/g, '')}@spx.zeromall.vn`
+
+      setAssignedNotification({
+        shipmentTrackingNumber: shipment.trackingNumber,
+        orderId: shipment.orderId,
+        buyerAddress: shipment.deliveryAddress,
+        hubName: targetChildHub.name,
+        hubCode: targetChildHub.code,
+        driverName: matchedDriver?.name || 'Shipper Bưu Cục',
+        driverPhone: matchedDriver?.phone || '',
+        vehicleNumber: matchedDriver?.vehicleNumber || 'Xe máy',
+        driverEmail: driverEmail,
+        driverUserId: matchedDriver?.userId || 'user-shipper-govap',
+      })
+      onRefresh()
+    } catch (err: any) {
+      alert(`Lỗi chuyển bưu kiện về HUD: ${err.message || 'Đã có lỗi xảy ra'}`)
     }
   }
 
@@ -843,6 +901,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               }}
               onOpenReconciliation={(trip) => setReconcilingTrip(trip)}
               onHandoverToSoc={handleHandoverToSoc}
+              onTransferToChildHub={handleTransferToChildHub}
               onUpdateStatus={onUpdateStatus}
             />
           </div>
@@ -938,6 +997,123 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         }}
         initialParentSocId={currentHub?.id}
       />
+
+      {/* MODAL 7: THÔNG BÁO TỰ ĐỘNG GÁN SHIPPER KHI BÀN GIAO VỀ HUD */}
+      {assignedNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-2xl max-w-lg w-full p-6 space-y-5 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                🛵
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Phân Tuyến Thành Công
+                </span>
+                <h3 className="text-base font-black text-slate-900 truncate mt-0.5">
+                  Đã Bàn Giao Về {assignedNotification.hubCode} & Gán Shipper
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignedNotification(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs text-slate-600">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200/80">
+                <span className="font-semibold text-slate-500">Mã vận đơn:</span>
+                <span className="font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                  {assignedNotification.shipmentTrackingNumber}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-500">Bưu cục tiếp nhận:</span>
+                <span className="font-bold text-slate-900">{assignedNotification.hubName}</span>
+              </div>
+              <div className="flex justify-between items-start gap-2">
+                <span className="font-semibold text-slate-500 shrink-0">Địa chỉ giao:</span>
+                <span className="font-medium text-slate-800 text-right line-clamp-2">
+                  {assignedNotification.buyerAddress}
+                </span>
+              </div>
+            </div>
+
+            {/* Khung Thông Tin Tài Xế & Tài Khoản Đăng Nhập */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">👤</span>
+                <span className="font-black text-xs text-emerald-950">Thông Tin Tài Xế Giao Hàng (Last-Mile Shipper):</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-white/90 rounded-xl border border-emerald-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Họ và tên</span>
+                  <div className="font-black text-slate-900 truncate">{assignedNotification.driverName}</div>
+                </div>
+                <div className="p-2.5 bg-white/90 rounded-xl border border-emerald-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase">SĐT & Biển số xe</span>
+                  <div className="font-bold text-slate-900 truncate">
+                    {assignedNotification.driverPhone} • {assignedNotification.vehicleNumber}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-1.5">
+                <div className="text-[11px] font-black text-emerald-800 flex items-center gap-1.5">
+                  <span>🔑</span>
+                  <span>Tài Khoản Đăng Nhập App Tài Xế:</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono bg-emerald-50/60 p-2 rounded-lg border border-emerald-100">
+                  <span className="text-slate-600 font-medium">Email:</span>
+                  <b className="text-emerald-900 select-all">{assignedNotification.driverEmail}</b>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono bg-emerald-50/60 p-2 rounded-lg border border-emerald-100">
+                  <span className="text-slate-600 font-medium">Mật khẩu:</span>
+                  <b className="text-emerald-900 font-black">123456</b>
+                </div>
+              </div>
+            </div>
+
+            {/* Nút hành động */}
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSwitchUser) {
+                    onSwitchUser(
+                      {
+                        id: assignedNotification.driverUserId,
+                        email: assignedNotification.driverEmail,
+                        name: assignedNotification.driverName,
+                        role: 'DRIVER',
+                        phoneNumber: assignedNotification.driverPhone,
+                      },
+                      'mock-shipper-token'
+                    )
+                  }
+                  setAssignedNotification(null)
+                }}
+                className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-2xl shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🚀</span>
+                <span>Chuyển Sang App Tài Xế Để Đi Giao Hàng</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAssignedNotification(null)}
+                className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
+              >
+                Ở Lại Trạm SOC
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
