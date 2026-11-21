@@ -160,6 +160,7 @@ export const AdminPortalLayout: React.FC<AdminPortalLayoutProps> = ({
           {activeNav === 'LINEHAUL' && (
             <AdminLinehaulFleetView
               hubs={hubs}
+              drivers={drivers}
               shipments={hubFilteredShipments}
               onSelectShipment={(s) => setSelectedShipment(s)}
             />
