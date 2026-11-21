@@ -844,7 +844,14 @@ export class DeliveryService {
         if (dto.truckNumber) {
           const sealPart = dto.sealNumber ? ` • Niêm phong Seal: [${dto.sealNumber}]` : '';
           const driverPart = dto.truckDriver ? ` • Bác tài: ${dto.truckDriver}${dto.truckDriverPhone ? ` (${dto.truckDriverPhone})` : ''}` : '';
-          desc = `Bưu kiện đã được xếp lên Xe tải Linehaul [${dto.truckNumber}]${driverPart}${sealPart}. Xe đang vận chuyển trên tuyến liên tỉnh đến bưu cục phát.`;
+          let destDesc = 'đến bưu cục đích';
+          if (dto.targetHubId) {
+            const destHub = await this.prisma.hub.findUnique({ where: { id: dto.targetHubId } });
+            if (destHub) {
+              destDesc = `đến ${destHub.name}`;
+            }
+          }
+          desc = `Bưu kiện đã được xếp lên Xe tải Linehaul [${dto.truckNumber}]${driverPart}${sealPart}. Xe đang vận chuyển trên tuyến liên tỉnh ${destDesc}.`;
           location = `Xe tải ${dto.truckNumber}`;
         } else {
           desc = dto.note || `Bưu kiện đã rời kho xuất phát và đang trên xe tải trung chuyển đến Bưu cục phát hàng địa phương.`;

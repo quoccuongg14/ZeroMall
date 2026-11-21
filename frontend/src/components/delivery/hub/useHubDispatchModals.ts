@@ -194,7 +194,7 @@ export function useHubDispatchModals(
           shipmentId,
           'IN_TRANSIT',
           undefined,
-          currentHub?.id,
+          data.targetHubId || currentHub?.id,
           undefined,
           {
             truckNumber: data.truckNumber,
