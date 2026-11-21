@@ -42,6 +42,10 @@ interface Hub {
   drivers?: Driver[]
   _count?: { shipments?: number; drivers?: number }
   createdAt?: string
+  parentSocId?: string | null
+  parentSoc?: { id: string; code: string; name: string; province: string } | null
+  childHubs?: Hub[]
+  email?: string | null
 }
 
 interface LogisticsHubsFleetTabProps {
@@ -50,18 +54,31 @@ interface LogisticsHubsFleetTabProps {
   shipments?: any[]
   onViewStation?: (hub: Hub) => void
   onViewShipments?: (hub: Hub) => void
+  onRefresh?: () => void
 }
 
 // Helper phân loại Hub vào Cụm Mega SOC chủ quản theo địa lý chuẩn TMĐT
-export const getParentSoc = (hub: { province?: string; code?: string }) => {
+export const getParentSoc = (hub: { province?: string; code?: string; parentSoc?: any; parentSocId?: string | null }) => {
+  if (hub.parentSoc) {
+    return {
+      id: hub.parentSoc.id,
+      code: hub.parentSoc.code,
+      name: hub.parentSoc.name,
+      shortName: hub.parentSoc.name.replace(/^(Trung Tâm Phân Loại|Kho Tổng)\s+/i, ''),
+      region: hub.parentSoc.province
+    }
+  }
   const p = (hub.province || '').toLowerCase()
-  if (p.includes('hồ chí minh') || p.includes('đồng nai') || p.includes('bình dương')) {
+  if (p.includes('hồ chí minh') || p.includes('đồng nai') || p.includes('bình dương') || p.includes('tây ninh') || p.includes('bà rịa')) {
     return { id: 'hub-hcm-01', code: 'HCM01', name: 'Trung Tâm Phân Loại Bắc Củ Chi SOC', shortName: 'Bắc Củ Chi SOC', region: 'Khu Vực Nam Bộ' }
   }
-  if (p.includes('hà nội') || p.includes('hoà bình') || p.includes('hòa bình') || p.includes('bắc ninh')) {
+  if (p.includes('hải phòng') || p.includes('quảng ninh')) {
+    return { id: 'd3b8a108-0eaf-49bf-9538-82589781fa0f', code: 'HUB692', name: 'SOC HẢI PHÒNG', shortName: 'SOC Hải Phòng', region: 'Khu Vực Duyên Hải Bắc Bộ' }
+  }
+  if (p.includes('hà nội') || p.includes('hoà bình') || p.includes('hòa bình') || p.includes('bắc ninh') || p.includes('vĩnh phúc') || p.includes('hưng yên') || p.includes('hải dương')) {
     return { id: 'hub-hn-01', code: 'HN01', name: 'Trung Tâm Phân Loại Mê Linh SOC', shortName: 'Mê Linh SOC', region: 'Khu Vực Miền Bắc' }
   }
-  if (p.includes('đà nẵng') || p.includes('quảng nam') || p.includes('huế')) {
+  if (p.includes('đà nẵng') || p.includes('quảng nam') || p.includes('huế') || p.includes('quảng ngãi')) {
     return { id: 'hub-dng-soc', code: 'DNG01', name: 'Trung Tâm Phân Loại Hòa Cầm SOC', shortName: 'Hòa Cầm SOC', region: 'Khu Vực Miền Trung' }
   }
   return { id: 'hub-ct-soc', code: 'CT01', name: 'Trung Tâm Phân Loại Trà Nóc SOC', shortName: 'Trà Nóc SOC', region: 'Khu Vực Tây Nam Bộ' }
@@ -73,8 +90,13 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
   shipments = [],
   onViewStation,
   onViewShipments,
+  onRefresh,
 }) => {
   const [subView, setSubView] = useState<'HUBS' | 'DRIVERS'>(initialSubView)
+  const [hubViewMode, setHubViewMode] = useState<'HIERARCHY' | 'FLAT'>('HIERARCHY')
+  const [expandedSocIds, setExpandedSocIds] = useState<Set<string>>(new Set())
+  const [selectedParentSocId, setSelectedParentSocId] = useState<string | null>(null)
+
   const [hubTypeFilter, setHubTypeFilter] = useState<'ALL' | 'DESTINATION_HUB' | 'SORTING_CENTER'>('ALL')
   const [vehicleFilter, setVehicleFilter] = useState<'ALL' | 'MOTORBIKE' | 'VAN' | 'TRUCK'>('ALL')
   const [hubs, setHubs] = useState<Hub[]>([])
@@ -106,7 +128,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     hubId: '',
     assignedDistrict: '',
     assignedProvince: '',
-    operatingArea: ''
+    operatingArea: '',
+    email: '',
+    password: '123456'
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -434,14 +458,25 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     }
   }
 
-  const openAddHubModal = () => {
+  const openAddHubModal = (parentSocId?: string) => {
+    setSelectedParentSocId(parentSocId || null)
     setEditingHub(null)
     setIsHubModalOpen(true)
   }
 
   const openEditHubModal = (hub: Hub) => {
+    setSelectedParentSocId(hub.parentSocId || null)
     setEditingHub(hub)
     setIsHubModalOpen(true)
+  }
+
+  const toggleSocExpand = (socId: string) => {
+    setExpandedSocIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(socId)) next.delete(socId)
+      else next.add(socId)
+      return next
+    })
   }
 
   const openAddDriverModal = (hub?: Hub, forcedVehicleType?: string) => {
@@ -465,7 +500,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
       hubId: targetHubId,
       assignedDistrict: chosenHub?.district || '',
       assignedProvince: chosenHub?.province || '',
-      operatingArea: ''
+      operatingArea: '',
+      email: '',
+      password: '123456'
     })
     setIsDriverModalOpen(true)
   }
@@ -480,7 +517,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
       hubId: driver.hubId,
       assignedDistrict: driver.assignedDistrict || '',
       assignedProvince: driver.assignedProvince || '',
-      operatingArea: driver.operatingArea || ''
+      operatingArea: driver.operatingArea || '',
+      email: (driver as any).email || '',
+      password: ''
     })
     setIsDriverModalOpen(true)
   }
@@ -582,7 +621,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
             {subView === 'HUBS' ? (
               <button
-                onClick={openAddHubModal}
+                onClick={() => openAddHubModal()}
                 className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-3xs transition cursor-pointer flex items-center gap-2"
               >
                 <span>➕</span> Thiết Lập Trạm Mới
@@ -844,212 +883,440 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
           </div>
         )}
 
-        {/* VIEW 1: BẢNG QUẢN LÝ BƯU CỤC & SOC */}
+        {/* VIEW 1: QUẢN LÝ BƯU CỤC & SOC - HIERARCHY hoặc FLAT */}
         {subView === 'HUBS' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-4 min-w-20">Mã Trạm</th>
-                  <th className="py-3 px-4 min-w-64">Tên Trạm & Cơ Sở</th>
-                  <th className="py-3 px-4 min-w-48">Vị Trí & Khu Vực</th>
-                  <th className="py-3 px-4 text-center min-w-36">Tải Trọng / Kiện Hàng</th>
-                  <th className="py-3 px-4 text-center min-w-36">Đội Ngũ Phụ Trách</th>
-                  <th className="py-3 px-4 text-center min-w-24">Trạng Thái</th>
-                  <th className="py-3 px-4 text-right min-w-44">Quản Trị Cơ Sở</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                      <div className="inline-block w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></div>
-                      <p>Đang tải dữ liệu mạng lưới bưu cục...</p>
-                    </td>
-                  </tr>
-                ) : filteredHubs.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                      Không tìm thấy bưu cục hoặc trạm nào phù hợp với bộ lọc.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredHubs.map((hub) => {
-                    const hubDrivers = allDrivers.filter(d => d.hubId === hub.id)
-                    const isSOC = hub.type === 'SORTING_CENTER'
-                    const motorDrivers = hubDrivers.filter(d => d.vehicleType === 'MOTORBIKE')
-                    const vanDrivers = hubDrivers.filter(d => d.vehicleType === 'VAN')
-                    const truckFleet = hubDrivers.filter(d => d.vehicleType === 'TRUCK')
-                    const lastMileCount = motorDrivers.length + vanDrivers.length
+          <div>
+            {/* Toggle HIERARCHY vs FLAT */}
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 bg-white">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl text-[11px]">
+                <button
+                  onClick={() => setHubViewMode('HIERARCHY')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    hubViewMode === 'HIERARCHY'
+                      ? 'bg-white text-slate-900 shadow-3xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span>🏛️</span> Cụm Mega SOC & Vệ Tinh
+                </button>
+                <button
+                  onClick={() => setHubViewMode('FLAT')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    hubViewMode === 'FLAT'
+                      ? 'bg-white text-slate-900 shadow-3xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span>📋</span> Toàn Bộ Trạm Dạng Bảng
+                </button>
+              </div>
+            </div>
 
-                    // Tải trọng bưu kiện thực tế tại trạm từ CSDL
-                    const hubParcels = (shipments || []).filter(
-                      (s: any) => s.currentHubId === hub.id || s.currentHub?.code === hub.code || s.currentHub?.id === hub.id
-                    )
-                    const inStockCount = hubParcels.filter((s: any) =>
-                      ['AT_ORIGIN_HUB', 'SORTING', 'AT_DESTINATION_HUB', 'AT_SORTING_CENTER', 'SORTED', 'WAITING_PICKUP', 'ARRIVED_HUB', 'READY_TO_DISPATCH'].includes(s.status)
-                    ).length
-                    const deliveringCount = hubParcels.filter((s: any) => s.status === 'OUT_FOR_DELIVERY').length
+            {loading ? (
+              <div className="py-16 text-center text-slate-400 font-medium">
+                <div className="inline-block w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+                <p>Đang tải dữ liệu mạng lưới bưu cục...</p>
+              </div>
+            ) : hubViewMode === 'HIERARCHY' ? (
+              /* ============ HIERARCHY VIEW ============ */
+              <div className="p-4 space-y-4">
+                {(() => {
+                  // Group: Mega SOCs
+                  const socList = hubs.filter(h => h.type === 'SORTING_CENTER')
+                  // Orphan hubs: delivery hubs with no parentSocId or parentSocId not matching any SOC
+                  const socIds = new Set(socList.map(s => s.id))
+                  const orphanHubs = hubs.filter(h => h.type !== 'SORTING_CENTER' && (!h.parentSocId || !socIds.has(h.parentSocId)))
 
+                  // Apply search filter
+                  const matchesSearch = (h: Hub) => {
+                    const query = searchQuery.toLowerCase().trim()
+                    if (!query) return true
+                    return h.name.toLowerCase().includes(query) ||
+                      h.code.toLowerCase().includes(query) ||
+                      h.province.toLowerCase().includes(query) ||
+                      h.district.toLowerCase().includes(query) ||
+                      h.address.toLowerCase().includes(query)
+                  }
+
+                  // Filter SOCs
+                  const filteredSocs = socList.filter(soc => {
+                    const childrenOfSoc = hubs.filter(h => h.parentSocId === soc.id && h.type !== 'SORTING_CENTER')
+                    const matchesProv = provinceFilter === 'ALL' || soc.province === provinceFilter || childrenOfSoc.some(c => c.province === provinceFilter)
+                    const matchesQ = matchesSearch(soc) || childrenOfSoc.some(c => matchesSearch(c))
+                    return matchesProv && matchesQ
+                  })
+
+                  if (filteredSocs.length === 0 && orphanHubs.filter(matchesSearch).length === 0) {
                     return (
-                      <tr key={hub.id} className="hover:bg-slate-50/70 transition">
-                        {/* Hub Code */}
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                          <span className={`px-2 py-0.5 rounded border ${
-                            isSOC 
-                              ? 'bg-sky-50 border-sky-200 text-sky-800' 
-                              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          }`}>
-                            {hub.code}
-                          </span>
-                        </td>
+                      <div className="py-12 text-center text-slate-400 font-medium">
+                        Không tìm thấy Mega SOC hoặc bưu cục nào phù hợp với bộ lọc.
+                      </div>
+                    )
+                  }
 
-                        {/* Hub Name & Category Badge */}
-                        <td className="py-3.5 px-4 min-w-64">
-                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
-                            <span>{isSOC ? '🏭' : '🏢'}</span>
-                            <span className="whitespace-nowrap font-black">{hub.name}</span>
-                            {isSOC ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-sky-50 text-sky-800 border border-sky-200">
-                                Mega SOC
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                Hub Phát
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <span className="text-[10px] text-slate-400 font-mono font-medium">ID: #{hub.id.slice(-6)}</span>
-                            {!isSOC && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
-                                <span>🏭</span> Trực thuộc: {getParentSoc(hub).shortName}
-                              </span>
-                            )}
-                          </div>
-                        </td>
+                  return (
+                    <>
+                      {filteredSocs.map((soc) => {
+                        const childrenOfSoc = hubs.filter(h => h.parentSocId === soc.id && h.type !== 'SORTING_CENTER').filter(matchesSearch)
+                        const isExpanded = expandedSocIds.has(soc.id)
+                        const socDrivers = allDrivers.filter(d => d.hubId === soc.id)
+                        const socTrucks = socDrivers.filter(d => d.vehicleType === 'TRUCK')
 
-                        {/* Address */}
-                        <td className="py-3.5 px-4 min-w-48">
-                          <p className="font-semibold text-slate-800" title={hub.address}>
-                            {hub.address}
-                          </p>
-                          <p className="text-[11px] text-slate-500 font-medium">
-                            {hub.district ? `${hub.district}, ` : ''}{hub.province}
-                          </p>
-                        </td>
+                        // Aggregate child hub stats
+                        const totalChildShippers = childrenOfSoc.reduce((sum, ch) => {
+                          return sum + allDrivers.filter(d => d.hubId === ch.id && d.vehicleType !== 'TRUCK').length
+                        }, 0)
 
-                        {/* Tải Trọng / Kiện Hàng Thực Tế */}
-                        <td className="py-3.5 px-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() => onViewShipments?.(hub)}
-                            className="inline-flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 transition cursor-pointer min-w-32 text-center"
-                            title="Nhấp để lọc danh sách vận đơn của cơ sở này"
-                          >
-                            <span className="inline-flex items-center gap-1 text-xs font-black text-slate-900">
-                              <span>📦</span> {inStockCount} kiện tồn kho
-                            </span>
-                            {deliveringCount > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 mt-0.5">
-                                <span>🛵</span> {deliveringCount} đang phát
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                                {isSOC ? 'Kho trung chuyển' : '0 kiện đang phát'}
-                              </span>
-                            )}
-                          </button>
-                        </td>
+                        // Parcels at SOC
+                        const socParcels = (shipments || []).filter(
+                          (s: any) => s.currentHubId === soc.id || s.currentHub?.id === soc.id
+                        )
+                        const socInStock = socParcels.filter((s: any) =>
+                          ['AT_ORIGIN_HUB', 'SORTING', 'AT_SORTING_CENTER', 'SORTED', 'WAITING_PICKUP', 'ARRIVED_HUB', 'READY_TO_DISPATCH'].includes(s.status)
+                        ).length
 
-                        {/* Drivers Assigned Breakdown */}
-                        <td className="py-3.5 px-4 text-center">
-                          <button
-                            onClick={() => setSelectedHubForDrivers(hub)}
-                            className="inline-flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 transition cursor-pointer min-w-32"
-                          >
-                            {isSOC ? (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                                  <span>🚫</span> 0 Shipper phát
-                                </span>
-                                <span className="inline-flex items-center gap-1 text-xs font-black text-sky-800 mt-0.5">
-                                  <span>🚛</span> {truckFleet.length} Xe Tải Tuyến
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center gap-1 text-xs font-black text-emerald-800">
-                                  <span>🛵</span> {lastMileCount} Shipper phát
-                                </span>
-                                {truckFleet.length > 0 && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 mt-0.5">
-                                    <span>🚛</span> {truckFleet.length} Xe gom
-                                  </span>
+                        return (
+                          <div key={soc.id} className="border border-sky-200/80 rounded-2xl overflow-hidden bg-white shadow-sm">
+                            {/* SOC Header Card */}
+                            <div className="bg-gradient-to-r from-sky-50 to-slate-50 p-4 flex flex-col lg:flex-row items-start lg:items-center gap-3">
+                              {/* SOC Identity */}
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="w-11 h-11 rounded-xl bg-sky-100 border border-sky-200 flex items-center justify-center text-xl shrink-0">
+                                  🏭
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-bold text-sky-800 text-xs px-1.5 py-0.5 bg-sky-100 border border-sky-200 rounded">{soc.code}</span>
+                                    <span className="font-black text-slate-900 text-sm truncate">{soc.name}</span>
+                                    <span className="px-2 py-0.5 rounded text-[9px] font-black bg-sky-600 text-white uppercase tracking-wider">Trung Tâm Phân Loại SOC</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium flex-wrap">
+                                    <span>📍 {soc.address}, {soc.district}, {soc.province}</span>
+                                    {soc.email && (
+                                      <span className="px-1.5 py-0.5 bg-amber-50 border border-amber-200 rounded text-amber-800 font-bold text-[10px]">
+                                        📧 {soc.email}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* SOC Stats */}
+                              <div className="flex items-center gap-3 flex-wrap shrink-0 text-[11px]">
+                                <div className="flex flex-col items-center px-3 py-1.5 bg-white rounded-xl border border-slate-200 min-w-16">
+                                  <span className="font-black text-sky-800 text-base">{childrenOfSoc.length}</span>
+                                  <span className="text-slate-500 font-bold">Hub Con</span>
+                                </div>
+                                <div className="flex flex-col items-center px-3 py-1.5 bg-white rounded-xl border border-slate-200 min-w-16">
+                                  <span className="font-black text-sky-800 text-base">{socTrucks.length}</span>
+                                  <span className="text-slate-500 font-bold">Xe Tải</span>
+                                </div>
+                                <div className="flex flex-col items-center px-3 py-1.5 bg-white rounded-xl border border-slate-200 min-w-16">
+                                  <span className="font-black text-emerald-700 text-base">{totalChildShippers}</span>
+                                  <span className="text-slate-500 font-bold">Shipper</span>
+                                </div>
+                                <div className="flex flex-col items-center px-3 py-1.5 bg-white rounded-xl border border-slate-200 min-w-16">
+                                  <span className="font-black text-amber-700 text-base">{socInStock}</span>
+                                  <span className="text-slate-500 font-bold">Kiện Kho</span>
+                                </div>
+                              </div>
+
+                              {/* SOC Actions */}
+                              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                                <button
+                                  onClick={() => onViewStation?.(soc)}
+                                  className="px-3 py-2 bg-slate-900 hover:bg-sky-700 text-white rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs"
+                                >
+                                  <span>⚡</span> Vào Trạm SOC
+                                </button>
+                                <button
+                                  onClick={() => openAddHubModal(soc.id)}
+                                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs"
+                                >
+                                  <span>➕</span> Thêm Hub Con
+                                </button>
+                                <button
+                                  onClick={() => openAddDriverModal(soc, 'TRUCK')}
+                                  className="px-2.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
+                                >
+                                  <span>🚛</span> + Xe Tải
+                                </button>
+                                <button
+                                  onClick={() => openEditHubModal(soc)}
+                                  className="p-2 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-sm"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => toggleSocExpand(soc.id)}
+                                  className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
+                                >
+                                  {isExpanded ? '▲ Ẩn' : '▼ Xem'} Hub Con ({childrenOfSoc.length})
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded: Child Hubs Table */}
+                            {isExpanded && (
+                              <div className="border-t border-sky-200/50">
+                                {childrenOfSoc.length === 0 ? (
+                                  <div className="py-8 text-center text-slate-400 text-xs font-medium">
+                                    <span className="text-2xl block mb-1">📭</span>
+                                    Chưa có Bưu Cục Giao Hàng nào trực thuộc SOC này.
+                                    <button
+                                      onClick={() => openAddHubModal(soc.id)}
+                                      className="ml-2 text-emerald-600 hover:text-emerald-800 font-bold underline cursor-pointer"
+                                    >
+                                      ➕ Thêm Hub Con
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <table className="w-full text-left text-xs text-slate-700">
+                                    <thead className="bg-sky-50/50 text-slate-500 font-bold uppercase text-[10px] border-b border-sky-100">
+                                      <tr>
+                                        <th className="py-2.5 px-4 pl-14 min-w-20">Mã Hub</th>
+                                        <th className="py-2.5 px-4 min-w-56">Tên Bưu Cục</th>
+                                        <th className="py-2.5 px-4 min-w-44">Vị Trí</th>
+                                        <th className="py-2.5 px-4 text-center min-w-28">Đội Ngũ</th>
+                                        <th className="py-2.5 px-4 text-center min-w-24">Gmail Trạm</th>
+                                        <th className="py-2.5 px-4 text-center min-w-20">Trạng Thái</th>
+                                        <th className="py-2.5 px-4 text-right min-w-48">Thao Tác</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100/80">
+                                      {childrenOfSoc.map((childHub) => {
+                                        const childDrivers = allDrivers.filter(d => d.hubId === childHub.id)
+                                        const childShippers = childDrivers.filter(d => d.vehicleType !== 'TRUCK')
+                                        const childTrucks = childDrivers.filter(d => d.vehicleType === 'TRUCK')
+
+                                        return (
+                                          <tr key={childHub.id} className="hover:bg-emerald-50/30 transition">
+                                            <td className="py-3 px-4 pl-14 font-mono font-bold text-emerald-800">
+                                              <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800">
+                                                {childHub.code}
+                                              </span>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                              <div className="flex items-center gap-2">
+                                                <span>🏢</span>
+                                                <span className="font-bold text-slate-900 text-xs">{childHub.name}</span>
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">Hub Phát</span>
+                                              </div>
+                                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 pl-6">ID: {childHub.id.substring(0, 12)}...</div>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                              <p className="font-medium text-slate-700 text-xs" title={childHub.address}>{childHub.address}</p>
+                                              <p className="text-[10px] text-slate-400 font-medium">{childHub.district}, {childHub.province}</p>
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                              <div className="flex flex-col items-center gap-0.5">
+                                                <span className="text-xs font-black text-emerald-800">🛵 {childShippers.length} Shipper</span>
+                                                {childTrucks.length > 0 && (
+                                                  <span className="text-[10px] font-medium text-slate-500">🚛 {childTrucks.length} Xe gom</span>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                              {childHub.email ? (
+                                                <span className="inline-block px-1.5 py-0.5 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-800 font-bold truncate max-w-28" title={childHub.email}>
+                                                  📧 {childHub.email}
+                                                </span>
+                                              ) : (
+                                                <span className="text-[10px] text-slate-300 font-medium">—</span>
+                                              )}
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                HOẠT ĐỘNG
+                                              </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-right">
+                                              <div className="flex items-center justify-end gap-1">
+                                                <button
+                                                  onClick={() => onViewStation?.(childHub)}
+                                                  className="px-2 py-1.5 bg-slate-900 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer text-[11px] font-bold flex items-center gap-1 shadow-2xs"
+                                                >
+                                                  <span>⚡</span> Vào Trạm
+                                                </button>
+                                                <button
+                                                  onClick={() => openAddDriverModal(childHub, 'MOTORBIKE')}
+                                                  className="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition cursor-pointer text-[11px] font-bold flex items-center gap-1"
+                                                >
+                                                  <span>➕</span> Shipper
+                                                </button>
+                                                <button
+                                                  onClick={() => openEditHubModal(childHub)}
+                                                  className="p-1.5 text-slate-400 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-sm"
+                                                >
+                                                  ✏️
+                                                </button>
+                                                <button
+                                                  onClick={() => handleDeleteHub(childHub)}
+                                                  className="p-1.5 text-rose-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer text-sm"
+                                                >
+                                                  🗑️
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
                                 )}
-                              </>
+                              </div>
                             )}
-                          </button>
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3.5 px-4 text-center">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            HOẠT ĐỘNG
-                          </span>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Nút Vào Trạm Khai Thác Live */}
-                            <button
-                              onClick={() => onViewStation?.(hub)}
-                              title={`Mở trạm vận hành và máy quét của ${hub.name}`}
-                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs"
-                            >
-                              <span>⚡</span> Vào Trạm
-                            </button>
-
-                            {isSOC ? (
-                              <button
-                                onClick={() => openAddDriverModal(hub, 'TRUCK')}
-                                title="Thêm tài xế xe tải tuyến cho kho SOC"
-                                className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
-                              >
-                                <span>🚛</span> + Tuyến
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => openAddDriverModal(hub, 'MOTORBIKE')}
-                                title="Thêm Shipper giao hàng cho bưu cục này"
-                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
-                              >
-                                <span>➕</span> Shipper
-                              </button>
-                            )}
-                            <button
-                              onClick={() => openEditHubModal(hub)}
-                              title="Chỉnh sửa thông tin cơ sở"
-                              className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-sm font-semibold"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => handleDeleteHub(hub)}
-                              title="Xóa cơ sở"
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer text-sm font-semibold"
-                            >
-                              🗑️
-                            </button>
                           </div>
+                        )
+                      })}
+
+                      {/* Orphan Hubs - Delivery Hubs without a parent SOC */}
+                      {orphanHubs.filter(matchesSearch).length > 0 && (
+                        <div className="border border-amber-200/80 rounded-2xl overflow-hidden bg-white shadow-sm">
+                          <div className="bg-amber-50/50 p-4 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-lg shrink-0">
+                              ⚠️
+                            </div>
+                            <div>
+                              <div className="font-black text-amber-900 text-sm">Hub Chưa Gắn SOC Chủ Quản</div>
+                              <div className="text-[11px] text-amber-700 font-medium">Các bưu cục chưa được phân bổ về Mega SOC nào. Vui lòng chỉnh sửa và gắn SOC chủ quản.</div>
+                            </div>
+                            <span className="ml-auto px-3 py-1 bg-amber-200 text-amber-900 rounded-full text-xs font-black">{orphanHubs.filter(matchesSearch).length}</span>
+                          </div>
+                          <table className="w-full text-left text-xs text-slate-700 border-t border-amber-200/50">
+                            <tbody className="divide-y divide-slate-100">
+                              {orphanHubs.filter(matchesSearch).map(hub => {
+                                const hubDrivers = allDrivers.filter(d => d.hubId === hub.id)
+                                const shipperCount = hubDrivers.filter(d => d.vehicleType !== 'TRUCK').length
+                                return (
+                                  <tr key={hub.id} className="hover:bg-amber-50/30 transition">
+                                    <td className="py-3 px-4 font-mono font-bold text-emerald-800 w-24">
+                                      <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200">{hub.code}</span>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <div className="flex items-center gap-2">
+                                        <span>🏢</span>
+                                        <span className="font-bold text-slate-900 text-xs">{hub.name}</span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 mt-0.5 pl-6">{hub.district}, {hub.province}</p>
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <span className="text-xs font-bold text-emerald-700">🛵 {shipperCount} Shipper</span>
+                                    </td>
+                                    <td className="py-3 px-4 text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <button onClick={() => onViewStation?.(hub)} className="px-2 py-1.5 bg-slate-900 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition">
+                                          <span>⚡</span> Vào Trạm
+                                        </button>
+                                        <button onClick={() => openEditHubModal(hub)} className="p-1.5 text-slate-400 hover:text-sky-700 hover:bg-sky-50 rounded-lg cursor-pointer transition text-sm">✏️</button>
+                                        <button onClick={() => handleDeleteHub(hub)} className="p-1.5 text-rose-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer transition text-sm">🗑️</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            ) : (
+              /* ============ FLAT TABLE VIEW ============ */
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4 min-w-20">Mã Trạm</th>
+                      <th className="py-3 px-4 min-w-64">Tên Trạm & Cơ Sở</th>
+                      <th className="py-3 px-4 min-w-48">Vị Trí & Khu Vực</th>
+                      <th className="py-3 px-4 text-center min-w-36">Đội Ngũ Phụ Trách</th>
+                      <th className="py-3 px-4 text-center min-w-24">Trạng Thái</th>
+                      <th className="py-3 px-4 text-right min-w-44">Quản Trị Cơ Sở</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredHubs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                          Không tìm thấy bưu cục hoặc trạm nào phù hợp với bộ lọc.
                         </td>
                       </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                    ) : (
+                      filteredHubs.map((hub) => {
+                        const hubDrivers = allDrivers.filter(d => d.hubId === hub.id)
+                        const isSOC = hub.type === 'SORTING_CENTER'
+                        const lastMileCount = hubDrivers.filter(d => d.vehicleType !== 'TRUCK').length
+                        const truckCount = hubDrivers.filter(d => d.vehicleType === 'TRUCK').length
+
+                        return (
+                          <tr key={hub.id} className="hover:bg-slate-50/70 transition">
+                            <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                              <span className={`px-2 py-0.5 rounded border ${isSOC ? 'bg-sky-50 border-sky-200 text-sky-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                                {hub.code}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 min-w-64">
+                              <div className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                                <span>{isSOC ? '🏭' : '🏢'}</span>
+                                <span className="font-black">{hub.name}</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${isSOC ? 'bg-sky-50 text-sky-800 border-sky-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`}>
+                                  {isSOC ? 'Mega SOC' : 'Hub Phát'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-slate-400 font-mono">ID: #{hub.id.slice(-6)}</span>
+                                {!isSOC && (
+                                  <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.2 rounded">
+                                    🏭 Trực thuộc: {getParentSoc(hub).shortName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 min-w-48">
+                              <p className="font-semibold text-slate-800">{hub.address}</p>
+                              <p className="text-[11px] text-slate-500 font-medium">{hub.district ? `${hub.district}, ` : ''}{hub.province}</p>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {isSOC ? (
+                                <span className="text-xs font-black text-sky-800">🚛 {truckCount} Xe Tải</span>
+                              ) : (
+                                <span className="text-xs font-black text-emerald-800">🛵 {lastMileCount} Shipper</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                HOẠT ĐỘNG
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button onClick={() => onViewStation?.(hub)} className="px-2.5 py-1.5 bg-slate-900 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs">
+                                  <span>⚡</span> Vào Trạm
+                                </button>
+                                {isSOC ? (
+                                  <button onClick={() => openAddDriverModal(hub, 'TRUCK')} className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1">
+                                    <span>🚛</span> + Tuyến
+                                  </button>
+                                ) : (
+                                  <button onClick={() => openAddDriverModal(hub, 'MOTORBIKE')} className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1">
+                                    <span>➕</span> Shipper
+                                  </button>
+                                )}
+                                <button onClick={() => openEditHubModal(hub)} className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-sm">✏️</button>
+                                <button onClick={() => handleDeleteHub(hub)} className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer text-sm">🗑️</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -1519,8 +1786,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
         isOpen={isHubModalOpen}
         onClose={() => setIsHubModalOpen(false)}
         editingHub={editingHub}
-        onSuccess={fetchData}
+        onSuccess={() => { fetchData(); onRefresh?.(); }}
         triggerAuditLog={triggerAuditLog}
+        initialParentSocId={selectedParentSocId}
       />
 
       {/* MODAL 2: Thêm / Sửa Tài Xế */}
@@ -1708,6 +1976,49 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                     placeholder="VD: Quận Tân Bình..."
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-emerald-600 focus:bg-white transition"
                   />
+                </div>
+              </div>
+
+              {/* Cấp Tài Khoản Cho Tài Xế / Shipper */}
+              <div className="p-4 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🔐</span>
+                  <div>
+                    <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                      Tài Khoản Đăng Nhập App Cho Tài Xế
+                    </h4>
+                    <p className="text-[10px] text-emerald-700 font-medium">
+                      Tài xế dùng tài khoản này để đăng nhập vào app nhận đơn tại <span className="font-mono font-bold">http://delivery.zeromall.local:3000</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">
+                      📧 Gmail / Email Tài Xế
+                    </label>
+                    <input
+                      type="email"
+                      value={driverFormData.email || ''}
+                      onChange={(e) => setDriverFormData({ ...driverFormData, email: e.target.value })}
+                      placeholder={driverFormData.phone ? `shipper_${driverFormData.phone}@spx.zeromall.vn` : 'vd: shipper_danang@zeromall.com'}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700">
+                      🔑 Mật Khẩu Đăng Nhập App
+                    </label>
+                    <input
+                      type="text"
+                      value={driverFormData.password || ''}
+                      onChange={(e) => setDriverFormData({ ...driverFormData, password: e.target.value })}
+                      placeholder="Mặc định: 123456"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-mono font-medium focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
                 </div>
               </div>
 

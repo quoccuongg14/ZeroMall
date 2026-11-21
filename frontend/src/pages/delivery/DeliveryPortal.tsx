@@ -70,6 +70,7 @@ interface Hub {
   address: string
   province: string
   district: string
+  email?: string
 }
 
 import { DeliveryAuthForm } from '../../components/delivery/DeliveryAuthForm'
@@ -254,13 +255,27 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
 
   // 2. NẾU LÀ NHÂN VIÊN KHO (HUB_OPERATOR) -> HIỂN THỊ TRẠM PHÂN LOẠI & MÁY QUÉT CỦA BƯU CỤC ĐÓ
   if (currentUser.role === 'HUB_OPERATOR') {
-    // Tự động tìm Hub phù hợp theo email/tên nhân viên
+    // Tự động tìm Hub phù hợp theo hubId / email / tên nhân viên
     const email = (currentUser?.email || '').toLowerCase()
-    const assignedHub = email.includes('bienhoa')
-      ? hubs.find((h) => h.code === 'DN01') || hubs[0]
-      : email.includes('melinh')
-      ? hubs.find((h) => h.code === 'HN01') || hubs[0]
-      : hubs.find((h) => h.code === 'HCM01') || hubs[0]
+    const assignedHub = (() => {
+      if (currentUser?.hubId) {
+        const found = hubs.find((h) => h.id === currentUser.hubId)
+        if (found) return found
+      }
+      if (email) {
+        const found = hubs.find((h) => h.email && h.email.toLowerCase() === email)
+        if (found) return found
+      }
+      const foundByCode = hubs.find((h) => email.includes(h.code.toLowerCase()))
+      if (foundByCode) return foundByCode
+
+      if (email.includes('haiphong')) return hubs.find((h) => h.code === 'HUB692') || hubs[0]
+      if (email.includes('bienhoa')) return hubs.find((h) => h.code === 'DN01') || hubs[0]
+      if (email.includes('melinh')) return hubs.find((h) => h.code === 'HN01') || hubs[0]
+      if (email.includes('danang') || email.includes('hoacam')) return hubs.find((h) => h.code === 'DNG01' || h.code === 'HC01') || hubs[0]
+      if (email.includes('cantho') || email.includes('tranoc')) return hubs.find((h) => h.code === 'CT01' || h.code === 'NK01') || hubs[0]
+      return hubs.find((h) => h.code === 'HCM01') || hubs[0]
+    })()
 
     const isAssignedSoc = assignedHub?.type === 'SORTING_CENTER'
 
@@ -332,6 +347,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
               handleUpdateStatus(shipmentId, status, failureReason, undefined, hubId, note, linehaulData)
             }
             actionLoading={actionLoading}
+            assignedHub={assignedHub}
             assignedHubId={assignedHub?.id}
           />
         </main>

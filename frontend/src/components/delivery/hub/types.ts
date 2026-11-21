@@ -59,6 +59,7 @@ export interface Hub {
   province: string
   district: string
   address?: string
+  email?: string
 }
 
 export type StationTab = 'INBOUND_PICKUP' | 'SORTING_LINEHAUL' | 'INBOUND_RECEIVING' | 'DISPATCH_LASTMILE' | 'HUB_CASHIER' | 'SOC_DASHBOARD'
@@ -86,6 +87,7 @@ export interface HubOperatorStationProps {
   ) => Promise<void>
   actionLoading: boolean
   assignedHubId?: string
+  assignedHub?: Hub
 }
 
 export type { ReturnData, LinehaulTrip, DockTruck, LinehaulShipment }

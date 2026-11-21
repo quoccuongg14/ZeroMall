@@ -18,6 +18,10 @@ export interface Hub {
   longitude?: number
   type: string
   status: string
+  email?: string | null
+  parentSocId?: string | null
+  parentSoc?: Partial<Hub> | null
+  childHubs?: Hub[]
   drivers?: any[]
   _count?: { shipments?: number; drivers?: number }
   createdAt?: string
@@ -27,6 +31,7 @@ interface HubCreateEditModalProps {
   isOpen: boolean
   onClose: () => void
   editingHub: Hub | null
+  initialParentSocId?: string | null
   onSuccess: () => void
   triggerAuditLog?: (action: string) => Promise<void>
   goongApiKey?: string
@@ -36,6 +41,7 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
   isOpen,
   onClose,
   editingHub,
+  initialParentSocId,
   onSuccess,
   triggerAuditLog,
   goongApiKey = import.meta.env.VITE_GOONG_API_KEY || ''
@@ -45,6 +51,10 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
   const [name, setName] = useState('')
   const [type, setType] = useState('DESTINATION_HUB')
   const [detailAddress, setDetailAddress] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [parentSocId, setParentSocId] = useState<string>('')
+  const [socList, setSocList] = useState<Hub[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   // Map states
@@ -73,11 +83,24 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
   useEffect(() => {
     if (!isOpen) return
 
+    // Tải danh sách các Mega SOC để chọn làm trạm chủ quản
+    fetch(`${API_BASE_URL}/delivery/hubs`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setSocList(data.filter((h: any) => h.type === 'SORTING_CENTER'))
+        }
+      })
+      .catch((e) => console.error('Error fetching SOC list:', e))
+
     if (editingHub) {
       setCode(editingHub.code || '')
       setName(editingHub.name || '')
       setType(editingHub.type || 'DESTINATION_HUB')
       setDetailAddress(editingHub.address || '')
+      setEmail(editingHub.email || '')
+      setPassword('')
+      setParentSocId(editingHub.parentSocId || initialParentSocId || '')
 
       if (editingHub.latitude && editingHub.longitude) {
         setMapCoords({ lat: Number(editingHub.latitude), lng: Number(editingHub.longitude) })
@@ -93,13 +116,16 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
     } else {
       setCode(`HUB${Math.floor(100 + Math.random() * 900)}`)
       setName('')
-      setType('DESTINATION_HUB')
+      setType(initialParentSocId ? 'DESTINATION_HUB' : 'DESTINATION_HUB')
       setDetailAddress('')
+      setEmail('')
+      setPassword('123456')
+      setParentSocId(initialParentSocId || '')
       setMapCoords({ lat: 10.762622, lng: 106.660172 })
       setMapZoom(14)
       resetSelection()
     }
-  }, [isOpen, editingHub])
+  }, [isOpen, editingHub, initialParentSocId])
 
   // 1. Khi chọn Tỉnh/Thành -> Bay bản đồ tới Tỉnh
   const onSelectProvinceWithMapFly = async (provinceCode: number | '') => {
@@ -182,7 +208,7 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
 
     setSubmitting(true)
     try {
-      const payload = {
+      const payload: any = {
         code: code.trim().toUpperCase(),
         name: name.trim(),
         type,
@@ -191,7 +217,10 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
         ward: chosenWard || undefined,
         address: detailAddress.trim(),
         latitude: mapCoords.lat,
-        longitude: mapCoords.lng
+        longitude: mapCoords.lng,
+        email: email.trim() || undefined,
+        password: password.trim() || undefined,
+        parentSocId: type === 'SORTING_CENTER' ? null : (parentSocId || undefined)
       }
 
       const url = editingHub
@@ -278,6 +307,30 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
             </div>
           </div>
 
+          {/* Chọn Mega SOC Chủ Quản (Nếu là Hub con) */}
+          {type === 'DESTINATION_HUB' && (
+            <div className="space-y-1 p-3 bg-sky-50/70 border border-sky-200 rounded-2xl">
+              <label className="text-xs font-black text-sky-900 flex items-center gap-1.5">
+                <span>🏭</span> Mega SOC Chủ Quản (Thuộc Trung Tâm Phân Loại Nào) *
+              </label>
+              <select
+                value={parentSocId}
+                onChange={(e) => setParentSocId(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-white border border-sky-300 rounded-xl text-xs text-slate-800 font-bold focus:outline-none focus:border-sky-600 cursor-pointer transition"
+              >
+                <option value="">-- Tự động gán theo địa bàn Tỉnh / Thành phố --</option>
+                {socList.map((soc) => (
+                  <option key={soc.id} value={soc.id}>
+                    {soc.name} [{soc.code}] - {soc.province}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-sky-700 font-medium">
+                Theo chuẩn Hub & Spoke: Mọi Bưu cục vệ tinh phải trực thuộc 1 Mega SOC để nhận xe tải Linehaul và gom đơn xuất kho.
+              </p>
+            </div>
+          )}
+
           {/* 2. Tên Bưu Cục */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700">Tên Bưu Cục Đầy Đủ *</label>
@@ -352,6 +405,52 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
               placeholder="VD: Số 123 Quang Trung, Phường 10"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:outline-none focus:border-emerald-600 focus:bg-white transition"
             />
+          </div>
+
+          {/* 6. Cấp Tài Khoản Đăng Nhập Vận Hành Trạm */}
+          <div className="p-4 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔐</span>
+              <div>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                  Tài Khoản Gmail & Mật Khẩu Đăng Nhập Trạm
+                </h4>
+                <p className="text-[10px] text-emerald-700 font-medium">
+                  Cấp quyền cho Trưởng trạm đăng nhập trực tiếp tại <span className="font-mono font-bold">http://delivery.zeromall.local:3000</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700">
+                  📧 Gmail / Email Đăng Nhập
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={type === 'SORTING_CENTER' ? 'haiphong.soc@spx.zeromall.vn' : 'hub_hongbang@spx.zeromall.vn'}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700">
+                  🔑 Mật Khẩu Đăng Nhập
+                </label>
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={editingHub ? 'Để trống nếu giữ nguyên mật khẩu cũ' : 'Mặc định: 123456'}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:outline-none focus:border-emerald-600 font-mono"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500 italic">
+              * Sau khi tạo, người phụ trách có thể đăng nhập bằng Gmail và mật khẩu này để quản lý trạm và tạo tiếp shipper/tài xế.
+            </p>
           </div>
 
           {/* Footer Actions */}
