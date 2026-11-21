@@ -144,15 +144,7 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
     return validShipments.reduce((sum, s) => sum + (s.shippingFee > 0 ? s.shippingFee : 25000), 0)
   }, [validShipments])
 
-  // 2. HOA HỒNG DỊCH VỤ SÀN (Platform 5% Commission trên giá trị đơn hàng giao thành công)
-  const totalPlatformCommission = useMemo(() => {
-    return deliveredShipments.reduce((sum, s) => {
-      const orderValue = s.declaredValue > 0 ? s.declaredValue : s.codAmount > 0 ? s.codAmount : 150000
-      return sum + Math.round(orderValue * 0.05)
-    }, 0)
-  }, [deliveredShipments])
-
-  // 3. CHI PHÍ VẬN TẢI THỰC TẾ THEO 3 CHẶNG
+  // 2. CHI PHÍ VẬN TẢI THỰC TẾ THEO 3 CHẶNG
   // - First Mile (Lấy hàng): Áp dụng cho các đơn đã qua khâu lấy hàng
   const allPickedShipments = useMemo(
     () => validShipments.filter((s) =>
@@ -177,13 +169,19 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
   // - Chi phí đơn hoàn / RTO
   const totalReturnCost = failedShipments.length * 10000
 
-  // Tổng chi phí vận hành toàn mạng lưới
-  const totalLogisticsCost = totalFirstMileCost + totalMiddleMileCost + totalLastMileCost + totalReturnCost
+  // Tổng tiền công & lương phải trả Bưu tá (First-mile lấy + Last-mile giao)
+  const totalDriverPayables = totalFirstMileCost + totalLastMileCost
 
-  // 4. LỢI NHUẬN RÒNG SÀN THU VỀ (Net Operating Margin)
-  const netPlatformProfit = totalShippingFeeCollected + totalPlatformCommission - totalLogisticsCost
-  const netProfitMarginPercent = (totalShippingFeeCollected + totalPlatformCommission) > 0
-    ? Math.round((netPlatformProfit / (totalShippingFeeCollected + totalPlatformCommission)) * 100)
+  // Tổng chi phí đội xe tải Linehaul & Vận hành kho Mega SOC + Dự phòng RTO
+  const totalFleetAndSocCost = totalMiddleMileCost + totalReturnCost
+
+  // Tổng toàn bộ chi phí vận tải mạng lưới
+  const totalLogisticsCost = totalDriverPayables + totalFleetAndSocCost
+
+  // 3. LỢI NHUẬN RÒNG VẬN TẢI (Net Logistics EBITDA Margin)
+  const netLogisticsProfit = totalShippingFeeCollected - totalLogisticsCost
+  const netProfitMarginPercent = totalShippingFeeCollected > 0
+    ? Math.round((netLogisticsProfit / totalShippingFeeCollected) * 100)
     : 0
 
   // Chỉ số trung bình trên mỗi bưu kiện (Unit Economics per Parcel)
@@ -299,14 +297,14 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xl">📊</span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
-              Tài Chính Vận Tải & P&L Sàn (Unit Economics)
+              Tài Chính Vận Tải & P&L Logistics (Unit Economics)
             </h2>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
-              Dữ Liệu Động Từ CSDL
+              Chuẩn Quản Trị ZeroExpress
             </span>
           </div>
           <p className="text-xs text-slate-500">
-            Hạch toán dòng tiền cước vận chuyển, hoa hồng sàn 5%, chi phí vận tải 3 chặng và biên lợi nhuận ròng toàn hệ thống.
+            Hạch toán dòng tiền cước vận chuyển, công nợ lương bưu tá lấy/giao, chi phí xe tải tuyến liên tỉnh và biên lợi nhuận ròng vận tải.
           </p>
         </div>
 
@@ -320,61 +318,61 @@ export const LogisticsFinanceTab: React.FC<LogisticsFinanceTabProps> = ({
         </div>
       </div>
 
-      {/* 2. 4 Thẻ Chỉ Số Tài Chính Cốt Lõi (100% Dynamic) */}
+      {/* 2. 4 Thẻ Chỉ Số Tài Chính Cốt Lõi Dành Cho Admin Giao Hàng */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Doanh thu cước */}
         <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-500 font-bold">
-            <span className="flex items-center gap-1.5"><span>🚚</span> Tổng Cước Vận Chuyển</span>
+            <span className="flex items-center gap-1.5"><span>🚚</span> 1. Tổng Cước Vận Chuyển</span>
             <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">Thu Vào</span>
           </div>
           <p className="text-2xl font-black text-slate-900 font-mono">
             {formatMoney(totalShippingFeeCollected)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
-            <span>Tổng số bưu kiện:</span>
-            <b className="text-slate-800 font-mono">{validShipments.length} đơn</b>
+            <span>Sản lượng toàn mạng:</span>
+            <b className="text-slate-800 font-mono">{validShipments.length} bưu kiện</b>
           </div>
         </div>
 
-        {/* Hoa hồng sàn thu được */}
+        {/* Lương & công nợ bưu tá */}
         <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
-          <div className="flex items-center justify-between text-xs text-indigo-600 font-bold">
-            <span className="flex items-center gap-1.5"><span>⚡</span> Hoa Hồng Sàn (5% GMV)</span>
-            <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">Khấu Trừ Shop</span>
+          <div className="flex items-center justify-between text-xs text-amber-700 font-bold">
+            <span className="flex items-center gap-1.5"><span>🛵</span> 2. Lương & Công Nợ Bưu Tá</span>
+            <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-bold">Phải Trả Shipper</span>
           </div>
-          <p className="text-2xl font-black text-indigo-600 font-mono">
-            {formatMoney(totalPlatformCommission)}
+          <p className="text-2xl font-black text-amber-800 font-mono">
+            {formatMoney(totalDriverPayables)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
-            <span>Đơn giao thành công:</span>
-            <b className="text-indigo-700 font-mono">{deliveredShipments.length} đơn</b>
+            <span>Công lấy & giao:</span>
+            <b className="text-amber-800 font-mono">{allPickedShipments.length} lấy • {deliveredShipments.length} giao</b>
           </div>
         </div>
 
-        {/* Chi phí vận hành */}
+        {/* Chi phí xe tải Linehaul & Mega SOC */}
         <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-3xs space-y-2">
-          <div className="flex items-center justify-between text-xs text-rose-600 font-bold">
-            <span className="flex items-center gap-1.5"><span>💸</span> Chi Phí Vận Hành Tuyến</span>
-            <span className="text-[10px] bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-bold">Chi Ra</span>
+          <div className="flex items-center justify-between text-xs text-sky-700 font-bold">
+            <span className="flex items-center gap-1.5"><span>🚛</span> 3. Xe Tải Linehaul & Kho SOC</span>
+            <span className="text-[10px] bg-sky-50 text-sky-800 border border-sky-200 px-1.5 py-0.5 rounded font-bold">Vận Chuyển Tuyến</span>
           </div>
-          <p className="text-2xl font-black text-rose-600 font-mono">
-            {formatMoney(totalLogisticsCost)}
+          <p className="text-2xl font-black text-sky-800 font-mono">
+            {formatMoney(totalFleetAndSocCost)}
           </p>
           <div className="text-[11px] text-slate-500 flex justify-between border-t border-slate-100 pt-2 font-medium">
-            <span>Shipper + Tuyến Mega SOC:</span>
-            <b className="text-rose-700 font-mono">{formatMoney(totalFirstMileCost + totalLastMileCost)}</b>
+            <span>Kho liên tỉnh & RTO:</span>
+            <b className="text-sky-800 font-mono">{middleMileShipments.length} kiện trung chuyển</b>
           </div>
         </div>
 
-        {/* Lợi nhuận ròng của sàn */}
+        {/* Lợi nhuận ròng vận tải */}
         <div className="bg-gradient-to-br from-emerald-50 to-teal-50/80 border border-emerald-200 p-4 rounded-2xl shadow-3xs space-y-2">
           <div className="flex items-center justify-between text-xs text-emerald-800 font-bold">
-            <span className="flex items-center gap-1.5"><span>🏆</span> Lợi Nhuận Ròng (EBITDA)</span>
+            <span className="flex items-center gap-1.5"><span>🏆</span> 4. Lợi Nhuận Ròng (EBITDA)</span>
             <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">Margin: {netProfitMarginPercent}%</span>
           </div>
           <p className="text-2xl font-black text-emerald-700 font-mono">
-            {formatMoney(netPlatformProfit)}
+            {formatMoney(netLogisticsProfit)}
           </p>
           <div className="text-[11px] text-emerald-800 flex justify-between border-t border-emerald-200/60 pt-2 font-medium">
             <span>Lợi nhuận ròng/đơn:</span>
