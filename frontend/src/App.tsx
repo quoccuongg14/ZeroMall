@@ -9,6 +9,7 @@ import { TopTrendingSection } from './components/buyer/TopTrendingSection'
 import { Categories } from './components/buyer/Categories'
 import { FlashSale } from './components/buyer/FlashSale'
 import type { Product } from './components/buyer/FlashSale'
+import { FlashVoucherBanner } from './components/buyer/FlashVoucherBanner'
 import { ProductList } from './components/buyer/ProductList'
 import { formatRawProduct } from './utils/productFormatter'
 import { ProductDetailPage } from './pages/buyer/ProductDetailPage'
@@ -269,6 +270,12 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
                 <TopTrendingSection
                   products={dbProducts}
                   onSelectProduct={(p) => navigate(`/product/${toSlug(p.name)}-i.${p.id}`)}
+                />
+
+                {/* 3.1 Khung Giờ Vàng Săn Voucher Sàn (Cơ chế 1: Claimable FCFS) */}
+                <FlashVoucherBanner
+                  user={user}
+                  onRequireLogin={() => triggerLoginPrompt('Đăng nhập để lưu Voucher', 'Vui lòng đăng nhập để lưu mã giảm giá vào ví và sử dụng khi thanh toán.', '⚡')}
                 />
 
                 {/* 4. Flash Sale Khung Giờ */}

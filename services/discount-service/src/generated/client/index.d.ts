@@ -23,6 +23,11 @@ export type Voucher = $Result.DefaultSelection<Prisma.$VoucherPayload>
  * 
  */
 export type VoucherUsage = $Result.DefaultSelection<Prisma.$VoucherUsagePayload>
+/**
+ * Model UserVoucherWallet
+ * 
+ */
+export type UserVoucherWallet = $Result.DefaultSelection<Prisma.$UserVoucherWalletPayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -164,6 +169,16 @@ export class PrismaClient<
     * ```
     */
   get voucherUsage(): Prisma.VoucherUsageDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.userVoucherWallet`: Exposes CRUD operations for the **UserVoucherWallet** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more UserVoucherWallets
+    * const userVoucherWallets = await prisma.userVoucherWallet.findMany()
+    * ```
+    */
+  get userVoucherWallet(): Prisma.UserVoucherWalletDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -599,7 +614,8 @@ export namespace Prisma {
 
   export const ModelName: {
     Voucher: 'Voucher',
-    VoucherUsage: 'VoucherUsage'
+    VoucherUsage: 'VoucherUsage',
+    UserVoucherWallet: 'UserVoucherWallet'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -615,7 +631,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "voucher" | "voucherUsage"
+      modelProps: "voucher" | "voucherUsage" | "userVoucherWallet"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -767,6 +783,80 @@ export namespace Prisma {
           }
         }
       }
+      UserVoucherWallet: {
+        payload: Prisma.$UserVoucherWalletPayload<ExtArgs>
+        fields: Prisma.UserVoucherWalletFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.UserVoucherWalletFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.UserVoucherWalletFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          findFirst: {
+            args: Prisma.UserVoucherWalletFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.UserVoucherWalletFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          findMany: {
+            args: Prisma.UserVoucherWalletFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>[]
+          }
+          create: {
+            args: Prisma.UserVoucherWalletCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          createMany: {
+            args: Prisma.UserVoucherWalletCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.UserVoucherWalletCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>[]
+          }
+          delete: {
+            args: Prisma.UserVoucherWalletDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          update: {
+            args: Prisma.UserVoucherWalletUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          deleteMany: {
+            args: Prisma.UserVoucherWalletDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.UserVoucherWalletUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.UserVoucherWalletUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>[]
+          }
+          upsert: {
+            args: Prisma.UserVoucherWalletUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$UserVoucherWalletPayload>
+          }
+          aggregate: {
+            args: Prisma.UserVoucherWalletAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateUserVoucherWallet>
+          }
+          groupBy: {
+            args: Prisma.UserVoucherWalletGroupByArgs<ExtArgs>
+            result: $Utils.Optional<UserVoucherWalletGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.UserVoucherWalletCountArgs<ExtArgs>
+            result: $Utils.Optional<UserVoucherWalletCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -877,6 +967,7 @@ export namespace Prisma {
   export type GlobalOmitConfig = {
     voucher?: VoucherOmit
     voucherUsage?: VoucherUsageOmit
+    userVoucherWallet?: UserVoucherWalletOmit
   }
 
   /* Types for Logging */
@@ -958,10 +1049,12 @@ export namespace Prisma {
 
   export type VoucherCountOutputType = {
     usages: number
+    claims: number
   }
 
   export type VoucherCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     usages?: boolean | VoucherCountOutputTypeCountUsagesArgs
+    claims?: boolean | VoucherCountOutputTypeCountClaimsArgs
   }
 
   // Custom InputTypes
@@ -980,6 +1073,13 @@ export namespace Prisma {
    */
   export type VoucherCountOutputTypeCountUsagesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: VoucherUsageWhereInput
+  }
+
+  /**
+   * VoucherCountOutputType without action
+   */
+  export type VoucherCountOutputTypeCountClaimsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: UserVoucherWalletWhereInput
   }
 
 
@@ -1027,6 +1127,7 @@ export namespace Prisma {
     usageLimit: number | null
     usedCount: number | null
     targetUserId: string | null
+    isClaimable: boolean | null
     startDate: Date | null
     endDate: Date | null
     createdAt: Date | null
@@ -1045,6 +1146,7 @@ export namespace Prisma {
     usageLimit: number | null
     usedCount: number | null
     targetUserId: string | null
+    isClaimable: boolean | null
     startDate: Date | null
     endDate: Date | null
     createdAt: Date | null
@@ -1063,6 +1165,7 @@ export namespace Prisma {
     usageLimit: number
     usedCount: number
     targetUserId: number
+    isClaimable: number
     startDate: number
     endDate: number
     createdAt: number
@@ -1099,6 +1202,7 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     targetUserId?: true
+    isClaimable?: true
     startDate?: true
     endDate?: true
     createdAt?: true
@@ -1117,6 +1221,7 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     targetUserId?: true
+    isClaimable?: true
     startDate?: true
     endDate?: true
     createdAt?: true
@@ -1135,6 +1240,7 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     targetUserId?: true
+    isClaimable?: true
     startDate?: true
     endDate?: true
     createdAt?: true
@@ -1240,6 +1346,7 @@ export namespace Prisma {
     usageLimit: number
     usedCount: number
     targetUserId: string | null
+    isClaimable: boolean
     startDate: Date
     endDate: Date
     createdAt: Date
@@ -1277,11 +1384,13 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     targetUserId?: boolean
+    isClaimable?: boolean
     startDate?: boolean
     endDate?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     usages?: boolean | Voucher$usagesArgs<ExtArgs>
+    claims?: boolean | Voucher$claimsArgs<ExtArgs>
     _count?: boolean | VoucherCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["voucher"]>
 
@@ -1297,6 +1406,7 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     targetUserId?: boolean
+    isClaimable?: boolean
     startDate?: boolean
     endDate?: boolean
     createdAt?: boolean
@@ -1315,6 +1425,7 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     targetUserId?: boolean
+    isClaimable?: boolean
     startDate?: boolean
     endDate?: boolean
     createdAt?: boolean
@@ -1333,15 +1444,17 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     targetUserId?: boolean
+    isClaimable?: boolean
     startDate?: boolean
     endDate?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type VoucherOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "name" | "code" | "type" | "value" | "minSpend" | "maxDiscount" | "usageLimit" | "usedCount" | "targetUserId" | "startDate" | "endDate" | "createdAt" | "updatedAt", ExtArgs["result"]["voucher"]>
+  export type VoucherOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shopId" | "name" | "code" | "type" | "value" | "minSpend" | "maxDiscount" | "usageLimit" | "usedCount" | "targetUserId" | "isClaimable" | "startDate" | "endDate" | "createdAt" | "updatedAt", ExtArgs["result"]["voucher"]>
   export type VoucherInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     usages?: boolean | Voucher$usagesArgs<ExtArgs>
+    claims?: boolean | Voucher$claimsArgs<ExtArgs>
     _count?: boolean | VoucherCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type VoucherIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -1351,6 +1464,7 @@ export namespace Prisma {
     name: "Voucher"
     objects: {
       usages: Prisma.$VoucherUsagePayload<ExtArgs>[]
+      claims: Prisma.$UserVoucherWalletPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -1364,6 +1478,7 @@ export namespace Prisma {
       usageLimit: number
       usedCount: number
       targetUserId: string | null
+      isClaimable: boolean
       startDate: Date
       endDate: Date
       createdAt: Date
@@ -1763,6 +1878,7 @@ export namespace Prisma {
   export interface Prisma__VoucherClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     usages<T extends Voucher$usagesArgs<ExtArgs> = {}>(args?: Subset<T, Voucher$usagesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$VoucherUsagePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    claims<T extends Voucher$claimsArgs<ExtArgs> = {}>(args?: Subset<T, Voucher$claimsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1803,6 +1919,7 @@ export namespace Prisma {
     readonly usageLimit: FieldRef<"Voucher", 'Int'>
     readonly usedCount: FieldRef<"Voucher", 'Int'>
     readonly targetUserId: FieldRef<"Voucher", 'String'>
+    readonly isClaimable: FieldRef<"Voucher", 'Boolean'>
     readonly startDate: FieldRef<"Voucher", 'DateTime'>
     readonly endDate: FieldRef<"Voucher", 'DateTime'>
     readonly createdAt: FieldRef<"Voucher", 'DateTime'>
@@ -2221,6 +2338,30 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: VoucherUsageScalarFieldEnum | VoucherUsageScalarFieldEnum[]
+  }
+
+  /**
+   * Voucher.claims
+   */
+  export type Voucher$claimsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    where?: UserVoucherWalletWhereInput
+    orderBy?: UserVoucherWalletOrderByWithRelationInput | UserVoucherWalletOrderByWithRelationInput[]
+    cursor?: UserVoucherWalletWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: UserVoucherWalletScalarFieldEnum | UserVoucherWalletScalarFieldEnum[]
   }
 
   /**
@@ -3306,6 +3447,1056 @@ export namespace Prisma {
 
 
   /**
+   * Model UserVoucherWallet
+   */
+
+  export type AggregateUserVoucherWallet = {
+    _count: UserVoucherWalletCountAggregateOutputType | null
+    _min: UserVoucherWalletMinAggregateOutputType | null
+    _max: UserVoucherWalletMaxAggregateOutputType | null
+  }
+
+  export type UserVoucherWalletMinAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    voucherId: string | null
+    claimedAt: Date | null
+  }
+
+  export type UserVoucherWalletMaxAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    voucherId: string | null
+    claimedAt: Date | null
+  }
+
+  export type UserVoucherWalletCountAggregateOutputType = {
+    id: number
+    userId: number
+    voucherId: number
+    claimedAt: number
+    _all: number
+  }
+
+
+  export type UserVoucherWalletMinAggregateInputType = {
+    id?: true
+    userId?: true
+    voucherId?: true
+    claimedAt?: true
+  }
+
+  export type UserVoucherWalletMaxAggregateInputType = {
+    id?: true
+    userId?: true
+    voucherId?: true
+    claimedAt?: true
+  }
+
+  export type UserVoucherWalletCountAggregateInputType = {
+    id?: true
+    userId?: true
+    voucherId?: true
+    claimedAt?: true
+    _all?: true
+  }
+
+  export type UserVoucherWalletAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which UserVoucherWallet to aggregate.
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of UserVoucherWallets to fetch.
+     */
+    orderBy?: UserVoucherWalletOrderByWithRelationInput | UserVoucherWalletOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: UserVoucherWalletWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` UserVoucherWallets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` UserVoucherWallets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned UserVoucherWallets
+    **/
+    _count?: true | UserVoucherWalletCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: UserVoucherWalletMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: UserVoucherWalletMaxAggregateInputType
+  }
+
+  export type GetUserVoucherWalletAggregateType<T extends UserVoucherWalletAggregateArgs> = {
+        [P in keyof T & keyof AggregateUserVoucherWallet]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateUserVoucherWallet[P]>
+      : GetScalarType<T[P], AggregateUserVoucherWallet[P]>
+  }
+
+
+
+
+  export type UserVoucherWalletGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: UserVoucherWalletWhereInput
+    orderBy?: UserVoucherWalletOrderByWithAggregationInput | UserVoucherWalletOrderByWithAggregationInput[]
+    by: UserVoucherWalletScalarFieldEnum[] | UserVoucherWalletScalarFieldEnum
+    having?: UserVoucherWalletScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: UserVoucherWalletCountAggregateInputType | true
+    _min?: UserVoucherWalletMinAggregateInputType
+    _max?: UserVoucherWalletMaxAggregateInputType
+  }
+
+  export type UserVoucherWalletGroupByOutputType = {
+    id: string
+    userId: string
+    voucherId: string
+    claimedAt: Date
+    _count: UserVoucherWalletCountAggregateOutputType | null
+    _min: UserVoucherWalletMinAggregateOutputType | null
+    _max: UserVoucherWalletMaxAggregateOutputType | null
+  }
+
+  type GetUserVoucherWalletGroupByPayload<T extends UserVoucherWalletGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<UserVoucherWalletGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof UserVoucherWalletGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], UserVoucherWalletGroupByOutputType[P]>
+            : GetScalarType<T[P], UserVoucherWalletGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type UserVoucherWalletSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    voucherId?: boolean
+    claimedAt?: boolean
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["userVoucherWallet"]>
+
+  export type UserVoucherWalletSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    voucherId?: boolean
+    claimedAt?: boolean
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["userVoucherWallet"]>
+
+  export type UserVoucherWalletSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    voucherId?: boolean
+    claimedAt?: boolean
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["userVoucherWallet"]>
+
+  export type UserVoucherWalletSelectScalar = {
+    id?: boolean
+    userId?: boolean
+    voucherId?: boolean
+    claimedAt?: boolean
+  }
+
+  export type UserVoucherWalletOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "voucherId" | "claimedAt", ExtArgs["result"]["userVoucherWallet"]>
+  export type UserVoucherWalletInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }
+  export type UserVoucherWalletIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }
+  export type UserVoucherWalletIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    voucher?: boolean | VoucherDefaultArgs<ExtArgs>
+  }
+
+  export type $UserVoucherWalletPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "UserVoucherWallet"
+    objects: {
+      voucher: Prisma.$VoucherPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      userId: string
+      voucherId: string
+      claimedAt: Date
+    }, ExtArgs["result"]["userVoucherWallet"]>
+    composites: {}
+  }
+
+  type UserVoucherWalletGetPayload<S extends boolean | null | undefined | UserVoucherWalletDefaultArgs> = $Result.GetResult<Prisma.$UserVoucherWalletPayload, S>
+
+  type UserVoucherWalletCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<UserVoucherWalletFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: UserVoucherWalletCountAggregateInputType | true
+    }
+
+  export interface UserVoucherWalletDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['UserVoucherWallet'], meta: { name: 'UserVoucherWallet' } }
+    /**
+     * Find zero or one UserVoucherWallet that matches the filter.
+     * @param {UserVoucherWalletFindUniqueArgs} args - Arguments to find a UserVoucherWallet
+     * @example
+     * // Get one UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends UserVoucherWalletFindUniqueArgs>(args: SelectSubset<T, UserVoucherWalletFindUniqueArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one UserVoucherWallet that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {UserVoucherWalletFindUniqueOrThrowArgs} args - Arguments to find a UserVoucherWallet
+     * @example
+     * // Get one UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends UserVoucherWalletFindUniqueOrThrowArgs>(args: SelectSubset<T, UserVoucherWalletFindUniqueOrThrowArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first UserVoucherWallet that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletFindFirstArgs} args - Arguments to find a UserVoucherWallet
+     * @example
+     * // Get one UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends UserVoucherWalletFindFirstArgs>(args?: SelectSubset<T, UserVoucherWalletFindFirstArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first UserVoucherWallet that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletFindFirstOrThrowArgs} args - Arguments to find a UserVoucherWallet
+     * @example
+     * // Get one UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends UserVoucherWalletFindFirstOrThrowArgs>(args?: SelectSubset<T, UserVoucherWalletFindFirstOrThrowArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more UserVoucherWallets that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all UserVoucherWallets
+     * const userVoucherWallets = await prisma.userVoucherWallet.findMany()
+     * 
+     * // Get first 10 UserVoucherWallets
+     * const userVoucherWallets = await prisma.userVoucherWallet.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const userVoucherWalletWithIdOnly = await prisma.userVoucherWallet.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends UserVoucherWalletFindManyArgs>(args?: SelectSubset<T, UserVoucherWalletFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a UserVoucherWallet.
+     * @param {UserVoucherWalletCreateArgs} args - Arguments to create a UserVoucherWallet.
+     * @example
+     * // Create one UserVoucherWallet
+     * const UserVoucherWallet = await prisma.userVoucherWallet.create({
+     *   data: {
+     *     // ... data to create a UserVoucherWallet
+     *   }
+     * })
+     * 
+     */
+    create<T extends UserVoucherWalletCreateArgs>(args: SelectSubset<T, UserVoucherWalletCreateArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many UserVoucherWallets.
+     * @param {UserVoucherWalletCreateManyArgs} args - Arguments to create many UserVoucherWallets.
+     * @example
+     * // Create many UserVoucherWallets
+     * const userVoucherWallet = await prisma.userVoucherWallet.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends UserVoucherWalletCreateManyArgs>(args?: SelectSubset<T, UserVoucherWalletCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many UserVoucherWallets and returns the data saved in the database.
+     * @param {UserVoucherWalletCreateManyAndReturnArgs} args - Arguments to create many UserVoucherWallets.
+     * @example
+     * // Create many UserVoucherWallets
+     * const userVoucherWallet = await prisma.userVoucherWallet.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many UserVoucherWallets and only return the `id`
+     * const userVoucherWalletWithIdOnly = await prisma.userVoucherWallet.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends UserVoucherWalletCreateManyAndReturnArgs>(args?: SelectSubset<T, UserVoucherWalletCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a UserVoucherWallet.
+     * @param {UserVoucherWalletDeleteArgs} args - Arguments to delete one UserVoucherWallet.
+     * @example
+     * // Delete one UserVoucherWallet
+     * const UserVoucherWallet = await prisma.userVoucherWallet.delete({
+     *   where: {
+     *     // ... filter to delete one UserVoucherWallet
+     *   }
+     * })
+     * 
+     */
+    delete<T extends UserVoucherWalletDeleteArgs>(args: SelectSubset<T, UserVoucherWalletDeleteArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one UserVoucherWallet.
+     * @param {UserVoucherWalletUpdateArgs} args - Arguments to update one UserVoucherWallet.
+     * @example
+     * // Update one UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends UserVoucherWalletUpdateArgs>(args: SelectSubset<T, UserVoucherWalletUpdateArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more UserVoucherWallets.
+     * @param {UserVoucherWalletDeleteManyArgs} args - Arguments to filter UserVoucherWallets to delete.
+     * @example
+     * // Delete a few UserVoucherWallets
+     * const { count } = await prisma.userVoucherWallet.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends UserVoucherWalletDeleteManyArgs>(args?: SelectSubset<T, UserVoucherWalletDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more UserVoucherWallets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many UserVoucherWallets
+     * const userVoucherWallet = await prisma.userVoucherWallet.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends UserVoucherWalletUpdateManyArgs>(args: SelectSubset<T, UserVoucherWalletUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more UserVoucherWallets and returns the data updated in the database.
+     * @param {UserVoucherWalletUpdateManyAndReturnArgs} args - Arguments to update many UserVoucherWallets.
+     * @example
+     * // Update many UserVoucherWallets
+     * const userVoucherWallet = await prisma.userVoucherWallet.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more UserVoucherWallets and only return the `id`
+     * const userVoucherWalletWithIdOnly = await prisma.userVoucherWallet.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends UserVoucherWalletUpdateManyAndReturnArgs>(args: SelectSubset<T, UserVoucherWalletUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one UserVoucherWallet.
+     * @param {UserVoucherWalletUpsertArgs} args - Arguments to update or create a UserVoucherWallet.
+     * @example
+     * // Update or create a UserVoucherWallet
+     * const userVoucherWallet = await prisma.userVoucherWallet.upsert({
+     *   create: {
+     *     // ... data to create a UserVoucherWallet
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the UserVoucherWallet we want to update
+     *   }
+     * })
+     */
+    upsert<T extends UserVoucherWalletUpsertArgs>(args: SelectSubset<T, UserVoucherWalletUpsertArgs<ExtArgs>>): Prisma__UserVoucherWalletClient<$Result.GetResult<Prisma.$UserVoucherWalletPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of UserVoucherWallets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletCountArgs} args - Arguments to filter UserVoucherWallets to count.
+     * @example
+     * // Count the number of UserVoucherWallets
+     * const count = await prisma.userVoucherWallet.count({
+     *   where: {
+     *     // ... the filter for the UserVoucherWallets we want to count
+     *   }
+     * })
+    **/
+    count<T extends UserVoucherWalletCountArgs>(
+      args?: Subset<T, UserVoucherWalletCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], UserVoucherWalletCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a UserVoucherWallet.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends UserVoucherWalletAggregateArgs>(args: Subset<T, UserVoucherWalletAggregateArgs>): Prisma.PrismaPromise<GetUserVoucherWalletAggregateType<T>>
+
+    /**
+     * Group by UserVoucherWallet.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UserVoucherWalletGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends UserVoucherWalletGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: UserVoucherWalletGroupByArgs['orderBy'] }
+        : { orderBy?: UserVoucherWalletGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, UserVoucherWalletGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetUserVoucherWalletGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the UserVoucherWallet model
+   */
+  readonly fields: UserVoucherWalletFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for UserVoucherWallet.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__UserVoucherWalletClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    voucher<T extends VoucherDefaultArgs<ExtArgs> = {}>(args?: Subset<T, VoucherDefaultArgs<ExtArgs>>): Prisma__VoucherClient<$Result.GetResult<Prisma.$VoucherPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the UserVoucherWallet model
+   */
+  interface UserVoucherWalletFieldRefs {
+    readonly id: FieldRef<"UserVoucherWallet", 'String'>
+    readonly userId: FieldRef<"UserVoucherWallet", 'String'>
+    readonly voucherId: FieldRef<"UserVoucherWallet", 'String'>
+    readonly claimedAt: FieldRef<"UserVoucherWallet", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * UserVoucherWallet findUnique
+   */
+  export type UserVoucherWalletFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter, which UserVoucherWallet to fetch.
+     */
+    where: UserVoucherWalletWhereUniqueInput
+  }
+
+  /**
+   * UserVoucherWallet findUniqueOrThrow
+   */
+  export type UserVoucherWalletFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter, which UserVoucherWallet to fetch.
+     */
+    where: UserVoucherWalletWhereUniqueInput
+  }
+
+  /**
+   * UserVoucherWallet findFirst
+   */
+  export type UserVoucherWalletFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter, which UserVoucherWallet to fetch.
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of UserVoucherWallets to fetch.
+     */
+    orderBy?: UserVoucherWalletOrderByWithRelationInput | UserVoucherWalletOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for UserVoucherWallets.
+     */
+    cursor?: UserVoucherWalletWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` UserVoucherWallets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` UserVoucherWallets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of UserVoucherWallets.
+     */
+    distinct?: UserVoucherWalletScalarFieldEnum | UserVoucherWalletScalarFieldEnum[]
+  }
+
+  /**
+   * UserVoucherWallet findFirstOrThrow
+   */
+  export type UserVoucherWalletFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter, which UserVoucherWallet to fetch.
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of UserVoucherWallets to fetch.
+     */
+    orderBy?: UserVoucherWalletOrderByWithRelationInput | UserVoucherWalletOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for UserVoucherWallets.
+     */
+    cursor?: UserVoucherWalletWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` UserVoucherWallets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` UserVoucherWallets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of UserVoucherWallets.
+     */
+    distinct?: UserVoucherWalletScalarFieldEnum | UserVoucherWalletScalarFieldEnum[]
+  }
+
+  /**
+   * UserVoucherWallet findMany
+   */
+  export type UserVoucherWalletFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter, which UserVoucherWallets to fetch.
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of UserVoucherWallets to fetch.
+     */
+    orderBy?: UserVoucherWalletOrderByWithRelationInput | UserVoucherWalletOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing UserVoucherWallets.
+     */
+    cursor?: UserVoucherWalletWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` UserVoucherWallets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` UserVoucherWallets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of UserVoucherWallets.
+     */
+    distinct?: UserVoucherWalletScalarFieldEnum | UserVoucherWalletScalarFieldEnum[]
+  }
+
+  /**
+   * UserVoucherWallet create
+   */
+  export type UserVoucherWalletCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * The data needed to create a UserVoucherWallet.
+     */
+    data: XOR<UserVoucherWalletCreateInput, UserVoucherWalletUncheckedCreateInput>
+  }
+
+  /**
+   * UserVoucherWallet createMany
+   */
+  export type UserVoucherWalletCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many UserVoucherWallets.
+     */
+    data: UserVoucherWalletCreateManyInput | UserVoucherWalletCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * UserVoucherWallet createManyAndReturn
+   */
+  export type UserVoucherWalletCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * The data used to create many UserVoucherWallets.
+     */
+    data: UserVoucherWalletCreateManyInput | UserVoucherWalletCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * UserVoucherWallet update
+   */
+  export type UserVoucherWalletUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * The data needed to update a UserVoucherWallet.
+     */
+    data: XOR<UserVoucherWalletUpdateInput, UserVoucherWalletUncheckedUpdateInput>
+    /**
+     * Choose, which UserVoucherWallet to update.
+     */
+    where: UserVoucherWalletWhereUniqueInput
+  }
+
+  /**
+   * UserVoucherWallet updateMany
+   */
+  export type UserVoucherWalletUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update UserVoucherWallets.
+     */
+    data: XOR<UserVoucherWalletUpdateManyMutationInput, UserVoucherWalletUncheckedUpdateManyInput>
+    /**
+     * Filter which UserVoucherWallets to update
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * Limit how many UserVoucherWallets to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * UserVoucherWallet updateManyAndReturn
+   */
+  export type UserVoucherWalletUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * The data used to update UserVoucherWallets.
+     */
+    data: XOR<UserVoucherWalletUpdateManyMutationInput, UserVoucherWalletUncheckedUpdateManyInput>
+    /**
+     * Filter which UserVoucherWallets to update
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * Limit how many UserVoucherWallets to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * UserVoucherWallet upsert
+   */
+  export type UserVoucherWalletUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * The filter to search for the UserVoucherWallet to update in case it exists.
+     */
+    where: UserVoucherWalletWhereUniqueInput
+    /**
+     * In case the UserVoucherWallet found by the `where` argument doesn't exist, create a new UserVoucherWallet with this data.
+     */
+    create: XOR<UserVoucherWalletCreateInput, UserVoucherWalletUncheckedCreateInput>
+    /**
+     * In case the UserVoucherWallet was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<UserVoucherWalletUpdateInput, UserVoucherWalletUncheckedUpdateInput>
+  }
+
+  /**
+   * UserVoucherWallet delete
+   */
+  export type UserVoucherWalletDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+    /**
+     * Filter which UserVoucherWallet to delete.
+     */
+    where: UserVoucherWalletWhereUniqueInput
+  }
+
+  /**
+   * UserVoucherWallet deleteMany
+   */
+  export type UserVoucherWalletDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which UserVoucherWallets to delete
+     */
+    where?: UserVoucherWalletWhereInput
+    /**
+     * Limit how many UserVoucherWallets to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * UserVoucherWallet without action
+   */
+  export type UserVoucherWalletDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserVoucherWallet
+     */
+    select?: UserVoucherWalletSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserVoucherWallet
+     */
+    omit?: UserVoucherWalletOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserVoucherWalletInclude<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -3331,6 +4522,7 @@ export namespace Prisma {
     usageLimit: 'usageLimit',
     usedCount: 'usedCount',
     targetUserId: 'targetUserId',
+    isClaimable: 'isClaimable',
     startDate: 'startDate',
     endDate: 'endDate',
     createdAt: 'createdAt',
@@ -3349,6 +4541,16 @@ export namespace Prisma {
   };
 
   export type VoucherUsageScalarFieldEnum = (typeof VoucherUsageScalarFieldEnum)[keyof typeof VoucherUsageScalarFieldEnum]
+
+
+  export const UserVoucherWalletScalarFieldEnum: {
+    id: 'id',
+    userId: 'userId',
+    voucherId: 'voucherId',
+    claimedAt: 'claimedAt'
+  };
+
+  export type UserVoucherWalletScalarFieldEnum = (typeof UserVoucherWalletScalarFieldEnum)[keyof typeof UserVoucherWalletScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -3423,6 +4625,13 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'Boolean'
+   */
+  export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
+    
+
+
+  /**
    * Reference to a field of type 'DateTime'
    */
   export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
@@ -3454,11 +4663,13 @@ export namespace Prisma {
     usageLimit?: IntFilter<"Voucher"> | number
     usedCount?: IntFilter<"Voucher"> | number
     targetUserId?: StringNullableFilter<"Voucher"> | string | null
+    isClaimable?: BoolFilter<"Voucher"> | boolean
     startDate?: DateTimeFilter<"Voucher"> | Date | string
     endDate?: DateTimeFilter<"Voucher"> | Date | string
     createdAt?: DateTimeFilter<"Voucher"> | Date | string
     updatedAt?: DateTimeFilter<"Voucher"> | Date | string
     usages?: VoucherUsageListRelationFilter
+    claims?: UserVoucherWalletListRelationFilter
   }
 
   export type VoucherOrderByWithRelationInput = {
@@ -3473,11 +4684,13 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     targetUserId?: SortOrderInput | SortOrder
+    isClaimable?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     usages?: VoucherUsageOrderByRelationAggregateInput
+    claims?: UserVoucherWalletOrderByRelationAggregateInput
   }
 
   export type VoucherWhereUniqueInput = Prisma.AtLeast<{
@@ -3496,11 +4709,13 @@ export namespace Prisma {
     usageLimit?: IntFilter<"Voucher"> | number
     usedCount?: IntFilter<"Voucher"> | number
     targetUserId?: StringNullableFilter<"Voucher"> | string | null
+    isClaimable?: BoolFilter<"Voucher"> | boolean
     startDate?: DateTimeFilter<"Voucher"> | Date | string
     endDate?: DateTimeFilter<"Voucher"> | Date | string
     createdAt?: DateTimeFilter<"Voucher"> | Date | string
     updatedAt?: DateTimeFilter<"Voucher"> | Date | string
     usages?: VoucherUsageListRelationFilter
+    claims?: UserVoucherWalletListRelationFilter
   }, "id" | "shopId_code">
 
   export type VoucherOrderByWithAggregationInput = {
@@ -3515,6 +4730,7 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     targetUserId?: SortOrderInput | SortOrder
+    isClaimable?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     createdAt?: SortOrder
@@ -3541,6 +4757,7 @@ export namespace Prisma {
     usageLimit?: IntWithAggregatesFilter<"Voucher"> | number
     usedCount?: IntWithAggregatesFilter<"Voucher"> | number
     targetUserId?: StringNullableWithAggregatesFilter<"Voucher"> | string | null
+    isClaimable?: BoolWithAggregatesFilter<"Voucher"> | boolean
     startDate?: DateTimeWithAggregatesFilter<"Voucher"> | Date | string
     endDate?: DateTimeWithAggregatesFilter<"Voucher"> | Date | string
     createdAt?: DateTimeWithAggregatesFilter<"Voucher"> | Date | string
@@ -3602,6 +4819,57 @@ export namespace Prisma {
     usedAt?: DateTimeWithAggregatesFilter<"VoucherUsage"> | Date | string
   }
 
+  export type UserVoucherWalletWhereInput = {
+    AND?: UserVoucherWalletWhereInput | UserVoucherWalletWhereInput[]
+    OR?: UserVoucherWalletWhereInput[]
+    NOT?: UserVoucherWalletWhereInput | UserVoucherWalletWhereInput[]
+    id?: StringFilter<"UserVoucherWallet"> | string
+    userId?: StringFilter<"UserVoucherWallet"> | string
+    voucherId?: StringFilter<"UserVoucherWallet"> | string
+    claimedAt?: DateTimeFilter<"UserVoucherWallet"> | Date | string
+    voucher?: XOR<VoucherScalarRelationFilter, VoucherWhereInput>
+  }
+
+  export type UserVoucherWalletOrderByWithRelationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    voucherId?: SortOrder
+    claimedAt?: SortOrder
+    voucher?: VoucherOrderByWithRelationInput
+  }
+
+  export type UserVoucherWalletWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    userId_voucherId?: UserVoucherWalletUserIdVoucherIdCompoundUniqueInput
+    AND?: UserVoucherWalletWhereInput | UserVoucherWalletWhereInput[]
+    OR?: UserVoucherWalletWhereInput[]
+    NOT?: UserVoucherWalletWhereInput | UserVoucherWalletWhereInput[]
+    userId?: StringFilter<"UserVoucherWallet"> | string
+    voucherId?: StringFilter<"UserVoucherWallet"> | string
+    claimedAt?: DateTimeFilter<"UserVoucherWallet"> | Date | string
+    voucher?: XOR<VoucherScalarRelationFilter, VoucherWhereInput>
+  }, "id" | "userId_voucherId">
+
+  export type UserVoucherWalletOrderByWithAggregationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    voucherId?: SortOrder
+    claimedAt?: SortOrder
+    _count?: UserVoucherWalletCountOrderByAggregateInput
+    _max?: UserVoucherWalletMaxOrderByAggregateInput
+    _min?: UserVoucherWalletMinOrderByAggregateInput
+  }
+
+  export type UserVoucherWalletScalarWhereWithAggregatesInput = {
+    AND?: UserVoucherWalletScalarWhereWithAggregatesInput | UserVoucherWalletScalarWhereWithAggregatesInput[]
+    OR?: UserVoucherWalletScalarWhereWithAggregatesInput[]
+    NOT?: UserVoucherWalletScalarWhereWithAggregatesInput | UserVoucherWalletScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"UserVoucherWallet"> | string
+    userId?: StringWithAggregatesFilter<"UserVoucherWallet"> | string
+    voucherId?: StringWithAggregatesFilter<"UserVoucherWallet"> | string
+    claimedAt?: DateTimeWithAggregatesFilter<"UserVoucherWallet"> | Date | string
+  }
+
   export type VoucherCreateInput = {
     id?: string
     shopId: string
@@ -3614,11 +4882,13 @@ export namespace Prisma {
     usageLimit: number
     usedCount?: number
     targetUserId?: string | null
+    isClaimable?: boolean
     startDate: Date | string
     endDate: Date | string
     createdAt?: Date | string
     updatedAt?: Date | string
     usages?: VoucherUsageCreateNestedManyWithoutVoucherInput
+    claims?: UserVoucherWalletCreateNestedManyWithoutVoucherInput
   }
 
   export type VoucherUncheckedCreateInput = {
@@ -3633,11 +4903,13 @@ export namespace Prisma {
     usageLimit: number
     usedCount?: number
     targetUserId?: string | null
+    isClaimable?: boolean
     startDate: Date | string
     endDate: Date | string
     createdAt?: Date | string
     updatedAt?: Date | string
     usages?: VoucherUsageUncheckedCreateNestedManyWithoutVoucherInput
+    claims?: UserVoucherWalletUncheckedCreateNestedManyWithoutVoucherInput
   }
 
   export type VoucherUpdateInput = {
@@ -3652,11 +4924,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     usages?: VoucherUsageUpdateManyWithoutVoucherNestedInput
+    claims?: UserVoucherWalletUpdateManyWithoutVoucherNestedInput
   }
 
   export type VoucherUncheckedUpdateInput = {
@@ -3671,11 +4945,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     usages?: VoucherUsageUncheckedUpdateManyWithoutVoucherNestedInput
+    claims?: UserVoucherWalletUncheckedUpdateManyWithoutVoucherNestedInput
   }
 
   export type VoucherCreateManyInput = {
@@ -3690,6 +4966,7 @@ export namespace Prisma {
     usageLimit: number
     usedCount?: number
     targetUserId?: string | null
+    isClaimable?: boolean
     startDate: Date | string
     endDate: Date | string
     createdAt?: Date | string
@@ -3708,6 +4985,7 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3726,6 +5004,7 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3785,6 +5064,54 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     orderId?: NullableStringFieldUpdateOperationsInput | string | null
     usedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletCreateInput = {
+    id?: string
+    userId: string
+    claimedAt?: Date | string
+    voucher: VoucherCreateNestedOneWithoutClaimsInput
+  }
+
+  export type UserVoucherWalletUncheckedCreateInput = {
+    id?: string
+    userId: string
+    voucherId: string
+    claimedAt?: Date | string
+  }
+
+  export type UserVoucherWalletUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    voucher?: VoucherUpdateOneRequiredWithoutClaimsNestedInput
+  }
+
+  export type UserVoucherWalletUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    voucherId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletCreateManyInput = {
+    id?: string
+    userId: string
+    voucherId: string
+    claimedAt?: Date | string
+  }
+
+  export type UserVoucherWalletUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    voucherId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type StringFilter<$PrismaModel = never> = {
@@ -3850,6 +5177,11 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
+  export type BoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -3867,12 +5199,22 @@ export namespace Prisma {
     none?: VoucherUsageWhereInput
   }
 
+  export type UserVoucherWalletListRelationFilter = {
+    every?: UserVoucherWalletWhereInput
+    some?: UserVoucherWalletWhereInput
+    none?: UserVoucherWalletWhereInput
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
   }
 
   export type VoucherUsageOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type UserVoucherWalletOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -3893,6 +5235,7 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     targetUserId?: SortOrder
+    isClaimable?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     createdAt?: SortOrder
@@ -3919,6 +5262,7 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     targetUserId?: SortOrder
+    isClaimable?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     createdAt?: SortOrder
@@ -3937,6 +5281,7 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     targetUserId?: SortOrder
+    isClaimable?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     createdAt?: SortOrder
@@ -4035,6 +5380,14 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
+  }
+
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -4078,6 +5431,32 @@ export namespace Prisma {
     usedAt?: SortOrder
   }
 
+  export type UserVoucherWalletUserIdVoucherIdCompoundUniqueInput = {
+    userId: string
+    voucherId: string
+  }
+
+  export type UserVoucherWalletCountOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    voucherId?: SortOrder
+    claimedAt?: SortOrder
+  }
+
+  export type UserVoucherWalletMaxOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    voucherId?: SortOrder
+    claimedAt?: SortOrder
+  }
+
+  export type UserVoucherWalletMinOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    voucherId?: SortOrder
+    claimedAt?: SortOrder
+  }
+
   export type VoucherUsageCreateNestedManyWithoutVoucherInput = {
     create?: XOR<VoucherUsageCreateWithoutVoucherInput, VoucherUsageUncheckedCreateWithoutVoucherInput> | VoucherUsageCreateWithoutVoucherInput[] | VoucherUsageUncheckedCreateWithoutVoucherInput[]
     connectOrCreate?: VoucherUsageCreateOrConnectWithoutVoucherInput | VoucherUsageCreateOrConnectWithoutVoucherInput[]
@@ -4085,11 +5464,25 @@ export namespace Prisma {
     connect?: VoucherUsageWhereUniqueInput | VoucherUsageWhereUniqueInput[]
   }
 
+  export type UserVoucherWalletCreateNestedManyWithoutVoucherInput = {
+    create?: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput> | UserVoucherWalletCreateWithoutVoucherInput[] | UserVoucherWalletUncheckedCreateWithoutVoucherInput[]
+    connectOrCreate?: UserVoucherWalletCreateOrConnectWithoutVoucherInput | UserVoucherWalletCreateOrConnectWithoutVoucherInput[]
+    createMany?: UserVoucherWalletCreateManyVoucherInputEnvelope
+    connect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+  }
+
   export type VoucherUsageUncheckedCreateNestedManyWithoutVoucherInput = {
     create?: XOR<VoucherUsageCreateWithoutVoucherInput, VoucherUsageUncheckedCreateWithoutVoucherInput> | VoucherUsageCreateWithoutVoucherInput[] | VoucherUsageUncheckedCreateWithoutVoucherInput[]
     connectOrCreate?: VoucherUsageCreateOrConnectWithoutVoucherInput | VoucherUsageCreateOrConnectWithoutVoucherInput[]
     createMany?: VoucherUsageCreateManyVoucherInputEnvelope
     connect?: VoucherUsageWhereUniqueInput | VoucherUsageWhereUniqueInput[]
+  }
+
+  export type UserVoucherWalletUncheckedCreateNestedManyWithoutVoucherInput = {
+    create?: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput> | UserVoucherWalletCreateWithoutVoucherInput[] | UserVoucherWalletUncheckedCreateWithoutVoucherInput[]
+    connectOrCreate?: UserVoucherWalletCreateOrConnectWithoutVoucherInput | UserVoucherWalletCreateOrConnectWithoutVoucherInput[]
+    createMany?: UserVoucherWalletCreateManyVoucherInputEnvelope
+    connect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -4124,6 +5517,10 @@ export namespace Prisma {
     set?: string | null
   }
 
+  export type BoolFieldUpdateOperationsInput = {
+    set?: boolean
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
@@ -4142,6 +5539,20 @@ export namespace Prisma {
     deleteMany?: VoucherUsageScalarWhereInput | VoucherUsageScalarWhereInput[]
   }
 
+  export type UserVoucherWalletUpdateManyWithoutVoucherNestedInput = {
+    create?: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput> | UserVoucherWalletCreateWithoutVoucherInput[] | UserVoucherWalletUncheckedCreateWithoutVoucherInput[]
+    connectOrCreate?: UserVoucherWalletCreateOrConnectWithoutVoucherInput | UserVoucherWalletCreateOrConnectWithoutVoucherInput[]
+    upsert?: UserVoucherWalletUpsertWithWhereUniqueWithoutVoucherInput | UserVoucherWalletUpsertWithWhereUniqueWithoutVoucherInput[]
+    createMany?: UserVoucherWalletCreateManyVoucherInputEnvelope
+    set?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    disconnect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    delete?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    connect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    update?: UserVoucherWalletUpdateWithWhereUniqueWithoutVoucherInput | UserVoucherWalletUpdateWithWhereUniqueWithoutVoucherInput[]
+    updateMany?: UserVoucherWalletUpdateManyWithWhereWithoutVoucherInput | UserVoucherWalletUpdateManyWithWhereWithoutVoucherInput[]
+    deleteMany?: UserVoucherWalletScalarWhereInput | UserVoucherWalletScalarWhereInput[]
+  }
+
   export type VoucherUsageUncheckedUpdateManyWithoutVoucherNestedInput = {
     create?: XOR<VoucherUsageCreateWithoutVoucherInput, VoucherUsageUncheckedCreateWithoutVoucherInput> | VoucherUsageCreateWithoutVoucherInput[] | VoucherUsageUncheckedCreateWithoutVoucherInput[]
     connectOrCreate?: VoucherUsageCreateOrConnectWithoutVoucherInput | VoucherUsageCreateOrConnectWithoutVoucherInput[]
@@ -4156,6 +5567,20 @@ export namespace Prisma {
     deleteMany?: VoucherUsageScalarWhereInput | VoucherUsageScalarWhereInput[]
   }
 
+  export type UserVoucherWalletUncheckedUpdateManyWithoutVoucherNestedInput = {
+    create?: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput> | UserVoucherWalletCreateWithoutVoucherInput[] | UserVoucherWalletUncheckedCreateWithoutVoucherInput[]
+    connectOrCreate?: UserVoucherWalletCreateOrConnectWithoutVoucherInput | UserVoucherWalletCreateOrConnectWithoutVoucherInput[]
+    upsert?: UserVoucherWalletUpsertWithWhereUniqueWithoutVoucherInput | UserVoucherWalletUpsertWithWhereUniqueWithoutVoucherInput[]
+    createMany?: UserVoucherWalletCreateManyVoucherInputEnvelope
+    set?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    disconnect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    delete?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    connect?: UserVoucherWalletWhereUniqueInput | UserVoucherWalletWhereUniqueInput[]
+    update?: UserVoucherWalletUpdateWithWhereUniqueWithoutVoucherInput | UserVoucherWalletUpdateWithWhereUniqueWithoutVoucherInput[]
+    updateMany?: UserVoucherWalletUpdateManyWithWhereWithoutVoucherInput | UserVoucherWalletUpdateManyWithWhereWithoutVoucherInput[]
+    deleteMany?: UserVoucherWalletScalarWhereInput | UserVoucherWalletScalarWhereInput[]
+  }
+
   export type VoucherCreateNestedOneWithoutUsagesInput = {
     create?: XOR<VoucherCreateWithoutUsagesInput, VoucherUncheckedCreateWithoutUsagesInput>
     connectOrCreate?: VoucherCreateOrConnectWithoutUsagesInput
@@ -4168,6 +5593,20 @@ export namespace Prisma {
     upsert?: VoucherUpsertWithoutUsagesInput
     connect?: VoucherWhereUniqueInput
     update?: XOR<XOR<VoucherUpdateToOneWithWhereWithoutUsagesInput, VoucherUpdateWithoutUsagesInput>, VoucherUncheckedUpdateWithoutUsagesInput>
+  }
+
+  export type VoucherCreateNestedOneWithoutClaimsInput = {
+    create?: XOR<VoucherCreateWithoutClaimsInput, VoucherUncheckedCreateWithoutClaimsInput>
+    connectOrCreate?: VoucherCreateOrConnectWithoutClaimsInput
+    connect?: VoucherWhereUniqueInput
+  }
+
+  export type VoucherUpdateOneRequiredWithoutClaimsNestedInput = {
+    create?: XOR<VoucherCreateWithoutClaimsInput, VoucherUncheckedCreateWithoutClaimsInput>
+    connectOrCreate?: VoucherCreateOrConnectWithoutClaimsInput
+    upsert?: VoucherUpsertWithoutClaimsInput
+    connect?: VoucherWhereUniqueInput
+    update?: XOR<XOR<VoucherUpdateToOneWithWhereWithoutClaimsInput, VoucherUpdateWithoutClaimsInput>, VoucherUncheckedUpdateWithoutClaimsInput>
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -4229,6 +5668,11 @@ export namespace Prisma {
     startsWith?: string | StringFieldRefInput<$PrismaModel>
     endsWith?: string | StringFieldRefInput<$PrismaModel>
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
+  }
+
+  export type NestedBoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
   }
 
   export type NestedDateTimeFilter<$PrismaModel = never> = {
@@ -4335,6 +5779,14 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
+  }
+
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -4373,6 +5825,28 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
+  export type UserVoucherWalletCreateWithoutVoucherInput = {
+    id?: string
+    userId: string
+    claimedAt?: Date | string
+  }
+
+  export type UserVoucherWalletUncheckedCreateWithoutVoucherInput = {
+    id?: string
+    userId: string
+    claimedAt?: Date | string
+  }
+
+  export type UserVoucherWalletCreateOrConnectWithoutVoucherInput = {
+    where: UserVoucherWalletWhereUniqueInput
+    create: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput>
+  }
+
+  export type UserVoucherWalletCreateManyVoucherInputEnvelope = {
+    data: UserVoucherWalletCreateManyVoucherInput | UserVoucherWalletCreateManyVoucherInput[]
+    skipDuplicates?: boolean
+  }
+
   export type VoucherUsageUpsertWithWhereUniqueWithoutVoucherInput = {
     where: VoucherUsageWhereUniqueInput
     update: XOR<VoucherUsageUpdateWithoutVoucherInput, VoucherUsageUncheckedUpdateWithoutVoucherInput>
@@ -4400,6 +5874,32 @@ export namespace Prisma {
     usedAt?: DateTimeFilter<"VoucherUsage"> | Date | string
   }
 
+  export type UserVoucherWalletUpsertWithWhereUniqueWithoutVoucherInput = {
+    where: UserVoucherWalletWhereUniqueInput
+    update: XOR<UserVoucherWalletUpdateWithoutVoucherInput, UserVoucherWalletUncheckedUpdateWithoutVoucherInput>
+    create: XOR<UserVoucherWalletCreateWithoutVoucherInput, UserVoucherWalletUncheckedCreateWithoutVoucherInput>
+  }
+
+  export type UserVoucherWalletUpdateWithWhereUniqueWithoutVoucherInput = {
+    where: UserVoucherWalletWhereUniqueInput
+    data: XOR<UserVoucherWalletUpdateWithoutVoucherInput, UserVoucherWalletUncheckedUpdateWithoutVoucherInput>
+  }
+
+  export type UserVoucherWalletUpdateManyWithWhereWithoutVoucherInput = {
+    where: UserVoucherWalletScalarWhereInput
+    data: XOR<UserVoucherWalletUpdateManyMutationInput, UserVoucherWalletUncheckedUpdateManyWithoutVoucherInput>
+  }
+
+  export type UserVoucherWalletScalarWhereInput = {
+    AND?: UserVoucherWalletScalarWhereInput | UserVoucherWalletScalarWhereInput[]
+    OR?: UserVoucherWalletScalarWhereInput[]
+    NOT?: UserVoucherWalletScalarWhereInput | UserVoucherWalletScalarWhereInput[]
+    id?: StringFilter<"UserVoucherWallet"> | string
+    userId?: StringFilter<"UserVoucherWallet"> | string
+    voucherId?: StringFilter<"UserVoucherWallet"> | string
+    claimedAt?: DateTimeFilter<"UserVoucherWallet"> | Date | string
+  }
+
   export type VoucherCreateWithoutUsagesInput = {
     id?: string
     shopId: string
@@ -4412,10 +5912,12 @@ export namespace Prisma {
     usageLimit: number
     usedCount?: number
     targetUserId?: string | null
+    isClaimable?: boolean
     startDate: Date | string
     endDate: Date | string
     createdAt?: Date | string
     updatedAt?: Date | string
+    claims?: UserVoucherWalletCreateNestedManyWithoutVoucherInput
   }
 
   export type VoucherUncheckedCreateWithoutUsagesInput = {
@@ -4430,10 +5932,12 @@ export namespace Prisma {
     usageLimit: number
     usedCount?: number
     targetUserId?: string | null
+    isClaimable?: boolean
     startDate: Date | string
     endDate: Date | string
     createdAt?: Date | string
     updatedAt?: Date | string
+    claims?: UserVoucherWalletUncheckedCreateNestedManyWithoutVoucherInput
   }
 
   export type VoucherCreateOrConnectWithoutUsagesInput = {
@@ -4464,10 +5968,12 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    claims?: UserVoucherWalletUpdateManyWithoutVoucherNestedInput
   }
 
   export type VoucherUncheckedUpdateWithoutUsagesInput = {
@@ -4482,10 +5988,108 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    claims?: UserVoucherWalletUncheckedUpdateManyWithoutVoucherNestedInput
+  }
+
+  export type VoucherCreateWithoutClaimsInput = {
+    id?: string
+    shopId: string
+    name: string
+    code: string
+    type: string
+    value: number
+    minSpend: number
+    maxDiscount?: number | null
+    usageLimit: number
+    usedCount?: number
+    targetUserId?: string | null
+    isClaimable?: boolean
+    startDate: Date | string
+    endDate: Date | string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    usages?: VoucherUsageCreateNestedManyWithoutVoucherInput
+  }
+
+  export type VoucherUncheckedCreateWithoutClaimsInput = {
+    id?: string
+    shopId: string
+    name: string
+    code: string
+    type: string
+    value: number
+    minSpend: number
+    maxDiscount?: number | null
+    usageLimit: number
+    usedCount?: number
+    targetUserId?: string | null
+    isClaimable?: boolean
+    startDate: Date | string
+    endDate: Date | string
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    usages?: VoucherUsageUncheckedCreateNestedManyWithoutVoucherInput
+  }
+
+  export type VoucherCreateOrConnectWithoutClaimsInput = {
+    where: VoucherWhereUniqueInput
+    create: XOR<VoucherCreateWithoutClaimsInput, VoucherUncheckedCreateWithoutClaimsInput>
+  }
+
+  export type VoucherUpsertWithoutClaimsInput = {
+    update: XOR<VoucherUpdateWithoutClaimsInput, VoucherUncheckedUpdateWithoutClaimsInput>
+    create: XOR<VoucherCreateWithoutClaimsInput, VoucherUncheckedCreateWithoutClaimsInput>
+    where?: VoucherWhereInput
+  }
+
+  export type VoucherUpdateToOneWithWhereWithoutClaimsInput = {
+    where?: VoucherWhereInput
+    data: XOR<VoucherUpdateWithoutClaimsInput, VoucherUncheckedUpdateWithoutClaimsInput>
+  }
+
+  export type VoucherUpdateWithoutClaimsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    code?: StringFieldUpdateOperationsInput | string
+    type?: StringFieldUpdateOperationsInput | string
+    value?: FloatFieldUpdateOperationsInput | number
+    minSpend?: FloatFieldUpdateOperationsInput | number
+    maxDiscount?: NullableFloatFieldUpdateOperationsInput | number | null
+    usageLimit?: IntFieldUpdateOperationsInput | number
+    usedCount?: IntFieldUpdateOperationsInput | number
+    targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    usages?: VoucherUsageUpdateManyWithoutVoucherNestedInput
+  }
+
+  export type VoucherUncheckedUpdateWithoutClaimsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    shopId?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    code?: StringFieldUpdateOperationsInput | string
+    type?: StringFieldUpdateOperationsInput | string
+    value?: FloatFieldUpdateOperationsInput | number
+    minSpend?: FloatFieldUpdateOperationsInput | number
+    maxDiscount?: NullableFloatFieldUpdateOperationsInput | number | null
+    usageLimit?: IntFieldUpdateOperationsInput | number
+    usedCount?: IntFieldUpdateOperationsInput | number
+    targetUserId?: NullableStringFieldUpdateOperationsInput | string | null
+    isClaimable?: BoolFieldUpdateOperationsInput | boolean
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    usages?: VoucherUsageUncheckedUpdateManyWithoutVoucherNestedInput
   }
 
   export type VoucherUsageCreateManyVoucherInput = {
@@ -4493,6 +6097,12 @@ export namespace Prisma {
     userId: string
     orderId?: string | null
     usedAt?: Date | string
+  }
+
+  export type UserVoucherWalletCreateManyVoucherInput = {
+    id?: string
+    userId: string
+    claimedAt?: Date | string
   }
 
   export type VoucherUsageUpdateWithoutVoucherInput = {
@@ -4514,6 +6124,24 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     orderId?: NullableStringFieldUpdateOperationsInput | string | null
     usedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletUpdateWithoutVoucherInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletUncheckedUpdateWithoutVoucherInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UserVoucherWalletUncheckedUpdateManyWithoutVoucherInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    claimedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
 

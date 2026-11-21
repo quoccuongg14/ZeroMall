@@ -20,6 +20,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
   const [validDays, setValidDays] = useState<number>(30)
   const [targetUserId, setTargetUserId] = useState('')
   const [isGoodwill, setIsGoodwill] = useState(false)
+  const [isClaimable, setIsClaimable] = useState(true)
   const [filterType, setFilterType] = useState<'ALL' | 'PLATFORM' | 'GOODWILL'>('ALL')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -79,6 +80,7 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
           minSpend: minSpendVal,
           usageLimit: limitVal,
           targetUserId: isGoodwill ? targetUserId.trim() : null,
+          isClaimable: isGoodwill ? false : isClaimable,
           startDate: new Date().toISOString(),
           endDate: new Date(Date.now() + 86400000 * validDays).toISOString()
         })
@@ -295,6 +297,22 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
           </div>
         </div>
 
+        {!isGoodwill && (
+          <div className="flex items-center gap-2 pt-1 text-xs border-t border-slate-100">
+            <input
+              type="checkbox"
+              id="claimableCheck"
+              checked={isClaimable}
+              onChange={(e) => setIsClaimable(e.target.checked)}
+              className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+            />
+            <label htmlFor="claimableCheck" className="text-slate-700 font-bold cursor-pointer select-none flex items-center gap-1.5">
+              <span>⚡</span>
+              <span>Kích hoạt Cơ chế 1: Voucher Khung Giờ Vàng (Bắt buộc người mua bấm "Lưu vào ví" trước khi thanh toán - FCFS)</span>
+            </label>
+          </div>
+        )}
+
       </div>
 
       {/* CARD 2: BẢNG DANH SÁCH VOUCHER TOÀN SÀN */}
@@ -388,18 +406,26 @@ export const PlatformVouchersTab: React.FC<PlatformVouchersTabProps> = ({
 
                       {/* Cột 2: Đối Tượng Áp Dụng */}
                       <td className="py-3.5 px-4">
-                        {v.targetUserId ? (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200/60 font-bold text-[10px]">
-                            <span>🎁</span>
-                            <span>CSKH Đền Bù:</span>
-                            <span className="font-mono">{v.targetUserId.slice(0, 8)}...</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-bold text-[10px]">
-                            <span>🌐</span>
-                            <span>Mọi Người Mua (Toàn Sàn)</span>
-                          </div>
-                        )}
+                        <div className="flex flex-col gap-1 items-start">
+                          {v.targetUserId ? (
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200/60 font-bold text-[10px]">
+                              <span>🎁</span>
+                              <span>CSKH Đền Bù:</span>
+                              <span className="font-mono">{v.targetUserId.slice(0, 8)}...</span>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-bold text-[10px]">
+                              <span>🌐</span>
+                              <span>Mọi Người Mua (Toàn Sàn)</span>
+                            </div>
+                          )}
+                          {v.isClaimable && (
+                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/80 font-bold text-[9px] uppercase tracking-wider">
+                              <span>⚡</span>
+                              <span>Giờ Vàng (Lưu Ví FCFS)</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Cột 3: Mức Giảm */}

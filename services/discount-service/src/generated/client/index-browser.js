@@ -132,6 +132,7 @@ exports.Prisma.VoucherScalarFieldEnum = {
   usageLimit: 'usageLimit',
   usedCount: 'usedCount',
   targetUserId: 'targetUserId',
+  isClaimable: 'isClaimable',
   startDate: 'startDate',
   endDate: 'endDate',
   createdAt: 'createdAt',
@@ -144,6 +145,13 @@ exports.Prisma.VoucherUsageScalarFieldEnum = {
   userId: 'userId',
   orderId: 'orderId',
   usedAt: 'usedAt'
+};
+
+exports.Prisma.UserVoucherWalletScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  voucherId: 'voucherId',
+  claimedAt: 'claimedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -164,7 +172,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   Voucher: 'Voucher',
-  VoucherUsage: 'VoucherUsage'
+  VoucherUsage: 'VoucherUsage',
+  UserVoucherWallet: 'UserVoucherWallet'
 };
 
 /**

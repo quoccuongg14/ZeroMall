@@ -399,7 +399,10 @@ export const CartPage: React.FC<CartPageProps> = ({
   useEffect(() => {
     const fetchActiveVouchers = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/discounts/all-active`)
+        const url = user?.id
+          ? `${API_BASE_URL}/discounts/all-active?userId=${user.id}`
+          : `${API_BASE_URL}/discounts/all-active`
+        const res = await fetch(url)
         if (res.ok) {
           const data = await res.json()
           setAllShopVouchers(data)
@@ -410,7 +413,7 @@ export const CartPage: React.FC<CartPageProps> = ({
     }
     
     fetchActiveVouchers()
-  }, [])
+  }, [user?.id])
 
   // Tự động tải thông số kích thước & cân nặng chuẩn từ CSDL cho các sản phẩm trong giỏ hàng (Cached)
   useEffect(() => {

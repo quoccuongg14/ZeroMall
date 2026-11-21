@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Delete, Body, Query, Param, BadRequestException } from '@nestjs/common';
 import { DiscountService } from './discount.service';
-import { CreateVoucherDto, UseVouchersDto } from './discount.dto';
+import { CreateVoucherDto, UseVouchersDto, ClaimVoucherDto } from './discount.dto';
 
 @Controller('discounts')
 export class DiscountController {
@@ -40,6 +40,16 @@ export class DiscountController {
   @Get('all-active')
   async getAllActiveVouchers(@Query('userId') userId?: string) {
     return this.discountService.getAllActiveVouchers(userId);
+  }
+
+  @Post('claim')
+  async claimVoucher(@Body() dto: ClaimVoucherDto) {
+    return this.discountService.claimVoucher(dto.userId, dto.voucherId);
+  }
+
+  @Get('my-wallet')
+  async getMyWallet(@Query('userId') userId: string) {
+    return this.discountService.getMyWallet(userId);
   }
 
   @Post('use')

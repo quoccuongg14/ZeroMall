@@ -7,8 +7,14 @@ export class CreateVoucherDto {
   maxDiscount?: number | null;
   usageLimit: number;
   targetUserId?: string | null;
+  isClaimable?: boolean;
   startDate: string;
   endDate: string;
+}
+
+export class ClaimVoucherDto {
+  userId: string;
+  voucherId: string;
 }
 
 export class UseVouchersDto {

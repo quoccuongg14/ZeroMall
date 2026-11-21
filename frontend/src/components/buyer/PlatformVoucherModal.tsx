@@ -370,33 +370,43 @@ export const PlatformVoucherModal: React.FC<PlatformVoucherModalProps> = ({
               {platformVouchers.map((v) => {
                 const isSelected = tempOrder === v.code || tempOrder === v.id
                 const isMinSpendMet = itemsTotal >= (v.minSpend || 0)
+                const isExhausted = (v.usedCount || 0) >= (v.usageLimit || 1)
+                const isClaimable = Boolean(v.isClaimable)
+                const isClaimed = Boolean(v.isClaimed)
+                const usagePercent = Math.min(Math.round(((v.usedCount || 0) / (v.usageLimit || 1)) * 100), 100)
+                const isEligibleToSelect = isMinSpendMet && !isExhausted && (!isClaimable || isClaimed)
 
                 return (
                   <div
                     key={v.id}
                     onClick={() => {
-                      if (isMinSpendMet) {
+                      if (isEligibleToSelect) {
                         setTempOrder(isSelected ? 'none' : v.code)
                       }
                     }}
                     className={`p-3.5 border rounded-xl flex items-center justify-between gap-3 transition cursor-pointer ${
                       isSelected
                         ? 'border-emerald-500 bg-emerald-50/30 shadow-2xs'
-                        : isMinSpendMet
+                        : isEligibleToSelect
                           ? 'border-slate-200 hover:border-slate-300 bg-white'
                           : 'border-slate-100 bg-slate-50/70 opacity-60 cursor-not-allowed'
                     }`}
                   >
-                    <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
                       <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg font-black shrink-0 border border-emerald-200">
-                        🏷️
+                        {isClaimable ? '⚡' : '🏷️'}
                       </div>
-                      <div className="text-left text-xs space-y-0.5">
-                        <div className="flex items-center gap-1.5">
+                      <div className="text-left text-xs space-y-0.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-extrabold text-slate-800">{v.name}</span>
                           <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
                             {v.code}
                           </span>
+                          {isClaimable && (
+                            <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">
+                              Giờ Vàng FCFS
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-emerald-700 font-bold">
                           Giảm {v.type === 'percentage' ? `${v.value}%` : formatPrice(v.value)}
@@ -405,14 +415,39 @@ export const PlatformVoucherModal: React.FC<PlatformVoucherModalProps> = ({
                         <p className="text-[10px] text-slate-500">
                           Đơn tối thiểu: {formatPrice(v.minSpend || 0)}
                         </p>
+
+                        {/* FCFS Meter */}
+                        <div className="pt-1 max-w-xs">
+                          <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 mb-0.5">
+                            <span>Đã dùng: <strong>{v.usedCount || 0}/{v.usageLimit}</strong></span>
+                            <span>{usagePercent}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isExhausted ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${usagePercent}%` }}
+                            />
+                          </div>
+                        </div>
+
                         {!isMinSpendMet && (
-                          <p className="text-[10px] text-rose-500 font-semibold">
+                          <p className="text-[10px] text-rose-500 font-semibold pt-0.5">
                             Mua thêm {formatPrice(v.minSpend - itemsTotal)} để áp dụng
+                          </p>
+                        )}
+                        {isExhausted && (
+                          <p className="text-[10px] text-rose-600 font-black pt-0.5">
+                            ❌ Đã hết lượt sử dụng theo thứ tự chốt đơn (FCFS)
+                          </p>
+                        )}
+                        {isClaimable && !isClaimed && !isExhausted && (
+                          <p className="text-[10px] text-amber-700 font-bold pt-0.5">
+                            ⚠️ Bạn chưa bấm "Lưu Vào Ví" tại banner Giờ Vàng!
                           </p>
                         )}
                       </div>
                     </div>
-                    {isMinSpendMet && (
+                    {isEligibleToSelect && (
                       <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition ${
                         isSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
                       }`}>

@@ -19,11 +19,13 @@ model Voucher {
   usageLimit   Int
   usedCount    Int      @default(0)
   targetUserId String?  // ID của user được cấp riêng (Goodwill Compensation Voucher CSKH)
+  isClaimable  Boolean  @default(false) // Voucher khung giờ vàng cần bấm Lưu vào ví (Claimable)
   startDate    DateTime
   endDate      DateTime
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   usages       VoucherUsage[]
+  claims       UserVoucherWallet[]
 
   @@unique([shopId, code])
 }
@@ -37,5 +39,16 @@ model VoucherUsage {
   usedAt    DateTime @default(now())
 
   @@index([voucherId, userId])
+  @@index([userId])
+}
+
+model UserVoucherWallet {
+  id        String   @id @default(uuid())
+  userId    String
+  voucherId String
+  voucher   Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  claimedAt DateTime @default(now())
+
+  @@unique([userId, voucherId])
   @@index([userId])
 }

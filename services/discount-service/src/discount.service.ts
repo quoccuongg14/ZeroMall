@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { CreateVoucherDto } from './discount.dto';
 
@@ -60,6 +60,7 @@ export class DiscountService {
         maxDiscount: dto.type === 'percentage' && dto.maxDiscount ? Number(dto.maxDiscount) : null,
         usageLimit: Number(dto.usageLimit),
         targetUserId: dto.targetUserId ? dto.targetUserId.trim() : null,
+        isClaimable: Boolean(dto.isClaimable),
         startDate: start,
         endDate: end,
       },
@@ -122,7 +123,7 @@ export class DiscountService {
       for (const id of uniqueIds) {
         // 2. Khóa dòng cấp CSDL (Pessimistic Row Lock: FOR UPDATE)
         const lockedRows: any[] = await tx.$queryRaw`
-          SELECT id, name, code, "usageLimit", "usedCount", "startDate", "endDate", "targetUserId"
+          SELECT id, name, code, "usageLimit", "usedCount", "startDate", "endDate", "targetUserId", "isClaimable"
           FROM discount."Voucher"
           WHERE id = ${id}
           FOR UPDATE
@@ -152,6 +153,23 @@ export class DiscountService {
         // 5. Kiểm tra người dùng đích (nếu là voucher cấp riêng)
         if (voucher.targetUserId && userId && voucher.targetUserId !== userId) {
           throw new BadRequestException(`Mã giảm giá "${voucher.code}" không áp dụng cho tài khoản của bạn!`);
+        }
+
+        // 5.1 Kiểm tra voucher giờ vàng (isClaimable): Bắt buộc người dùng phải bấm Lưu vào Ví trước
+        if (voucher.isClaimable && userId) {
+          const claimed = await tx.userVoucherWallet.findUnique({
+            where: {
+              userId_voucherId: {
+                userId,
+                voucherId: id,
+              },
+            },
+          });
+          if (!claimed) {
+            throw new BadRequestException(
+              `Mã giảm giá "${voucher.code}" là mã Khung Giờ Vàng FCFS. Bạn cần bấm "Lưu Vào Ví" trước khi thanh toán!`
+            );
+          }
         }
 
         // 6. Kiểm tra xem người dùng đã từng sử dụng voucher này chưa (nếu có userId)
@@ -226,6 +244,100 @@ export class DiscountService {
     }
   }
 
+  async claimVoucher(userId: string, voucherId: string) {
+    if (!userId || !voucherId) {
+      throw new BadRequestException('userId và voucherId không được để trống!');
+    }
+
+    const voucher = await this.prisma.voucher.findUnique({
+      where: { id: voucherId },
+    });
+
+    if (!voucher) {
+      throw new NotFoundException('Không tìm thấy mã giảm giá!');
+    }
+
+    const now = new Date();
+    if (new Date(voucher.endDate) < now) {
+      throw new BadRequestException('Mã giảm giá này đã hết hạn hiệu lực!');
+    }
+
+    // Check if user already claimed
+    const existingClaim = await this.prisma.userVoucherWallet.findUnique({
+      where: {
+        userId_voucherId: {
+          userId,
+          voucherId,
+        },
+      },
+    });
+
+    if (existingClaim) {
+      return {
+        success: true,
+        message: 'Voucher này đã có trong ví của bạn!',
+        alreadyClaimed: true,
+        voucher,
+      };
+    }
+
+    const claim = await this.prisma.userVoucherWallet.create({
+      data: {
+        userId,
+        voucherId,
+      },
+      include: {
+        voucher: true,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Đã lưu voucher vào ví thành công!',
+      alreadyClaimed: false,
+      voucher: claim.voucher,
+    };
+  }
+
+  async getMyWallet(userId: string) {
+    if (!userId) return [];
+
+    const now = new Date();
+    const claims = await this.prisma.userVoucherWallet.findMany({
+      where: { userId },
+      include: {
+        voucher: true,
+      },
+      orderBy: { claimedAt: 'desc' },
+    });
+
+    return claims.map((c) => {
+      const v = c.voucher;
+      const isExpired = new Date(v.endDate) < now;
+      const isExhausted = v.usedCount >= v.usageLimit;
+      return {
+        id: v.id,
+        claimId: c.id,
+        claimedAt: c.claimedAt,
+        code: v.code,
+        name: v.name,
+        shopId: v.shopId,
+        type: v.type,
+        value: v.value,
+        minSpend: v.minSpend,
+        maxDiscount: v.maxDiscount,
+        usageLimit: v.usageLimit,
+        usedCount: v.usedCount,
+        isClaimable: v.isClaimable,
+        startDate: v.startDate,
+        endDate: v.endDate,
+        isExpired,
+        isExhausted,
+        isAvailable: !isExpired && !isExhausted,
+      };
+    });
+  }
+
   async getAllActiveVouchers(userId?: string) {
     const now = new Date();
     const whereCondition: any = {
@@ -243,9 +355,31 @@ export class DiscountService {
       whereCondition.targetUserId = null;
     }
 
-    return this.prisma.voucher.findMany({
+    const vouchers = await this.prisma.voucher.findMany({
       where: whereCondition,
       orderBy: { createdAt: 'desc' },
     });
+
+    if (!userId || vouchers.length === 0) {
+      return vouchers.map((v: any) => ({
+        ...v,
+        isClaimed: false,
+      }));
+    }
+
+    const claimedList = await this.prisma.userVoucherWallet.findMany({
+      where: {
+        userId,
+        voucherId: { in: vouchers.map((v: any) => v.id) },
+      },
+      select: { voucherId: true },
+    });
+
+    const claimedSet = new Set(claimedList.map((c) => c.voucherId));
+
+    return vouchers.map((v: any) => ({
+      ...v,
+      isClaimed: claimedSet.has(v.id),
+    }));
   }
 }
