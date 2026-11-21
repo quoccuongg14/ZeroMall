@@ -50,6 +50,12 @@ const SCAN_CONFIG = {
     buttonLabel: '💵 Quét Đối Soát',
     buttonColor: 'bg-emerald-600 hover:bg-emerald-500',
   },
+  SOC_DASHBOARD: {
+    title: '4. Giám Sát SOC',
+    placeholder: 'Quét hoặc tra cứu mã vận đơn tại trung tâm...',
+    buttonLabel: '🔍 Tra Cứu Kiện',
+    buttonColor: 'bg-indigo-600 hover:bg-indigo-500',
+  },
 }
 
 export const HubScannerBar: React.FC<HubScannerBarProps> = ({

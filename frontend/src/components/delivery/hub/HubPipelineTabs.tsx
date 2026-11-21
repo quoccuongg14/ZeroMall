@@ -19,6 +19,7 @@ interface HubPipelineTabsProps {
   sortingCount: number
   inTransitCount: number
   destinationCount: number
+  hubType?: string // 'SORTING_CENTER' | 'DESTINATION_HUB' | 'ORIGIN_HUB'
 }
 
 export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
@@ -29,15 +30,62 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
   sortingCount,
   inTransitCount,
   destinationCount,
+  hubType = 'DESTINATION_HUB',
 }) => {
-  const tabs: TabConfig[] = [
+  const isSoc = hubType === 'SORTING_CENTER'
+
+  // Cấu hình Tabs cho Trung Tâm Phân Loại (SOC)
+  const socTabs: TabConfig[] = [
+    {
+      id: 'INBOUND_RECEIVING',
+      title: '1. Tiếp Nhận Xe Tải Cập Bến',
+      desc: 'Cắt seal chì, dỡ hàng & đối soát kiện từ Hub/SOC khác',
+      count: inTransitCount,
+      icon: '🚛',
+      activeColor: 'border-indigo-500 bg-indigo-50 ring-indigo-200',
+      countColor: 'text-indigo-700 bg-indigo-100 border-indigo-300',
+    },
+    {
+      id: 'SORTING_LINEHAUL',
+      title: '2. Phân Luồng & Đóng Xe Tuyến',
+      desc: 'Phân loại băng chuyền, quét DWS & niêm phong xe tải',
+      count: sortingCount,
+      icon: '⚡',
+      activeColor: 'border-sky-500 bg-sky-50 ring-sky-200',
+      countColor: 'text-sky-700 bg-sky-100 border-sky-300',
+    },
+    {
+      id: 'INBOUND_PICKUP',
+      title: '3. Tiếp Nhận Shop / Hàng Hoàn',
+      desc:
+        returnCount > 0
+          ? `Nhận ${pickupCount} đơn gửi trực tiếp, ${returnCount} đơn hoàn`
+          : 'Tiếp nhận hàng Shop ký gửi trực tiếp & kiện thu hồi',
+      count: pickupCount + returnCount,
+      icon: '📥',
+      activeColor: 'border-amber-500 bg-amber-50 ring-amber-200',
+      countColor: 'text-amber-700 bg-amber-100 border-amber-300',
+    },
+    {
+      id: 'SOC_DASHBOARD',
+      title: '4. Giám Sát Vận Hành SOC',
+      desc: 'Sản lượng băng chuyền, tình trạng cửa Dock & tải trọng xe',
+      count: sortingCount + inTransitCount,
+      icon: '📊',
+      activeColor: 'border-emerald-500 bg-emerald-50 ring-emerald-200',
+      countColor: 'text-emerald-700 bg-emerald-100 border-emerald-300',
+    },
+  ]
+
+  // Cấu hình Tabs cho Bưu Cục Giao Hàng (HUB)
+  const hubTabs: TabConfig[] = [
     {
       id: 'INBOUND_PICKUP',
       title: '1. Nhận Từ Shipper',
       desc:
         returnCount > 0
           ? `Tiếp nhận ${pickupCount} đơn Shop, ${returnCount} đơn Thu Hồi`
-          : 'Tiếp nhận bưu kiện Shipper First-Mile bàn giao',
+          : 'Tiếp nhận bưu kiện Shipper First-Mile bàn giao về kho',
       count: pickupCount + returnCount,
       icon: '📥',
       activeColor: 'border-amber-500 bg-amber-50 ring-amber-200',
@@ -45,8 +93,8 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     },
     {
       id: 'SORTING_LINEHAUL',
-      title: '2. Phân Loại & Đóng Xe Tải',
-      desc: 'Phân luồng, chọn xe tải & niêm phong Seal chì',
+      title: '2. Đóng Xe Tải Đi SOC',
+      desc: 'Gom kiện ngoại tỉnh, đóng xe tải xuất lên SOC phân loại',
       count: sortingCount,
       icon: '🚛',
       activeColor: 'border-sky-500 bg-sky-50 ring-sky-200',
@@ -54,8 +102,8 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     },
     {
       id: 'INBOUND_RECEIVING',
-      title: '3. Tiếp Nhận Xe Tải Đến',
-      desc: 'Cắt Seal & nhận kiện từ xe tải về bưu cục phát',
+      title: '3. Tiếp Nhận Xe Từ SOC',
+      desc: 'Cắt Seal & nhận kiện phân loại từ SOC về bưu cục phát',
       count: inTransitCount,
       icon: '🏢',
       activeColor: 'border-indigo-500 bg-indigo-50 ring-indigo-200',
@@ -63,8 +111,8 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     },
     {
       id: 'DISPATCH_LASTMILE',
-      title: '4. Chia Tuyến Giao',
-      desc: 'Bàn giao Shipper Last-Mile đi phát tận nhà',
+      title: '4. Chia Tuyến Shipper Phát',
+      desc: 'Bàn giao Shipper Last-Mile đi phát tận tay người mua',
       count: destinationCount,
       icon: '🛵',
       activeColor: 'border-emerald-500 bg-emerald-50 ring-emerald-200',
@@ -73,7 +121,7 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     {
       id: 'HUB_CASHIER',
       title: '5. Thu Ngân Bưu Cục',
-      desc: 'Duyệt nộp tiền COD & Quản lý quỹ tiền mặt',
+      desc: 'Duyệt nộp tiền COD & Quản lý quỹ tiền mặt bưu cục',
       count: 0,
       icon: '🏦',
       activeColor: 'border-rose-500 bg-rose-50 ring-rose-200',
@@ -81,9 +129,11 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     },
   ]
 
+  const activeTabs = isSoc ? socTabs : hubTabs
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      {tabs.map((tab) => {
+    <div className={`grid gap-3 ${isSoc ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'}`}>
+      {activeTabs.map((tab) => {
         const isActive = currentTab === tab.id
         return (
           <button

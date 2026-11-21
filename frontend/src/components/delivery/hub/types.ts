@@ -61,7 +61,7 @@ export interface Hub {
   address?: string
 }
 
-export type StationTab = 'INBOUND_PICKUP' | 'SORTING_LINEHAUL' | 'INBOUND_RECEIVING' | 'DISPATCH_LASTMILE' | 'HUB_CASHIER'
+export type StationTab = 'INBOUND_PICKUP' | 'SORTING_LINEHAUL' | 'INBOUND_RECEIVING' | 'DISPATCH_LASTMILE' | 'HUB_CASHIER' | 'SOC_DASHBOARD'
 
 export interface HubOperatorStationProps {
   currentUser: any

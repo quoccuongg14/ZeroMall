@@ -61,6 +61,7 @@ const TAB_TITLES: Record<StationTab, string> = {
   INBOUND_RECEIVING: '3. Tiếp Nhận Xe Tải Đến',
   DISPATCH_LASTMILE: '4. Chia Tuyến Giao',
   HUB_CASHIER: '5. Thu Ngân Bưu Cục',
+  SOC_DASHBOARD: '4. Giám Sát Vận Hành SOC',
 }
 
 export const HubParcelTable: React.FC<HubParcelTableProps> = ({

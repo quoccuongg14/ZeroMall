@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { LinehaulDispatchModal } from './LinehaulDispatchModal'
 import { LinehaulInboundReconciliationModal } from './LinehaulInboundReconciliationModal'
@@ -24,6 +24,7 @@ import { HubLinehaulTripsBanner } from './hub/HubLinehaulTripsBanner'
 import { DockTruckQuickSealModal } from './hub/DockTruckQuickSealModal'
 import { HubParcelTable } from './hub/HubParcelTable'
 import { HubCashierDesk } from './hub/HubCashierDesk'
+import { SocDashboard } from './hub/SocDashboard'
 
 export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   currentUser,
@@ -44,8 +45,26 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
     return hubs.find((h) => h.code === 'HCM01') || hubs[0]
   }, [assignedHubId, currentUser?.email, hubs])
 
-  const [stationTab, setStationTab] = useState<StationTab>('INBOUND_PICKUP')
+  const isSoc = currentHub?.type === 'SORTING_CENTER'
+
+  const [stationTab, setStationTab] = useState<StationTab>(() => {
+    const isSocHub = currentHub?.type === 'SORTING_CENTER'
+    return isSocHub ? 'INBOUND_RECEIVING' : 'INBOUND_PICKUP'
+  })
   const [searchFilter, setSearchFilter] = useState('')
+
+  // Tự động chuyển tab phù hợp khi đổi loại Hub (SOC vs HUB)
+  useEffect(() => {
+    if (isSoc) {
+      if (stationTab === 'DISPATCH_LASTMILE' || stationTab === 'HUB_CASHIER') {
+        setStationTab('INBOUND_RECEIVING')
+      }
+    } else {
+      if (stationTab === 'SOC_DASHBOARD') {
+        setStationTab('INBOUND_PICKUP')
+      }
+    }
+  }, [isSoc, currentHub?.id])
 
   // Modal Tuyển / Thêm tài xế mới cho Bưu cục
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState(false)
@@ -512,49 +531,92 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
 
   return (
     <div className="space-y-5 text-left">
-      {/* HUB IDENTITY & SHIPPER RECRUITMENT BAR */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      {/* HUB / SOC IDENTITY & ACTION BAR */}
+      <div
+        className={`p-4 sm:p-5 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${
+          isSoc
+            ? 'bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border border-indigo-900/40 text-white'
+            : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white'
+        }`}
+      >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-xl shadow-xs">
-            🏢
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-xs border ${
+              isSoc
+                ? 'bg-indigo-500/20 border-indigo-500/30'
+                : 'bg-emerald-500/20 border-emerald-500/30'
+            }`}
+          >
+            {isSoc ? '🏭' : '🏢'}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-black tracking-tight text-white">
-                {currentHub?.name || 'Trạm Khai Thác Bưu Cục'}
+                {currentHub?.name || (isSoc ? 'Trung Tâm Phân Loại SOC' : 'Trạm Khai Thác Bưu Cục')}
               </h2>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+              <span
+                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                  isSoc
+                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}
+              >
                 {currentHub?.code}
               </span>
+              {isSoc && (
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 font-extrabold px-2 py-0.5 rounded-full border border-amber-500/30">
+                  ⚡ MEGA SORTING CENTER
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 font-medium">
               📍 {currentHub?.address ? `${currentHub.address}, ` : ''}{currentHub?.district}, {currentHub?.province}
               <span className="text-white/30 mx-2">•</span>
-              <span className="text-amber-300 font-bold">
-                🛵 {drivers.filter((d) => d.hubId === currentHub?.id).length} Tài xế trực thuộc
-              </span>
+              {isSoc ? (
+                <span className="text-indigo-300 font-bold">
+                  🚛 {dockTrucks.length} Cửa Dock Linehaul • ⚡ Băng Chuyền DWS Tự Động
+                </span>
+              ) : (
+                <span className="text-amber-300 font-bold">
+                  🛵 {drivers.filter((d) => d.hubId === currentHub?.id).length} Tài xế trực thuộc
+                </span>
+              )}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setDriverForm({
-              name: '',
-              phone: '',
-              vehicleNumber: '',
-              vehicleType: 'MOTORBIKE',
-              operatingArea: `${currentHub?.district || ''}, ${currentHub?.province || ''}`
-            })
-            setIsAddDriverModalOpen(true)
-          }}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
-        >
-          <span>➕</span> Tuyển / Thêm Tài Xế Mới
-        </button>
+        {isSoc ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setStationTab('SORTING_LINEHAUL')
+                handleOpenDispatchBatch()
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <span>🚛</span> Đóng Xe Tải Tuyến Mới
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setDriverForm({
+                name: '',
+                phone: '',
+                vehicleNumber: '',
+                vehicleType: 'MOTORBIKE',
+                operatingArea: `${currentHub?.district || ''}, ${currentHub?.province || ''}`,
+              })
+              setIsAddDriverModalOpen(true)
+            }}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <span>➕</span> Tuyển / Thêm Tài Xế Mới
+          </button>
+        )}
       </div>
 
-      {/* SECTION 1: 4-STEP PIPELINE TABS */}
+      {/* SECTION 1: 4/5-STEP PIPELINE TABS (DỰA TRÊN LOẠI HUB: SOC vs BƯU CỤC) */}
       <HubPipelineTabs
         currentTab={stationTab}
         onSelectTab={(tab) => {
@@ -569,10 +631,21 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         sortingCount={sortingList.length}
         inTransitCount={inTransitList.length}
         destinationCount={destinationList.length}
+        hubType={currentHub?.type}
       />
 
-      {/* SECTION 2: BÀN THU NGÂN BƯU CỤC vs. SCANNER & BẢNG BƯU KIỆN */}
-      {stationTab === 'HUB_CASHIER' ? (
+      {/* SECTION 2: VIEW CHI TIẾT THEO TAB */}
+      {stationTab === 'SOC_DASHBOARD' ? (
+        <SocDashboard
+          currentHub={currentHub}
+          hubs={hubs}
+          sortingList={sortingList}
+          inTransitList={inTransitList}
+          linehaulTrips={linehaulTrips}
+          dockTrucks={dockTrucks}
+          onRefresh={onRefresh}
+        />
+      ) : stationTab === 'HUB_CASHIER' ? (
         <HubCashierDesk
           currentHub={currentHub}
           drivers={drivers}

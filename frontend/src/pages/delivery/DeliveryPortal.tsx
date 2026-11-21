@@ -262,25 +262,43 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
       ? hubs.find((h) => h.code === 'HN01') || hubs[0]
       : hubs.find((h) => h.code === 'HCM01') || hubs[0]
 
+    const isAssignedSoc = assignedHub?.type === 'SORTING_CENTER'
+
     return (
       <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans selection:bg-emerald-600 selection:text-white flex flex-col justify-between text-left">
         <header className="bg-slate-900 text-white py-3.5 px-6 sm:px-12 sticky top-0 z-30 shadow-md">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white text-xl shadow-xs font-black">
-                🏭
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-xs font-black ${
+                  isAssignedSoc
+                    ? 'bg-gradient-to-tr from-indigo-600 to-purple-600'
+                    : 'bg-gradient-to-tr from-sky-500 to-emerald-600'
+                }`}
+              >
+                {isAssignedSoc ? '🏭' : '🏢'}
               </div>
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-xl font-black tracking-tight text-white">
-                    ZMX <span className="text-sky-400">Hub Station</span>
+                    ZMX{' '}
+                    <span className={isAssignedSoc ? 'text-indigo-400' : 'text-sky-400'}>
+                      {isAssignedSoc ? 'Sorting Center' : 'Delivery Hub'}
+                    </span>
                   </span>
-                  <span className="text-[10px] font-black text-sky-300 bg-sky-950 border border-sky-600 px-2.5 py-0.5 rounded-md uppercase tracking-wider">
-                    {assignedHub?.name || 'Bưu Cục Khai Thác'}
+                  <span
+                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase tracking-wider border ${
+                      isAssignedSoc
+                        ? 'text-indigo-300 bg-indigo-950 border-indigo-600'
+                        : 'text-sky-300 bg-sky-950 border-sky-600'
+                    }`}
+                  >
+                    {assignedHub?.name || (isAssignedSoc ? 'Trung Tâm Phân Loại' : 'Bưu Cục Giao Hàng')}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 font-medium">
-                  Nhân viên kho: <b>{currentUser?.name || currentUser?.email || 'Nhân viên'}</b> ({currentUser?.email || ''})
+                  {isAssignedSoc ? 'Điều phối viên SOC:' : 'Nhân viên bưu cục:'}{' '}
+                  <b>{currentUser?.name || currentUser?.email || 'Nhân viên'}</b> ({currentUser?.email || ''})
                 </p>
               </div>
             </div>
@@ -319,7 +337,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
         </main>
 
         <footer className="bg-white border-t border-slate-200 py-3.5 text-center text-xs text-slate-400 font-medium">
-          © 2026 ZeroExpress (ZMX) Logistics • Trạm Khai Thác & Phân Loại Bưu Cục {assignedHub?.name}
+          © 2026 ZeroExpress (ZMX) Logistics • {isAssignedSoc ? 'Hệ Thống Trung Tâm Phân Loại Tự Động SOC' : 'Mạng Lưới Bưu Cục Phát Giao Hàng Tận Nơi'} • {assignedHub?.name}
         </footer>
       </div>
     )
