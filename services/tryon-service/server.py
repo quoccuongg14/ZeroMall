@@ -968,6 +968,7 @@ class TryOnSynthesizer:
                     f"STRICT VISUAL MATCHING RULES: You must accurately replicate and transfer the exact appearance, color, fabric, pattern, and design from each reference image in additional_images: "
                     f"{', '.join(outfit_prompts)}. "
                     f"Garment positioning: The upper garment must be worn exclusively on the upper torso, the lower trousers exclusively on the legs and waist, and the footwear strictly on the feet. "
+                    f"Footwear color & style rule: The shoes must strictly match the EXACT color, tone, and design of the footwear reference image (e.g., if the shoe photo is red, burgundy, or maroon, the footwear on {gender_pronoun} feet MUST be red/burgundy; never substitute with black or another color). "
                     f"Do NOT invent or substitute different clothes or shoes; they must faithfully match the reference photos provided. "
                     f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image. "
                     f"Body proportions: {height_cm:.0f}cm, {weight_kg:.0f}kg. "
