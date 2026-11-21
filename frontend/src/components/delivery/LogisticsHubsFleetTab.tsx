@@ -827,27 +827,26 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Mã Trạm</th>
-                  <th className="py-3 px-4">Tên Trạm / Cơ Sở</th>
-                  <th className="py-3 px-4">Phân Loại Hạ Tầng</th>
-                  <th className="py-3 px-4">Vị Trí & Khu Vực</th>
-                  <th className="py-3 px-4 text-center">Tải Trọng / Kiện Hàng</th>
-                  <th className="py-3 px-4 text-center">Đội Ngũ Phụ Trách</th>
-                  <th className="py-3 px-4 text-center">Trạng Thái</th>
-                  <th className="py-3 px-4 text-right">Quản Trị Cơ Sở</th>
+                  <th className="py-3 px-4 min-w-20">Mã Trạm</th>
+                  <th className="py-3 px-4 min-w-64">Tên Trạm & Cơ Sở</th>
+                  <th className="py-3 px-4 min-w-48">Vị Trí & Khu Vực</th>
+                  <th className="py-3 px-4 text-center min-w-36">Tải Trọng / Kiện Hàng</th>
+                  <th className="py-3 px-4 text-center min-w-36">Đội Ngũ Phụ Trách</th>
+                  <th className="py-3 px-4 text-center min-w-24">Trạng Thái</th>
+                  <th className="py-3 px-4 text-right min-w-44">Quản Trị Cơ Sở</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                       <div className="inline-block w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></div>
                       <p>Đang tải dữ liệu mạng lưới bưu cục...</p>
                     </td>
                   </tr>
                 ) : filteredHubs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                       Không tìm thấy bưu cục hoặc trạm nào phù hợp với bộ lọc.
                     </td>
                   </tr>
@@ -882,14 +881,23 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                           </span>
                         </td>
 
-                        {/* Hub Name */}
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        {/* Hub Name & Category Badge */}
+                        <td className="py-3.5 px-4 min-w-64">
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
                             <span>{isSOC ? '🏭' : '🏢'}</span>
-                            <span>{hub.name}</span>
+                            <span className="whitespace-nowrap font-black">{hub.name}</span>
+                            {isSOC ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-sky-50 text-sky-800 border border-sky-200">
+                                Mega SOC
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                Hub Phát
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <span className="text-[10px] text-slate-400 font-mono font-medium">ID: {hub.id}</span>
+                            <span className="text-[10px] text-slate-400 font-mono font-medium">ID: #{hub.id.slice(-6)}</span>
                             {!isSOC && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
                                 <span>🏭</span> Trực thuộc: {getParentSoc(hub).shortName}
@@ -898,28 +906,9 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                           </div>
                         </td>
 
-                        {/* Infrastructure Type Badge */}
-                        <td className="py-3.5 px-4">
-                          {isSOC ? (
-                            <div>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-sky-50 text-sky-800 border border-sky-200">
-                                <span>🏭</span> TRUNG TÂM PHÂN LOẠI SOC
-                              </span>
-                              <p className="text-[10px] text-sky-600 font-semibold mt-0.5">Kho tổng • Tuyến xe tải Linehaul</p>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                <span>🏢</span> BƯU CỤC GIAO HÀNG (HUB)
-                              </span>
-                              <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">Trạm phát • Shipper Last-mile</p>
-                            </div>
-                          )}
-                        </td>
-
                         {/* Address */}
-                        <td className="py-3.5 px-4 max-w-xs">
-                          <p className="font-semibold text-slate-800 truncate" title={hub.address}>
+                        <td className="py-3.5 px-4 min-w-48">
+                          <p className="font-semibold text-slate-800" title={hub.address}>
                             {hub.address}
                           </p>
                           <p className="text-[11px] text-slate-500 font-medium">
