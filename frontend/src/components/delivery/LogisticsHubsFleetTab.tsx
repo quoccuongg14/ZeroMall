@@ -1,6 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { HubCreateEditModal } from './HubCreateEditModal'
+
+const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
+
+const cleanHubName = (name: string): string => {
+  return (name || '')
+    .replace(/^Trung Tâm Phân Loại\s+/i, '')
+    .replace(/^Bưu Cục Giao Hàng\s+/i, '')
+    .replace(/^Kho Trung Chuyển\s+/i, '')
+    .replace(/^Bưu Cục\s+/i, '')
+    .replace(/^Kho Tổng\s+/i, '')
+    .trim()
+}
 
 interface Driver {
   id: string
@@ -74,14 +86,10 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     return params?.get('hub') || 'ALL'
   })
-  const [selectedSocId, setSelectedSocId] = useState<string>(() => {
-    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-    return params?.get('soc') || 'ALL'
-  })
-  const [driverViewMode, setDriverViewMode] = useState<'TABLE' | 'TREE'>(() => {
-    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-    return params?.get('dview') === 'TREE' ? 'TREE' : 'TABLE'
-  })
+  const [driverStatusFilter, setDriverStatusFilter] = useState<'ALL' | 'BUSY' | 'AVAILABLE' | 'OFFLINE' | 'SUSPENDED'>('ALL')
+  const [driverPage, setDriverPage] = useState<number>(1)
+  const [driverPageSize, setDriverPageSize] = useState<number>(20)
+  const [updatingDriverId, setUpdatingDriverId] = useState<string | null>(null)
 
   // Modals state
   const [isHubModalOpen, setIsHubModalOpen] = useState(false)
@@ -155,18 +163,6 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
   const totalSocCount = megaSocs.length
   const totalDeliveryHubCount = destHubs.length
 
-  // Danh sách các Hub con tương ứng với Cụm Mega SOC đang chọn
-  const activeChildHubs = selectedSocId === 'ALL'
-    ? destHubs
-    : destHubs.filter(h => getParentSoc(h).id === selectedSocId)
-
-  const activeSocTruckDrivers = selectedSocId === 'ALL'
-    ? truckDrivers
-    : allDrivers.filter(d => d.hubId === selectedSocId && d.vehicleType === 'TRUCK')
-
-  const activeSelectedSoc = megaSocs.find(s => s.id === selectedSocId)
-  const activeSelectedHub = hubs.find(h => h.id === selectedHubFilter)
-
   // Filtered hubs
   const filteredHubs = hubs.filter(h => {
     const query = searchQuery.toLowerCase().trim()
@@ -183,43 +179,132 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
     return matchesSearch && matchesProvince && matchesType
   })
 
-  // Filtered drivers with 2-Tier Hierarchy (SOC ➔ Hub)
-  const filteredDrivers = allDrivers.filter(d => {
-    const query = searchQuery.toLowerCase().trim()
-    const matchesSearch = !query ||
-      d.name.toLowerCase().includes(query) ||
-      d.phone.includes(query) ||
-      d.vehicleNumber.toLowerCase().includes(query) ||
-      (d.hub?.name && d.hub.name.toLowerCase().includes(query)) ||
-      (d.operatingArea && d.operatingArea.toLowerCase().includes(query))
+  // Helper tính toán tải đơn & trạng thái vận hành thời gian thực cho từng tài xế
+  const getDriverOperationalInfo = (driver: Driver) => {
+    const driverShipments = (shipments || []).filter((s: any) =>
+      s.assignments?.some(
+        (a: any) => a.driver?.id === driver.id || a.driverId === driver.id
+      )
+    )
+    const activeShipments = driverShipments.filter((s: any) =>
+      ['PICKING_UP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'IN_TRANSIT'].includes(s.status)
+    )
+    const completedShipments = driverShipments.filter((s: any) =>
+      ['DELIVERED', 'COMPLETED'].includes(s.status)
+    )
+    const codInHand = activeShipments.reduce((sum: number, s: any) => sum + (s.codAmount || 0), 0)
 
-    // 1. Phân loại theo Mega SOC
-    let matchesSoc = true
-    if (selectedSocId !== 'ALL') {
-      const hubObj = hubs.find(h => h.id === d.hubId) || d.hub
-      if (hubObj) {
-        if (hubObj.type === 'SORTING_CENTER') {
-          matchesSoc = hubObj.id === selectedSocId
-        } else {
-          matchesSoc = getParentSoc(hubObj).id === selectedSocId
-        }
-      } else {
-        matchesSoc = false
+    let operationalStatus: 'BUSY' | 'AVAILABLE' | 'OFFLINE' | 'SUSPENDED' = 'AVAILABLE'
+    if (driver.status === 'SUSPENDED') {
+      operationalStatus = 'SUSPENDED'
+    } else if (driver.status === 'OFFLINE') {
+      operationalStatus = 'OFFLINE'
+    } else if (activeShipments.length > 0) {
+      operationalStatus = 'BUSY'
+    } else {
+      operationalStatus = 'AVAILABLE'
+    }
+
+    return {
+      driverShipments,
+      activeShipments,
+      completedShipments,
+      codInHand,
+      operationalStatus,
+    }
+  }
+
+  // Thống kê số lượng tài xế theo trạng thái ca trực thời gian thực
+  const driverStatusCounts = useMemo(() => {
+    let busy = 0
+    let available = 0
+    let offline = 0
+    let suspended = 0
+
+    allDrivers.forEach((d) => {
+      const info = getDriverOperationalInfo(d)
+      if (info.operationalStatus === 'BUSY') busy++
+      else if (info.operationalStatus === 'AVAILABLE') available++
+      else if (info.operationalStatus === 'OFFLINE') offline++
+      else if (info.operationalStatus === 'SUSPENDED') suspended++
+    })
+
+    return { busy, available, offline, suspended }
+  }, [allDrivers, shipments])
+
+  // Lọc danh sách tài xế chuẩn Enterprise
+  const filteredDrivers = useMemo(() => {
+    return allDrivers.filter((d) => {
+      const query = searchQuery.toLowerCase().trim()
+      const matchesSearch =
+        !query ||
+        d.name.toLowerCase().includes(query) ||
+        d.phone.includes(query) ||
+        d.vehicleNumber.toLowerCase().includes(query) ||
+        (d.hub?.name && d.hub.name.toLowerCase().includes(query)) ||
+        (d.operatingArea && d.operatingArea.toLowerCase().includes(query)) ||
+        (d.assignedDistrict && d.assignedDistrict.toLowerCase().includes(query))
+
+      if (!matchesSearch) return false
+
+      // Lọc theo Bưu cục / Trạm
+      if (selectedHubFilter === 'TRUCKS_ONLY') {
+        if (d.vehicleType !== 'TRUCK') return false
+      } else if (selectedHubFilter !== 'ALL') {
+        if (d.hubId !== selectedHubFilter) return false
       }
+
+      // Lọc theo Phương tiện
+      if (vehicleFilter !== 'ALL') {
+        if (d.vehicleType !== vehicleFilter) return false
+      }
+
+      // Lọc theo Trạng thái ca trực
+      if (driverStatusFilter !== 'ALL') {
+        const info = getDriverOperationalInfo(d)
+        if (info.operationalStatus !== driverStatusFilter) return false
+      }
+
+      return true
+    })
+  }, [allDrivers, searchQuery, selectedHubFilter, vehicleFilter, driverStatusFilter, shipments])
+
+  // Phân trang dữ liệu tài xế
+  const totalDriverPages = Math.ceil(filteredDrivers.length / driverPageSize) || 1
+  const paginatedDrivers = useMemo(() => {
+    const startIndex = (driverPage - 1) * driverPageSize
+    return filteredDrivers.slice(startIndex, startIndex + driverPageSize)
+  }, [filteredDrivers, driverPage, driverPageSize])
+
+  // Hàm chuyển đổi trạng thái ca trực của tài xế trực tiếp từ màn hình Admin
+  const handleUpdateDriverStatus = async (driver: Driver, newStatus: string) => {
+    setUpdatingDriverId(driver.id)
+    try {
+      const res = await fetch(`${API_BASE_URL}/delivery/drivers/${driver.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) {
+        const fallbackRes = await fetch(`${API_BASE_URL}/delivery/drivers/${driver.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        })
+        if (!fallbackRes.ok) throw new Error('Không thể cập nhật trạng thái tài xế')
+      }
+      setAllDrivers((prev) =>
+        prev.map((d) => (d.id === driver.id ? { ...d, status: newStatus } : d))
+      )
+      if (triggerAuditLog) {
+        await triggerAuditLog(`Đổi trạng thái tài xế [${driver.name}] sang ${newStatus}`)
+      }
+    } catch (err: any) {
+      alert('Lỗi: ' + (err.message || 'Không thể cập nhật trạng thái'))
+    } finally {
+      setUpdatingDriverId(null)
     }
-
-    // 2. Phân loại theo Bưu Cục Hub con
-    let matchesHub = true
-    if (selectedHubFilter === 'TRUCKS_ONLY') {
-      matchesHub = d.vehicleType === 'TRUCK'
-    } else if (selectedHubFilter !== 'ALL') {
-      matchesHub = d.hubId === selectedHubFilter
-    }
-
-    const matchesVehicle = vehicleFilter === 'ALL' || d.vehicleType === vehicleFilter
-
-    return matchesSearch && matchesSoc && matchesHub && matchesVehicle
-  })
+  }
 
   // Handle Delete Hub
   const handleDeleteHub = async (hub: Hub) => {
@@ -431,27 +516,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
         </div>
       </div>
 
-      {/* 2. SPX Supply Chain Explanatory Notice */}
-      <div className="p-4 bg-linear-to-r from-sky-50/70 via-indigo-50/50 to-emerald-50/70 border border-slate-200/90 rounded-2xl shadow-3xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-base shrink-0 shadow-3xs">
-            💡
-          </div>
-          <div className="space-y-1">
-            <span className="font-black text-slate-900">
-              Quy chuẩn phân định chức năng: Trung Tâm Phân Loại (SOC) vs. Bưu Cục Giao Hàng (Hub)
-            </span>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600 text-[11px]">
-              <span className="flex items-center gap-1">
-                <b className="text-sky-800">🏭 Mega SOC:</b> Kho tổng xử lý phân loại tự động liên tỉnh, chỉ tiếp nhận <b>Xe tải Linehaul (8T-20ft)</b>. Tuyệt đối không giao hàng lẻ và <u>không có shipper xe máy</u>.
-              </span>
-              <span className="flex items-center gap-1">
-                <b className="text-emerald-800">🏢 Delivery Hub:</b> Bưu cục vệ tinh chặng cuối (Last-mile), nơi quản lý <b>Đội ngũ Shipper (Xe máy / Van)</b> để giao bưu kiện đến tận cửa khách hàng.
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* 3. Main Admin Management Card */}
       <div className="bg-white border border-slate-200/80 rounded-3xl shadow-sm overflow-hidden">
@@ -574,276 +639,185 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
               </select>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto">
-              {/* Vehicle Type Filter */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs">
-                <button
-                  onClick={() => setVehicleFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
-                    vehicleFilter === 'ALL'
-                      ? 'bg-white text-slate-900 shadow-3xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Tất cả ({allDrivers.length})
-                </button>
-                <button
-                  onClick={() => setVehicleFilter('MOTORBIKE')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                    vehicleFilter === 'MOTORBIKE'
-                      ? 'bg-emerald-600 text-white shadow-3xs'
-                      : 'text-emerald-700 hover:bg-emerald-50'
-                  }`}
-                >
-                  <span>🛵</span> Xe Máy ({motorbikeDrivers.length})
-                </button>
-                <button
-                  onClick={() => setVehicleFilter('VAN')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                    vehicleFilter === 'VAN'
-                      ? 'bg-indigo-600 text-white shadow-3xs'
-                      : 'text-indigo-700 hover:bg-indigo-50'
-                  }`}
-                >
-                  <span>🚐</span> Xe Van ({vanDrivers.length})
-                </button>
-                <button
-                  onClick={() => setVehicleFilter('TRUCK')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
-                    vehicleFilter === 'TRUCK'
-                      ? 'bg-sky-600 text-white shadow-3xs'
-                      : 'text-sky-700 hover:bg-sky-50'
-                  }`}
-                >
-                  <span>🚛</span> Xe Tải Tuyến ({truckDrivers.length})
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* Hub Dropdown Grouped */}
+              <select
+                value={selectedHubFilter}
+                onChange={(e) => {
+                  setSelectedHubFilter(e.target.value)
+                  setDriverPage(1)
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer min-w-56"
+              >
+                <option value="ALL">🏢 Toàn quốc (Tất cả {allDrivers.length} nhân sự)</option>
+                <optgroup label="🏭 Trung Tâm Phân Loại (Mega SOC)">
+                  {megaSocs.map((soc) => {
+                    const count = allDrivers.filter(d => d.hubId === soc.id).length
+                    return (
+                      <option key={soc.id} value={soc.id}>
+                        [{soc.code}] {cleanHubName(soc.name)} ({count} tài xế tuyến)
+                      </option>
+                    )
+                  })}
+                </optgroup>
+                <optgroup label="🏢 Bưu Cục Giao Hàng Vệ Tinh (Delivery Hubs)">
+                  {destHubs.map((hub) => {
+                    const count = allDrivers.filter(d => d.hubId === hub.id).length
+                    const pSoc = getParentSoc(hub)
+                    return (
+                      <option key={hub.id} value={hub.id}>
+                        [{hub.code}] {cleanHubName(hub.name)} ({count} shipper) - {pSoc.shortName}
+                      </option>
+                    )
+                  })}
+                </optgroup>
+              </select>
 
-              {/* View Mode Switcher: TABLE vs TREE */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs">
-                <button
-                  onClick={() => setDriverViewMode('TABLE')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    driverViewMode === 'TABLE'
-                      ? 'bg-slate-900 text-white shadow-3xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span>📋</span> Bảng Lọc Thu Gọn
-                </button>
-                <button
-                  onClick={() => setDriverViewMode('TREE')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    driverViewMode === 'TREE'
-                      ? 'bg-emerald-600 text-white shadow-3xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span>🌳</span> Cây Phân Cấp SOC ➔ Hubs
-                </button>
-              </div>
+              {/* Vehicle Type Dropdown */}
+              <select
+                value={vehicleFilter}
+                onChange={(e) => {
+                  setVehicleFilter(e.target.value as any)
+                  setDriverPage(1)
+                }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-600 cursor-pointer"
+              >
+                <option value="ALL">Mọi phương tiện ({allDrivers.length})</option>
+                <option value="MOTORBIKE">🛵 Xe máy ({motorbikeDrivers.length})</option>
+                <option value="VAN">🚐 Xe Van ({vanDrivers.length})</option>
+                <option value="TRUCK">🚛 Xe tải tuyến ({truckDrivers.length})</option>
+              </select>
             </div>
           )}
         </div>
 
-        {/* BỘ LỌC PHÂN CẤP 2 TẦNG (Cụm Mega SOC ➔ Bưu Cục Hubs ➔ Shippers) */}
+        {/* THANH LỌC TRẠNG THÁI CA TRỰC CHUẨN ENTERPRISE SPX */}
         {subView === 'DRIVERS' && (
-          <div className="bg-slate-50/80 border-b border-slate-200/80 p-4 space-y-3.5">
-            {/* TẦNG 1: CHỌN CỤM VÙNG MEGA SOC */}
-            <div className="space-y-1.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
-                <span className="font-black text-slate-800 flex items-center gap-1.5">
-                  <span>🏭</span> 1. Chọn Cụm Vùng Quản Lý (Mega SOC):
+          <div className="bg-slate-50/80 border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                Trạng Thái Ca:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDriverStatusFilter('ALL')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-3xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>Tất Cả</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  driverStatusFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {allDrivers.length}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {selectedSocId === 'ALL'
-                    ? 'Đang hiển thị toàn quốc • Chọn 1 SOC để lọc các Hub con'
-                    : `Đang lọc: ${activeSelectedSoc?.name || 'Cụm SOC'}`}
-                </span>
-              </div>
+              </button>
 
-              <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDriverStatusFilter('BUSY')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'BUSY'
+                    ? 'bg-emerald-600 text-white shadow-3xs'
+                    : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>🟢 Đang Đi Giao</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  driverStatusFilter === 'BUSY' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-800 font-bold'
+                }`}>
+                  {driverStatusCounts.busy}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDriverStatusFilter('AVAILABLE')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'AVAILABLE'
+                    ? 'bg-amber-600 text-white shadow-3xs'
+                    : 'bg-white text-amber-700 hover:bg-amber-50 border border-amber-200'
+                }`}
+              >
+                <span>🟡 Sẵn Sàng Nhận Đơn</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  driverStatusFilter === 'AVAILABLE' ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-800 font-bold'
+                }`}>
+                  {driverStatusCounts.available}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDriverStatusFilter('OFFLINE')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'OFFLINE'
+                    ? 'bg-slate-700 text-white shadow-3xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                <span>⚪ Ngoại Tuyến (Nghỉ Ca)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  driverStatusFilter === 'OFFLINE' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {driverStatusCounts.offline}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDriverStatusFilter('SUSPENDED')
+                  setDriverPage(1)
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer text-xs flex items-center gap-1.5 ${
+                  driverStatusFilter === 'SUSPENDED'
+                    ? 'bg-rose-600 text-white shadow-3xs'
+                    : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
+                }`}
+              >
+                <span>🔴 Tạm Khóa / Đình Chỉ</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  driverStatusFilter === 'SUSPENDED' ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-800 font-bold'
+                }`}>
+                  {driverStatusCounts.suspended}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-500 text-xs">
+              <span>Đang lọc: <b>{filteredDrivers.length}</b> / {allDrivers.length} nhân sự</span>
+              {(selectedHubFilter !== 'ALL' || vehicleFilter !== 'ALL' || driverStatusFilter !== 'ALL' || searchQuery) && (
                 <button
+                  type="button"
                   onClick={() => {
-                    setSelectedSocId('ALL')
                     setSelectedHubFilter('ALL')
+                    setVehicleFilter('ALL')
+                    setDriverStatusFilter('ALL')
+                    setSearchQuery('')
+                    setDriverPage(1)
                   }}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    selectedSocId === 'ALL'
-                      ? 'bg-slate-900 text-white shadow-3xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
+                  className="text-xs text-sky-600 hover:text-sky-800 font-bold underline cursor-pointer"
                 >
-                  <span>🌐</span> Toàn Mạng Lưới ({allDrivers.length})
+                  Xóa lọc
                 </button>
-
-                {megaSocs.map((soc) => {
-                  const socMeta = getParentSoc(soc)
-                  // Đếm tổng số tài xế thuộc cụm SOC này (cả xe tải SOC và các shipper thuộc Hub con)
-                  const socTotalDrivers = allDrivers.filter((d) => {
-                    if (d.hubId === soc.id) return true
-                    const dHub = hubs.find((h) => h.id === d.hubId) || d.hub
-                    return dHub && getParentSoc(dHub).id === soc.id
-                  })
-
-                  const isSelected = selectedSocId === soc.id
-
-                  return (
-                    <button
-                      key={soc.id}
-                      onClick={() => {
-                        setSelectedSocId(soc.id)
-                        setSelectedHubFilter('ALL')
-                      }}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                        isSelected
-                          ? 'bg-sky-600 text-white shadow-3xs'
-                          : 'bg-white text-slate-700 hover:bg-sky-50 border border-slate-200'
-                      }`}
-                    >
-                      <span>🏭</span>
-                      <span>{socMeta.shortName}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 font-mono'
-                      }`}>
-                        {socTotalDrivers.length}
-                      </span>
-                      <span className={`text-[10px] font-normal hidden lg:inline ${
-                        isSelected ? 'text-sky-100' : 'text-slate-400'
-                      }`}>
-                        ({socMeta.region})
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              )}
             </div>
-
-            {/* TẦNG 2: CHỌN BƯU CỤC HUB THUỘC SOC ĐƯỢC CHỌN */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
-                <span className="font-black text-slate-800 flex items-center gap-1.5">
-                  <span>🏢</span> 2. Chọn Bưu Cục Hub Để Xem Đội Ngũ Shipper Của Riêng Hub Đó:
-                </span>
-                <span className="text-[11px] text-emerald-700 font-bold">
-                  {selectedHubFilter !== 'ALL'
-                    ? `✓ Đã chọn: ${activeSelectedHub?.name || (selectedHubFilter === 'TRUCKS_ONLY' ? 'Xe Tải Linehaul SOC' : 'Bưu Cục')}`
-                    : 'Bấm vào một bưu cục để xem gọn danh sách'}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSelectedHubFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                    selectedHubFilter === 'ALL'
-                      ? 'bg-emerald-700 text-white shadow-3xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <span>Tất Cả Cơ Sở Của Cụm</span>
-                </button>
-
-                {activeChildHubs.map((hub) => {
-                  const hubDrivers = allDrivers.filter((d) => d.hubId === hub.id)
-                  const isSelected = selectedHubFilter === hub.id
-                  const cleanName = hub.name.replace('Bưu Cục Giao Hàng ', '').replace('Bưu Cục ', '')
-
-                  return (
-                    <button
-                      key={hub.id}
-                      onClick={() => setSelectedHubFilter(hub.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                        isSelected
-                          ? 'bg-emerald-600 text-white shadow-3xs'
-                          : 'bg-white text-slate-700 hover:bg-emerald-50 border border-slate-200'
-                      }`}
-                    >
-                      <span>🏢</span>
-                      <span>{cleanName}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                        isSelected ? 'bg-white/20 text-white' : hubDrivers.length > 0 ? 'bg-emerald-50 text-emerald-800 font-bold' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {hubDrivers.length}
-                      </span>
-                    </button>
-                  )
-                })}
-
-                {/* Nếu SOC có xe tải Linehaul */}
-                {selectedSocId !== 'ALL' && activeSocTruckDrivers.length > 0 && (
-                  <button
-                    onClick={() => setSelectedHubFilter('TRUCKS_ONLY')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                      selectedHubFilter === 'TRUCKS_ONLY'
-                        ? 'bg-sky-600 text-white shadow-3xs'
-                        : 'bg-white text-sky-800 hover:bg-sky-50 border border-sky-200'
-                    }`}
-                  >
-                    <span>🚛</span>
-                    <span>Xe Tải Linehaul SOC</span>
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                      selectedHubFilter === 'TRUCKS_ONLY' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 font-bold'
-                    }`}>
-                      {activeSocTruckDrivers.length}
-                    </span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ACTIVE HUB CONTEXT CARD (Hiện ra khi Admin chọn 1 Hub cụ thể) */}
-        {subView === 'DRIVERS' && selectedHubFilter !== 'ALL' && activeSelectedHub && (
-          <div className="p-4 bg-emerald-50/80 border-b border-emerald-200/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🏢</span>
-                <span className="font-black text-emerald-950 text-sm">{activeSelectedHub.name}</span>
-                <span className="px-1.5 py-0.5 bg-emerald-200/80 text-emerald-900 rounded font-mono text-[10px] font-bold">
-                  {activeSelectedHub.code}
-                </span>
-                <span className="px-2 py-0.5 bg-sky-100 text-sky-800 rounded-md text-[10px] font-bold">
-                  Trực thuộc: {getParentSoc(activeSelectedHub).shortName}
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-900/80 leading-relaxed">
-                📍 {activeSelectedHub.address}, {activeSelectedHub.district}, {activeSelectedHub.province} • Đang hiển thị đúng <b>{filteredDrivers.length} nhân sự shipper</b> của riêng Hub này (không bị gom lẫn lộn).
-              </p>
-            </div>
-
-            <button
-              onClick={() => openAddDriverModal(activeSelectedHub, 'MOTORBIKE')}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-3xs cursor-pointer"
-            >
-              <span>➕</span> Tuyển Shipper Cho {activeSelectedHub.name.replace('Bưu Cục Giao Hàng ', '').replace('Bưu Cục ', '')}
-            </button>
-          </div>
-        )}
-
-        {/* ACTIVE SOC TRUCKS CONTEXT CARD */}
-        {subView === 'DRIVERS' && selectedHubFilter === 'TRUCKS_ONLY' && activeSelectedSoc && (
-          <div className="p-4 bg-sky-50/80 border-b border-sky-200/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🚛</span>
-                <span className="font-black text-sky-950 text-sm">Đội Xe Tải Tuyến Chính Linehaul • {activeSelectedSoc.name}</span>
-                <span className="px-1.5 py-0.5 bg-sky-200/80 text-sky-900 rounded font-mono text-[10px] font-bold">
-                  {activeSelectedSoc.code}
-                </span>
-              </div>
-              <p className="text-[11px] text-sky-900/80 leading-relaxed">
-                📍 {activeSelectedSoc.address}, {activeSelectedSoc.province} • Chạy tuyến vận chuyển đường dài liên tỉnh (8T - 20ft) • Đang hiển thị <b>{filteredDrivers.length} tài xế xe tải</b>.
-              </p>
-            </div>
-
-            <button
-              onClick={() => openAddDriverModal(activeSelectedSoc, 'TRUCK')}
-              className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-3xs cursor-pointer"
-            >
-              <span>➕</span> Tuyển Tài Xế Xe Tải Tuyến
-            </button>
           </div>
         )}
 
@@ -1067,18 +1041,18 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
           </div>
         )}
 
-        {/* VIEW 2A: BẢNG QUẢN LÝ TÀI XẾ THEO BỘ LỌC PHÂN CẤP */}
-        {subView === 'DRIVERS' && driverViewMode === 'TABLE' && (
+        {/* VIEW 2: BẢNG QUẢN TRỊ ĐỘI NGŨ VẬN TẢI CHUẨN ENTERPRISE SPX */}
+        {subView === 'DRIVERS' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-4">Tài Xế / Nhân Sự</th>
-                  <th className="py-3 px-4">Số Điện Thoại</th>
-                  <th className="py-3 px-4">Trực Thuộc Cơ Sở</th>
-                  <th className="py-3 px-4">Phương Tiện & Biển Số</th>
-                  <th className="py-3 px-4">Nghiệp Vụ & Tuyến Phụ Trách</th>
-                  <th className="py-3 px-4 text-center">Trạng Thái</th>
+                  <th className="py-3 px-4">Số Điện Thoại & Biển Số</th>
+                  <th className="py-3 px-4">Bưu Cục Trực Thuộc</th>
+                  <th className="py-3 px-4">Khu Vực Phụ Trách</th>
+                  <th className="py-3 px-4 text-center">Tải Đơn & Tiền COD</th>
+                  <th className="py-3 px-4 text-center">Trạng Thái Ca Trực</th>
                   <th className="py-3 px-4 text-right">Thao Tác</th>
                 </tr>
               </thead>
@@ -1093,84 +1067,177 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                 ) : filteredDrivers.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
-                      Không tìm thấy tài xế nào thuộc cơ sở hoặc bộ lọc này.
+                      Không tìm thấy tài xế nào phù hợp với bộ lọc hiện tại.
                     </td>
                   </tr>
                 ) : (
-                  filteredDrivers.map((driver) => {
-                    const hubObj = hubs.find(h => h.id === driver.hubId) || driver.hub
+                  paginatedDrivers.map((driver) => {
+                    const hubObj: Hub | undefined = hubs.find((h) => h.id === driver.hubId || h.id === driver.hub?.id) || (driver.hub as any)
                     const isTruck = driver.vehicleType === 'TRUCK'
                     const isVan = driver.vehicleType === 'VAN'
                     const isHubSOC = hubObj?.type === 'SORTING_CENTER'
+                    const parentSoc = hubObj ? getParentSoc(hubObj) : null
+                    const info = getDriverOperationalInfo(driver)
 
                     return (
                       <tr key={driver.id} className="hover:bg-slate-50/70 transition">
+                        {/* 1. Nhân sự & Vai trò */}
                         <td className="py-3.5 px-4 font-bold text-slate-900 text-sm">
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                              isTruck ? 'bg-sky-100 text-sky-800' : isVan ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
+                            <span
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center text-base border shrink-0 ${
+                                isTruck
+                                  ? 'bg-sky-50 border-sky-200 text-sky-800'
+                                  : isVan
+                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              }`}
+                            >
                               {isTruck ? '🚛' : isVan ? '🚐' : '🛵'}
                             </span>
                             <div>
-                              <div>{driver.name}</div>
-                              <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-black uppercase mt-0.5 ${
-                                isTruck 
-                                  ? 'bg-sky-50 text-sky-700 border border-sky-200' 
+                              <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                <span>{driver.name}</span>
+                                <span className="font-mono text-[10px] text-slate-400 font-normal">
+                                  #{driver.id.slice(-6)}
+                                </span>
+                              </div>
+                              <span
+                                className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-black uppercase mt-0.5 ${
+                                  isTruck
+                                    ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                    : isVan
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                }`}
+                              >
+                                {isTruck
+                                  ? 'Tài Xế Tuyến Linehaul'
                                   : isVan
-                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}>
-                                {isTruck ? 'Tài Xế Xe Tải Tuyến' : isVan ? 'Shipper Bán Tải (Van)' : 'Shipper Xe Máy Giao Hàng'}
+                                  ? 'Shipper Bán Tải (Van)'
+                                  : 'Shipper Xe Máy Last-mile'}
                               </span>
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
-                          {driver.phone}
-                        </td>
-
-                        {/* Assigned Hub */}
+                        {/* 2. SĐT & Biển số xe */}
                         <td className="py-3.5 px-4">
-                          <span className={`inline-flex items-center gap-1 font-bold px-2 py-1 rounded-lg border ${
-                            isHubSOC
-                              ? 'bg-sky-50 text-sky-800 border-sky-200'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          }`}>
-                            <span>{isHubSOC ? '🏭' : '🏢'}</span>
-                            <span>{hubObj?.name || 'Chưa gán cơ sở'}</span>
+                          <a
+                            href={`tel:${driver.phone}`}
+                            className="font-mono font-bold text-slate-800 hover:text-emerald-700 block text-xs"
+                          >
+                            📞 {driver.phone}
+                          </a>
+                          <span className="inline-block mt-1 px-1.5 py-0.5 rounded font-mono font-black text-[10px] bg-slate-100 text-slate-700 border border-slate-300">
+                            {driver.vehicleNumber}
                           </span>
                         </td>
 
-                        {/* Vehicle Number & Type */}
+                        {/* 3. Bưu cục trực thuộc */}
                         <td className="py-3.5 px-4">
-                          <div className="font-mono font-bold text-slate-800">{driver.vehicleNumber}</div>
-                          <div className="text-[10px] text-slate-400 font-medium">
-                            {isTruck ? '🚚 Xe tải Linehaul' : isVan ? '🚐 Xe tải nhẹ / Van' : '🛵 Xe máy'}
+                          {hubObj ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                                <span>{isHubSOC ? '🏭' : '🏢'}</span>
+                                <span>{cleanHubName(hubObj.name)}</span>
+                                <span className="px-1 py-0.2 rounded text-[9px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                                  {hubObj.code}
+                                </span>
+                              </div>
+                              {parentSoc && !isHubSOC && (
+                                <div className="text-[10px] text-sky-700 font-semibold mt-0.5">
+                                  Trực thuộc: {parentSoc.shortName}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">Chưa gán bưu cục</span>
+                          )}
+                        </td>
+
+                        {/* 4. Tuyến / Khu vực phụ trách */}
+                        <td className="py-3.5 px-4 max-w-xs text-xs">
+                          <p className="font-semibold text-slate-800 truncate" title={driver.operatingArea || ''}>
+                            {driver.operatingArea || (driver.assignedDistrict ? `${driver.assignedDistrict}, ${driver.assignedProvince}` : 'Toàn khu vực bưu cục')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {isTruck ? 'Tuyến vận chuyển liên tỉnh / liên trạm' : 'Tuyến giao phát chặng cuối tận cửa'}
+                          </p>
+                        </td>
+
+                        {/* 5. Tải đơn & Tiền COD */}
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="inline-flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 border border-slate-200/90 min-w-32">
+                            {info.activeShipments.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-black text-emerald-800">
+                                <span>📦</span> {info.activeShipments.length} đơn đang phát
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-medium">0 đơn đang phát</span>
+                            )}
+                            {info.completedShipments.length > 0 && (
+                              <span className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                ✓ {info.completedShipments.length} đã giao xong
+                              </span>
+                            )}
+                            {info.codInHand > 0 ? (
+                              <span className="text-[11px] font-black text-amber-950 font-mono mt-0.5">
+                                💰 COD: {formatMoney(info.codInHand)}
+                              </span>
+                            ) : null}
                           </div>
                         </td>
 
-                        {/* Operating Area */}
-                        <td className="py-3.5 px-4 text-slate-600">
-                          <p className="font-medium">
-                            {driver.operatingArea || (driver.assignedDistrict ? `${driver.assignedDistrict}, ${driver.assignedProvince}` : 'Toàn khu vực phụ trách')}
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            {isTruck ? 'Chạy tuyến đường dài liên tỉnh / liên trạm' : 'Tuyến giao phát chặng cuối'}
-                          </p>
-                        </td>
-
-                        {/* Status */}
+                        {/* 6. Trạng thái ca trực & Thay đổi nhanh */}
                         <td className="py-3.5 px-4 text-center">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {driver.status === 'AVAILABLE' ? 'SẴN SÀNG' : driver.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1.5">
+                            {info.operationalStatus === 'BUSY' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                                🟢 ĐANG ĐI GIAO
+                              </span>
+                            ) : info.operationalStatus === 'AVAILABLE' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                🟡 SẴN SÀNG
+                              </span>
+                            ) : info.operationalStatus === 'OFFLINE' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                ⚪ NGOẠI TUYẾN
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                🔴 TẠM KHÓA
+                              </span>
+                            )}
+
+                            {/* Dropdown chỉnh trạng thái live từ Admin */}
+                            <select
+                              value={driver.status}
+                              disabled={updatingDriverId === driver.id}
+                              onChange={(e) => handleUpdateDriverStatus(driver, e.target.value)}
+                              className="text-[10px] font-bold px-2 py-0.5 bg-white border border-slate-200 rounded-lg shadow-3xs cursor-pointer focus:outline-none focus:border-emerald-600"
+                              title="Thay đổi trạng thái ca trực của tài xế"
+                            >
+                              <option value="AVAILABLE">🟡 Sẵn sàng nhận đơn</option>
+                              <option value="OFFLINE">⚪ Ngoại tuyến (Nghỉ ca)</option>
+                              <option value="SUSPENDED">🔴 Tạm khóa / Đình chỉ</option>
+                            </select>
+                          </div>
                         </td>
 
-                        {/* Actions */}
+                        {/* 7. Thao tác */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {hubObj && 'address' in hubObj && onViewShipments && (
+                              <button
+                                type="button"
+                                onClick={() => onViewShipments(hubObj as Hub)}
+                                title="Xem các vận đơn thuộc bưu cục của tài xế này"
+                                className="px-2.5 py-1 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer text-xs font-bold border border-slate-200"
+                              >
+                                📦 Xem Đơn
+                              </button>
+                            )}
                             <button
                               onClick={() => openEditDriverModal(driver)}
                               title="Sửa hồ sơ tài xế"
@@ -1193,193 +1260,56 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                 )}
               </tbody>
             </table>
-          </div>
-        )}
 
-        {/* VIEW 2B: CHẾ ĐỘ CÂY PHÂN CẤP TRỰC QUAN (SOC ➔ HUBS ➔ SHIPPERS TREE VIEW) */}
-        {subView === 'DRIVERS' && driverViewMode === 'TREE' && (
-          <div className="p-6 space-y-6 bg-slate-50/50">
-            {megaSocs
-              .filter((soc) => selectedSocId === 'ALL' || selectedSocId === soc.id)
-              .map((soc) => {
-                const socMeta = getParentSoc(soc)
-                const childHubs = destHubs.filter((h) => getParentSoc(h).id === soc.id)
-                const socTrucks = allDrivers.filter((d) => d.hubId === soc.id)
-                const totalClusterDrivers = allDrivers.filter((d) => {
-                  if (d.hubId === soc.id) return true
-                  const dHub = hubs.find((h) => h.id === d.hubId) || d.hub
-                  return dHub && getParentSoc(dHub).id === soc.id
-                })
-
-                return (
-                  <div key={soc.id} className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs space-y-4">
-                    {/* SOC Header */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-xl text-sky-700">
-                          🏭
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-black text-slate-900 text-base">{soc.name}</h4>
-                            <span className="px-2 py-0.5 bg-sky-100 text-sky-800 rounded font-mono text-[10px] font-bold">
-                              {soc.code}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {soc.address}, {soc.province} • {socMeta.region}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span className="px-3 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full text-xs font-bold">
-                        {childHubs.length} Hubs Vệ Tinh • {totalClusterDrivers.length} Nhân Sự
-                      </span>
-                    </div>
-
-                    {/* Xe tải Tuyến Linehaul SOC */}
-                    {socTrucks.length > 0 && (
-                      <div className="bg-sky-50/40 border border-sky-100 rounded-2xl p-3.5 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-black text-sky-900 flex items-center gap-1.5">
-                            <span>🚛</span> Đội Xe Tải Tuyến Chính Linehaul ({socTrucks.length} tài xế):
-                          </span>
-                          <button
-                            onClick={() => openAddDriverModal(soc, 'TRUCK')}
-                            className="text-[11px] font-bold text-sky-700 hover:text-sky-900 cursor-pointer"
-                          >
-                            + Tuyển Thêm Xe Tải
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {socTrucks.map((driver) => (
-                            <div key={driver.id} className="bg-white border border-sky-200/80 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-3xs">
-                              <div className="flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-sm">
-                                  🚛
-                                </span>
-                                <div>
-                                  <div className="font-bold text-slate-900 text-xs">{driver.name}</div>
-                                  <div className="text-[10px] text-slate-500 font-mono">
-                                    {driver.phone} • {driver.vehicleNumber}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => openEditDriverModal(driver)}
-                                  className="p-1.5 text-slate-400 hover:text-sky-700 text-xs cursor-pointer"
-                                  title="Sửa"
-                                >
-                                  ✏️
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteDriver(driver)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 text-xs cursor-pointer"
-                                  title="Xóa"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Lưới các Bưu Cục Hub con & Shipper */}
-                    <div className="space-y-2">
-                      <span className="text-xs font-black text-slate-700 uppercase tracking-wide block">
-                        Mạng Lưới Các Bưu Cục Giao Hàng Con ({childHubs.length} Hubs):
-                      </span>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {childHubs.map((hub) => {
-                          const hubDrivers = allDrivers.filter((d) => d.hubId === hub.id)
-
-                          return (
-                            <div key={hub.id} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-3.5 space-y-2.5">
-                              <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                                <div className="space-y-0.5">
-                                  <div className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                                    <span>🏢</span>
-                                    <span>{hub.name}</span>
-                                    <span className="px-1.5 py-0.2 bg-white text-slate-600 rounded text-[9px] font-mono border border-slate-200">
-                                      {hub.code}
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] text-slate-500">
-                                    {hub.district}, {hub.province}
-                                  </div>
-                                </div>
-
-                                <button
-                                  onClick={() => openAddDriverModal(hub, 'MOTORBIKE')}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                                >
-                                  <span>➕</span> Tuyển
-                                </button>
-                              </div>
-
-                              {/* Danh sách Shipper của Hub này */}
-                              {hubDrivers.length === 0 ? (
-                                <div className="text-center py-3 text-[11px] text-slate-400 italic bg-white/60 rounded-xl border border-dashed border-slate-200">
-                                  Chưa có shipper gán vào bưu cục này.
-                                </div>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {hubDrivers.map((driver) => (
-                                    <div
-                                      key={driver.id}
-                                      className="bg-white border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs shadow-3xs"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-base">
-                                          {driver.vehicleType === 'VAN' ? '🚐' : driver.vehicleType === 'TRUCK' ? '🚛' : '🛵'}
-                                        </span>
-                                        <div>
-                                          <div className="font-bold text-slate-900 text-xs">{driver.name}</div>
-                                          <div className="text-[10px] text-slate-500 font-mono">
-                                            {driver.phone} • {driver.vehicleNumber}
-                                          </div>
-                                          <div className="text-[9px] text-slate-400 line-clamp-1">
-                                            {driver.operatingArea || 'Tuyến bưu cục phụ trách'}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                          SẴN SÀNG
-                                        </span>
-                                        <button
-                                          onClick={() => openEditDriverModal(driver)}
-                                          className="p-1 text-slate-400 hover:text-sky-700 text-xs cursor-pointer"
-                                          title="Sửa"
-                                        >
-                                          ✏️
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteDriver(driver)}
-                                          className="p-1 text-slate-400 hover:text-rose-600 text-xs cursor-pointer"
-                                          title="Xóa"
-                                        >
-                                          🗑️
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
+            {/* Pagination Controls */}
+            {filteredDrivers.length > 0 && (
+              <div className="p-4 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2 text-slate-600 font-medium">
+                  <span>
+                    Hiển thị <b>{(driverPage - 1) * driverPageSize + 1} - {Math.min(driverPage * driverPageSize, filteredDrivers.length)}</b> trên tổng số <b>{filteredDrivers.length}</b> tài xế
+                  </span>
+                  <span className="text-slate-300">|</span>
+                  <div className="flex items-center gap-1">
+                    <span>Số lượng:</span>
+                    <select
+                      value={driverPageSize}
+                      onChange={(e) => {
+                        setDriverPageSize(Number(e.target.value))
+                        setDriverPage(1)
+                      }}
+                      className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 cursor-pointer focus:outline-none"
+                    >
+                      <option value={10}>10 / trang</option>
+                      <option value={20}>20 / trang</option>
+                      <option value={50}>50 / trang</option>
+                      <option value={100}>100 / trang</option>
+                    </select>
                   </div>
-                )
-              })}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={driverPage <= 1}
+                    onClick={() => setDriverPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-slate-700 transition cursor-pointer"
+                  >
+                    ◀ Trước
+                  </button>
+                  <span className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold font-mono">
+                    {driverPage} / {totalDriverPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={driverPage >= totalDriverPages}
+                    onClick={() => setDriverPage((p) => Math.min(totalDriverPages, p + 1))}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-slate-700 transition cursor-pointer"
+                  >
+                    Sau ▶
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
