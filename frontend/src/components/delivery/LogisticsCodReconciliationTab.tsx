@@ -133,6 +133,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   const [filter, setFilter] = useState<'ALL' | 'COLLECTING' | 'VAULT' | 'SETTLED'>('ALL')
   const [search, setSearch] = useState('')
   const [selectedHubFilter, setSelectedHubFilter] = useState<string>('ALL')
+  const [hubStatusFilter, setHubStatusFilter] = useState<'ALL' | 'VAULT' | 'COLLECTING' | 'BALANCED'>('ALL')
 
   // Phân trang sổ chi tiết kiện hàng
   const [parcelPage, setParcelPage] = useState<number>(1)
@@ -165,7 +166,8 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         } else {
           inVault.push(s)
         }
-      } else if (['OUT_FOR_DELIVERY', 'DELIVERY_ASSIGNED', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'SORTING', 'PICKED_UP', 'PICKUP_ASSIGNED'].includes(s.status)) {
+      } else {
+        // Mọi đơn COD chưa giao xong (WAITING_PICKUP, PICKUP_ASSIGNED, PICKED_UP, SORTING, IN_TRANSIT, AT_DESTINATION_HUB, OUT_FOR_DELIVERY...)
         collecting.push(s)
       }
     })
@@ -201,7 +203,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
       })
 
       const hubCollecting = hubShipments.filter((s) =>
-        ['OUT_FOR_DELIVERY', 'DELIVERY_ASSIGNED', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'SORTING', 'PICKED_UP', 'PICKUP_ASSIGNED'].includes(s.status)
+        !['DELIVERED', 'COMPLETED', 'CANCELLED'].includes(s.status)
       )
 
       const isHubSettled = locallySettledHubIds.includes(hub.id)
@@ -236,8 +238,29 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         hubSettledShipments,
         isOverLimit: vaultCashAmount > 20000000, // Cảnh báo két đọng trên 20 triệu
       }
+    }).sort((a, b) => {
+      // 1. Ưu tiên Bưu cục đang có tiền trong két cần thu nộp về sàn
+      if (b.vaultCashAmount !== a.vaultCashAmount) return b.vaultCashAmount - a.vaultCashAmount
+      // 2. Tiếp theo ưu tiên Bưu cục có tiền COD phát sinh / đang thu
+      if (b.totalCod !== a.totalCod) return b.totalCod - a.totalCod
+      // 3. Theo tên
+      return a.hub.name.localeCompare(b.hub.name)
     })
   }, [destinationHubs, megaSocs, drivers, codShipments, hubs, locallySettledHubIds])
+
+  // Lọc Hub theo bộ lọc trạng thái két
+  const filteredHubs = useMemo(() => {
+    return hubCodBreakdown.filter((item) => {
+      if (hubStatusFilter === 'VAULT') return item.vaultCashAmount > 0
+      if (hubStatusFilter === 'COLLECTING') return item.collectingAmount > 0
+      if (hubStatusFilter === 'BALANCED') return item.vaultCashAmount === 0 && item.collectingAmount === 0
+      return true
+    })
+  }, [hubCodBreakdown, hubStatusFilter])
+
+  const hubsWithVaultCount = useMemo(() => hubCodBreakdown.filter((h) => h.vaultCashAmount > 0).length, [hubCodBreakdown])
+  const hubsWithCollectingCount = useMemo(() => hubCodBreakdown.filter((h) => h.collectingAmount > 0).length, [hubCodBreakdown])
+  const hubsBalancedCount = useMemo(() => hubCodBreakdown.filter((h) => h.vaultCashAmount === 0 && h.collectingAmount === 0).length, [hubCodBreakdown])
 
   // Tính toán số liệu COD theo từng Cụm Mega SOC
   const socClusters = useMemo(() => {
@@ -319,7 +342,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
       const isRemitted = Boolean(s.codTransaction?.settledAt) || s.codTransaction?.status === 'SETTLED' || isHubSettled
 
       if (filter === 'COLLECTING') {
-        if (!['OUT_FOR_DELIVERY', 'DELIVERY_ASSIGNED', 'IN_TRANSIT', 'AT_DESTINATION_HUB', 'SORTING', 'PICKED_UP', 'PICKUP_ASSIGNED'].includes(s.status)) return false
+        if (isDelivered) return false
       } else if (filter === 'VAULT') {
         if (!isDelivered || isRemitted) return false
       } else if (filter === 'SETTLED') {
@@ -354,7 +377,7 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   // Tỷ trọng % dòng tiền để vẽ thanh tiến độ
   const collectingPct = totalCodAll > 0 ? Math.round((totalCollecting / totalCodAll) * 100) : 0
   const vaultPct = totalCodAll > 0 ? Math.round((totalVault / totalCodAll) * 100) : 0
-  const settledPct = totalCodAll > 0 ? Math.max(0, 100 - collectingPct - vaultPct) : 0
+  const settledPct = totalCodAll > 0 ? Math.round((totalSettled / totalCodAll) * 100) : 0
 
   return (
     <div className="space-y-6">
@@ -516,147 +539,231 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         {/* VIEW 1: SỔ QUỸ KÉT SẮT THEO TỪNG BƯU CỤC HUB (HUB CASHIER TABLE) */}
         {/* ========================================================================= */}
         {activeTierView === 'HUBS' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-4 min-w-56">Bưu Cục Hub & Địa Bàn</th>
-                  <th className="py-3 px-4 text-center min-w-28">Shipper</th>
-                  <th className="py-3 px-4 text-right min-w-36">Tổng COD Phát Sinh</th>
-                  <th className="py-3 px-4 text-right min-w-36">Đang Thu Ngoài Đường</th>
-                  <th className="py-3 px-4 text-right min-w-36">Tiền Trong Két Hub</th>
-                  <th className="py-3 px-4 text-right min-w-36">Đã Nộp Về Sàn</th>
-                  <th className="py-3 px-4 text-center min-w-32">Trạng Thái Két</th>
-                  <th className="py-3 px-4 text-right min-w-52">Quản Trị Két Sắt</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {hubCodBreakdown.map((item) => {
-                  const hasVaultCash = item.vaultCashAmount > 0
+          <div>
+            {/* Thanh lọc trạng thái két sắt bưu cục */}
+            <div className="p-3 border-b border-slate-100 bg-slate-50/40 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                  Lọc Két Sắt:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHubStatusFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    hubStatusFilter === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-3xs'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>Tất Cả Hubs</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200/60 text-slate-800 font-mono">
+                    {hubCodBreakdown.length}
+                  </span>
+                </button>
 
-                  return (
-                    <tr key={item.hub.id} className="hover:bg-slate-50/80 transition">
-                      {/* Bưu cục & SOC Chủ Quản */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                          <span>🏢</span>
-                          <span className="font-black">{cleanHubName(item.hub.name)}</span>
-                          <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] font-mono border border-slate-200">
-                            {item.hub.code}
+                <button
+                  type="button"
+                  onClick={() => setHubStatusFilter('VAULT')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    hubStatusFilter === 'VAULT'
+                      ? 'bg-rose-600 text-white shadow-3xs'
+                      : 'bg-white border border-rose-200 text-rose-700 hover:bg-rose-50'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  <span>Có Tiền Trong Két</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 text-rose-800 font-mono font-bold">
+                    {hubsWithVaultCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHubStatusFilter('COLLECTING')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    hubStatusFilter === 'COLLECTING'
+                      ? 'bg-amber-500 text-white shadow-3xs'
+                      : 'bg-white border border-amber-200 text-amber-800 hover:bg-amber-50'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <span>Đang Thu Ngoài Đường</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-900 font-mono font-bold">
+                    {hubsWithCollectingCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHubStatusFilter('BALANCED')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    hubStatusFilter === 'BALANCED'
+                      ? 'bg-slate-700 text-white shadow-3xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>✓ Két Cân Bằng</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+                    {hubsBalancedCount}
+                  </span>
+                </button>
+              </div>
+
+              <span className="text-[11px] text-slate-400 font-medium">
+                Ưu tiên vận hành: Két đọng tiền mặt ➔ Đang thu phát ➔ Cân bằng
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[1080px] w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4 min-w-60 whitespace-nowrap">Bưu Cục Hub & Địa Bàn</th>
+                    <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Shipper</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Tổng COD Phát Sinh</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Đang Thu Ngoài Đường</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Tiền Trong Két Hub</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Đã Nộp Về Sàn</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">Trạng Thái Két</th>
+                    <th className="py-3 px-4 text-right min-w-56 whitespace-nowrap">Thao Tác Két Sắt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredHubs.map((item) => {
+                    const hasVaultCash = item.vaultCashAmount > 0
+
+                    return (
+                      <tr key={item.hub.id} className="hover:bg-slate-50/80 transition">
+                        {/* Bưu cục & SOC Chủ Quản */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <span>🏢</span>
+                            <span className="font-black">{cleanHubName(item.hub.name)}</span>
+                            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] font-mono border border-slate-200">
+                              {item.hub.code}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200 whitespace-nowrap">
+                              <span>🏭</span> Trực thuộc: {item.parentSoc.shortName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 truncate max-w-xs" title={item.hub.address}>
+                              {item.hub.district ? `${item.hub.district}, ` : ''}{item.hub.province}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Shipper */}
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold inline-block">
+                            🛵 {item.driverCount}
                           </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
-                            <span>🏭</span> Trực thuộc: {item.parentSoc.shortName}
-                          </span>
-                          <span className="text-[11px] text-slate-500 truncate max-w-xs" title={item.hub.address}>
-                            {item.hub.district ? `${item.hub.district}, ` : ''}{item.hub.province}
-                          </span>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Shipper */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold">
-                          🛵 {item.driverCount}
-                        </span>
-                      </td>
+                        {/* Tổng COD */}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-xs whitespace-nowrap">
+                          {item.totalCod > 0 ? (
+                            <>
+                              <div>{formatMoney(item.totalCod)}</div>
+                              <span className="text-[10px] text-slate-400 font-sans font-normal">{item.shipmentCount} kiện</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
 
-                      {/* Tổng COD */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-xs">
-                        {item.totalCod > 0 ? (
-                          <>
-                            <div>{formatMoney(item.totalCod)}</div>
-                            <span className="text-[10px] text-slate-400 font-sans font-normal">{item.shipmentCount} kiện</span>
-                          </>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </td>
+                        {/* Đang thu ngoài đường */}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600 whitespace-nowrap">
+                          {item.collectingAmount > 0 ? (
+                            formatMoney(item.collectingAmount)
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
 
-                      {/* Đang thu ngoài đường */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-600">
-                        {item.collectingAmount > 0 ? formatMoney(item.collectingAmount) : <span className="text-slate-300 font-sans">-</span>}
-                      </td>
+                        {/* Tiền trong két Hub */}
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-sm whitespace-nowrap">
+                          {hasVaultCash ? (
+                            <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 inline-block font-mono">
+                              {formatMoney(item.vaultCashAmount)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
 
-                      {/* Tiền trong két Hub */}
-                      <td className="py-3.5 px-4 text-right font-mono font-black text-sm">
-                        {hasVaultCash ? (
-                          <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 inline-block">
-                            {formatMoney(item.vaultCashAmount)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 font-sans text-xs">-</span>
-                        )}
-                      </td>
+                        {/* Đã nộp sàn */}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-600 whitespace-nowrap">
+                          {item.remittedAmount > 0 ? (
+                            formatMoney(item.remittedAmount)
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
 
-                      {/* Đã nộp sàn */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-600">
-                        {item.remittedAmount > 0 ? formatMoney(item.remittedAmount) : <span className="text-slate-300 font-sans">-</span>}
-                      </td>
+                        {/* Trạng thái két */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          {item.isOverLimit ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap">
+                              ⚠️ Vượt Hạn Mức
+                            </span>
+                          ) : hasVaultCash ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                              🛡️ Đang Giữ Tiền
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 whitespace-nowrap">
+                              ✓ Két Cân Bằng
+                            </span>
+                          )}
+                        </td>
 
-                      {/* Trạng thái két */}
-                      <td className="py-3.5 px-4 text-center">
-                        {item.isOverLimit ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
-                            ⚠️ Vượt Hạn Mức
-                          </span>
-                        ) : hasVaultCash ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            🛡️ Đang Giữ Tiền
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                            ✓ Két Cân Bằng
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Thao tác Quản trị két */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Nút Xem chi tiết két */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedVaultHub(item)}
-                            className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs"
-                            title="Mở sổ kiểm kê các vận đơn và tiền mặt trong két sắt này"
-                          >
-                            <span>🔍</span> Chi Tiết Két
-                          </button>
-
-                          {/* Nút Chốt nộp tiền về sàn nếu có tiền két */}
-                          {hasVaultCash && (
+                        {/* Thao tác Quản trị két */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Nút Xem chi tiết két */}
                             <button
                               type="button"
-                              disabled={settlingHubId === item.hub.id}
-                              onClick={() => handleSettleHubVault(item)}
-                              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs"
-                              title="Xác nhận bưu cục đã chuyển khoản tiền két về tài khoản Sàn"
+                              onClick={() => setSelectedVaultHub(item)}
+                              className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                              title="Mở sổ kiểm kê các vận đơn và tiền mặt trong két sắt này"
                             >
-                              <span>⚡</span> Chốt Nộp Sàn
+                              <span>🔍</span> Chi Tiết Két
                             </button>
-                          )}
 
-                          {/* Nút xem đơn */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedHubFilter(item.hub.id)
-                              setActiveTierView('PARCELS')
-                            }}
-                            className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition text-xs font-semibold"
-                            title="Lọc các bưu kiện của bưu cục này sang Sổ Kế Toán"
-                          >
-                            📦
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                            {/* Nút Chốt nộp tiền về sàn nếu có tiền két */}
+                            {hasVaultCash && (
+                              <button
+                                type="button"
+                                disabled={settlingHubId === item.hub.id}
+                                onClick={() => handleSettleHubVault(item)}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                                title="Xác nhận bưu cục đã chuyển khoản tiền két về tài khoản Sàn"
+                              >
+                                <span>⚡</span> Chốt Nộp Sàn
+                              </button>
+                            )}
+
+                            {/* Nút xem đơn */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedHubFilter(item.hub.id)
+                                setActiveTierView('PARCELS')
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition text-xs font-semibold flex-shrink-0"
+                              title="Lọc các bưu kiện của bưu cục này sang Sổ Kế Toán"
+                            >
+                              📦
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
