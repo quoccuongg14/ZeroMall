@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { API_BASE_URL } from '../../config/api.config'
 
 export interface Hub {
   id: string
@@ -128,12 +129,13 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   drivers = [],
   onSelectShipment,
 }) => {
-  // Chế độ xem: Phân cấp Hubs | Cụm Mega SOC | Sổ kế toán chi tiết
-  const [activeTierView, setActiveTierView] = useState<'HUBS' | 'SOCS' | 'PARCELS'>('HUBS')
+  // Chế độ xem: Thu Hồi Công Nợ Bưu Cục | Đối Soát Giải Ngân Shop | Sổ Kế Toán Chi Tiết
+  const [activeTierView, setActiveTierView] = useState<'HUBS' | 'SELLERS' | 'PARCELS'>('HUBS')
   const [filter, setFilter] = useState<'ALL' | 'COLLECTING' | 'VAULT' | 'SETTLED'>('ALL')
   const [search, setSearch] = useState('')
   const [selectedHubFilter, setSelectedHubFilter] = useState<string>('ALL')
-  const [hubStatusFilter, setHubStatusFilter] = useState<'ALL' | 'VAULT' | 'COLLECTING' | 'BALANCED'>('ALL')
+  // Mặc định lọc các Hub đang giữ tiền két cần thu hồi để Admin không bị phân tâm bởi các Hub 0đ
+  const [hubStatusFilter, setHubStatusFilter] = useState<'ALL' | 'VAULT' | 'COLLECTING' | 'BALANCED'>('VAULT')
 
   // Phân trang sổ chi tiết kiện hàng
   const [parcelPage, setParcelPage] = useState<number>(1)
@@ -143,6 +145,30 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   const [selectedVaultHub, setSelectedVaultHub] = useState<any | null>(null)
   const [settlingHubId, setSettlingHubId] = useState<string | null>(null)
   const [locallySettledHubIds, setLocallySettledHubIds] = useState<string[]>([])
+
+  // Quản trị giải ngân Người Bán (Shop Settlement)
+  const [shops, setShops] = useState<any[]>([])
+  const [locallySettledSellerIds, setLocallySettledSellerIds] = useState<string[]>([])
+  const [settlingSellerId, setSettlingSellerId] = useState<string | null>(null)
+  const [sellerSearch, setSellerSearch] = useState('')
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/auth/shops`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setShops(data)
+      })
+      .catch((err) => console.error('Error fetching shops for COD:', err))
+  }, [])
+
+  const shopMap = useMemo(() => {
+    const map = new Map<string, any>()
+    shops.forEach((s) => {
+      if (s.id) map.set(s.id, s)
+      if (s.ownerId) map.set(s.ownerId, s)
+    })
+    return map
+  }, [shops])
 
   // Lọc chỉ lấy các đơn có thu COD và không bị hủy
   const codShipments = useMemo(() => {
@@ -262,28 +288,107 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
   const hubsWithCollectingCount = useMemo(() => hubCodBreakdown.filter((h) => h.collectingAmount > 0).length, [hubCodBreakdown])
   const hubsBalancedCount = useMemo(() => hubCodBreakdown.filter((h) => h.vaultCashAmount === 0 && h.collectingAmount === 0).length, [hubCodBreakdown])
 
-  // Tính toán số liệu COD theo từng Cụm Mega SOC
-  const socClusters = useMemo(() => {
-    return megaSocs.map((soc) => {
-      const childHubs = hubCodBreakdown.filter((item) => item.parentSoc.id === soc.id || item.parentSoc.code === soc.code)
-      const totalChildCod = childHubs.reduce((sum, item) => sum + item.totalCod, 0)
-      const totalCollectingInCluster = childHubs.reduce((sum, item) => sum + item.collectingAmount, 0)
-      const totalVaultInCluster = childHubs.reduce((sum, item) => sum + item.vaultCashAmount, 0)
-      const totalRemittedInCluster = childHubs.reduce((sum, item) => sum + item.remittedAmount, 0)
-      const totalShipments = childHubs.reduce((sum, item) => sum + item.shipmentCount, 0)
+  // Tổng hợp đối soát dòng tiền theo từng Người Bán (Seller Settlement & Escrow Ledger)
+  const sellerSettlements = useMemo(() => {
+    const map = new Map<string, {
+      sellerId: string
+      shopName: string
+      email?: string
+      phone?: string
+      totalShipments: number
+      deliveredShipments: number
+      grossCod: number
+      deliveredCod: number
+      collectingCod: number
+      platformFee: number
+      netPayable: number
+      shipments: Shipment[]
+      isSettled: boolean
+    }>()
 
-      return {
-        soc,
-        childHubs,
-        totalChildHubs: childHubs.length,
-        totalShipments,
-        totalCod: totalChildCod,
-        totalCollecting: totalCollectingInCluster,
-        totalVault: totalVaultInCluster,
-        totalRemitted: totalRemittedInCluster,
+    codShipments.forEach((s) => {
+      const sellerId = s.sellerId || 'unknown'
+      const shop = shopMap.get(sellerId)
+      const shopName = shop?.name || (sellerId === 'seller-test-01' ? 'Shop Thử Nghiệm ZMX' : `Shop #${sellerId.slice(0, 8)}`)
+      const isDelivered = ['DELIVERED', 'COMPLETED'].includes(s.status)
+
+      if (!map.has(sellerId)) {
+        map.set(sellerId, {
+          sellerId,
+          shopName,
+          email: shop?.email || `${sellerId.slice(0, 8)}@zeromall.vn`,
+          phone: shop?.phoneNumber || '090xxxxxxx',
+          totalShipments: 0,
+          deliveredShipments: 0,
+          grossCod: 0,
+          deliveredCod: 0,
+          collectingCod: 0,
+          platformFee: 0,
+          netPayable: 0,
+          shipments: [],
+          isSettled: false,
+        })
+      }
+
+      const item = map.get(sellerId)!
+      item.totalShipments += 1
+      item.grossCod += s.codAmount
+      item.shipments.push(s)
+
+      if (isDelivered) {
+        item.deliveredShipments += 1
+        item.deliveredCod += s.codAmount
+      } else {
+        item.collectingCod += s.codAmount
       }
     })
-  }, [megaSocs, hubCodBreakdown])
+
+    return Array.from(map.values()).map((item) => {
+      const isLocallySettled = locallySettledSellerIds.includes(item.sellerId)
+      // 5% phí hoa hồng dịch vụ Sàn thu trên doanh số COD giao thành công
+      const platformFee = Math.round(item.deliveredCod * 0.05)
+      const netPayable = Math.max(0, item.deliveredCod - platformFee)
+      const isSettled = isLocallySettled || (item.deliveredShipments > 0 && item.shipments.every((s) => s.codTransaction?.status === 'SETTLED'))
+
+      return {
+        ...item,
+        platformFee,
+        netPayable,
+        isSettled,
+      }
+    }).sort((a, b) => b.deliveredCod - a.deliveredCod)
+  }, [codShipments, shopMap, locallySettledSellerIds])
+
+  // Lọc danh sách Shop theo tìm kiếm
+  const filteredSellerSettlements = useMemo(() => {
+    if (!sellerSearch.trim()) return sellerSettlements
+    const q = sellerSearch.toLowerCase()
+    return sellerSettlements.filter(
+      (s) =>
+        s.shopName.toLowerCase().includes(q) ||
+        s.sellerId.toLowerCase().includes(q) ||
+        (s.email && s.email.toLowerCase().includes(q)) ||
+        (s.phone && s.phone.includes(q))
+    )
+  }, [sellerSettlements, sellerSearch])
+
+  // Thao tác Kế toán / Admin duyệt giải ngân vào Ví Shop
+  const handleSettleSeller = (sellerItem: any) => {
+    if (sellerItem.deliveredCod <= 0) {
+      alert(`Người bán "${sellerItem.shopName}" chưa có đơn COD giao thành công để giải ngân.`)
+      return
+    }
+
+    const confirmMsg = `XÁC NHẬN GIẢI NGÂN VÍ DOANH THU SHOP:\n\n• Tên Shop: ${sellerItem.shopName}\n• Tổng tiền COD thu hộ: ${formatMoney(sellerItem.deliveredCod)} (${sellerItem.deliveredShipments} đơn)\n• Khấu trừ hoa hồng sàn (5%): -${formatMoney(sellerItem.platformFee)}\n• Số tiền thực chuyển vào Ví Shop: ${formatMoney(sellerItem.netPayable)}\n\nXác nhận chuyển tiền vào Ví Người Bán ngay bây giờ?`
+    if (!window.confirm(confirmMsg)) return
+
+    setSettlingSellerId(sellerItem.sellerId)
+    setTimeout(() => {
+      setLocallySettledSellerIds((prev) => [...prev, sellerItem.sellerId])
+      setSettlingSellerId(null)
+      alert(`✓ ĐÃ GIẢI NGÂN THÀNH CÔNG!\n\nĐã chuyển ${formatMoney(sellerItem.netPayable)} vào Ví Người Bán "${sellerItem.shopName}".\nSàn đã thu ${formatMoney(sellerItem.platformFee)} hoa hồng dịch vụ.`)
+    }, 500)
+  }
 
   // Thao tác Kế toán duyệt chốt két và nộp tiền từ Bưu cục về Sàn
   const handleSettleHubVault = (hubItem: any) => {
@@ -306,28 +411,64 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
     }, 600)
   }
 
-  // Xuất báo cáo sổ quỹ COD ra định dạng CSV chuẩn
+  // Xuất báo cáo đối soát ra định dạng CSV chuẩn
   const handleExportCsv = () => {
-    const headers = ['Mã Trạm', 'Tên Bưu Cục', 'Cụm SOC Chủ Quản', 'Địa Bàn', 'Số Shipper', 'Tổng COD Phát Sinh (VND)', 'Đang Thu Ngoài Đường (VND)', 'Tiền Két Sắt Hub (VND)', 'Đã Nộp Về Sàn (VND)', 'Trạng Thái Két']
-    const rows = hubCodBreakdown.map((item) => [
-      item.hub.code,
-      item.hub.name,
-      item.parentSoc.shortName,
-      `"${item.hub.district}, ${item.hub.province}"`,
-      item.driverCount,
-      item.totalCod,
-      item.collectingAmount,
-      item.vaultCashAmount,
-      item.remittedAmount,
-      item.vaultCashAmount > 20000000 ? 'VƯỢT HẠN MỨC' : item.vaultCashAmount > 0 ? 'ĐANG GIỮ TIỀN' : 'CÂN BẰNG',
-    ])
+    let headers: string[] = []
+    let rows: any[][] = []
+    let fileName = ''
+
+    if (activeTierView === 'SELLERS') {
+      headers = ['Mã Shop', 'Tên Người Bán', 'Email', 'Số Điện Thoại', 'Tổng Đơn', 'Đã Giao', 'Tổng COD Phát Sinh (VND)', 'Đã Thu Thành Công (VND)', 'Hoa Hồng Sàn 5% (VND)', 'Thực Chuyển Ví Shop (VND)', 'Trạng Thái']
+      rows = sellerSettlements.map((s) => [
+        s.sellerId,
+        `"${s.shopName}"`,
+        s.email || '',
+        s.phone || '',
+        s.totalShipments,
+        s.deliveredShipments,
+        s.grossCod,
+        s.deliveredCod,
+        s.platformFee,
+        s.netPayable,
+        s.isSettled ? 'ĐÃ GIẢI NGÂN' : s.deliveredCod > 0 ? 'SẴN SÀNG GIẢI NGÂN' : 'ĐANG GIAO HÀNG',
+      ])
+      fileName = `Bao_Cao_Doi_Soat_Shop_ZeroMall_${new Date().toISOString().slice(0, 10)}.csv`
+    } else if (activeTierView === 'PARCELS') {
+      headers = ['Mã Vận Đơn', 'Mã Đơn Hàng', 'Shop Bán', 'Người Nhận', 'Số Điện Thoại', 'Địa Chỉ', 'Tiền COD (VND)', 'Trạng Thái Đơn']
+      rows = displayedShipments.map((s) => [
+        s.trackingNumber,
+        s.orderId,
+        `"${shopMap.get(s.sellerId)?.name || 'ZeroMall Shop'}"`,
+        `"${s.buyerName}"`,
+        s.buyerPhone,
+        `"${s.deliveryAddress}"`,
+        s.codAmount,
+        s.status,
+      ])
+      fileName = `So_Ke_Toan_Van_Don_COD_ZeroMall_${new Date().toISOString().slice(0, 10)}.csv`
+    } else {
+      headers = ['Mã Trạm', 'Tên Bưu Cục', 'Cụm SOC Chủ Quản', 'Địa Bàn', 'Số Shipper', 'Tổng COD Phát Sinh (VND)', 'Đang Thu Ngoài Đường (VND)', 'Tiền Két Sắt Hub (VND)', 'Đã Nộp Về Sàn (VND)', 'Trạng Thái Két']
+      rows = hubCodBreakdown.map((item) => [
+        item.hub.code,
+        item.hub.name,
+        item.parentSoc.shortName,
+        `"${item.hub.district}, ${item.hub.province}"`,
+        item.driverCount,
+        item.totalCod,
+        item.collectingAmount,
+        item.vaultCashAmount,
+        item.remittedAmount,
+        item.vaultCashAmount > 20000000 ? 'VƯỢT HẠN MỨC' : item.vaultCashAmount > 0 ? 'ĐANG GIỮ TIỀN' : 'CÂN BẰNG',
+      ])
+      fileName = `Bao_Cao_Cong_No_Két_Hub_ZeroExpress_${new Date().toISOString().slice(0, 10)}.csv`
+    }
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.setAttribute('href', url)
-    link.setAttribute('download', `Bao_Cao_Doi_Soat_COD_ZeroExpress_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -428,36 +569,42 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
             </p>
           </div>
 
-          {/* Card 2: Đang Thu Trên Đường */}
-          <div className="bg-amber-50/60 border border-amber-200/80 p-4 rounded-2xl space-y-1">
-            <span className="text-[11px] text-amber-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>🛵</span> Đang Thu Ngoài Đường
-            </span>
-            <p className="text-2xl font-black text-amber-600 font-mono mt-0.5">{formatMoney(totalCollecting)}</p>
-            <p className="text-[10px] text-amber-700/80 font-medium">
-              {collectingShipments.length} đơn shipper đang giao tận tay khách
-            </p>
-          </div>
-
-          {/* Card 3: Trong Két Sắt Hub */}
+          {/* Card 2: Công nợ tiền mặt cần thu hồi */}
           <div className="bg-rose-50/60 border border-rose-200/80 p-4 rounded-2xl space-y-1">
             <span className="text-[11px] text-rose-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>🏦</span> Tiền Trong Két Sắt Hub
+              <span>⚠️</span> Công Nợ Tiền Mặt Cần Thu Hồi
             </span>
-            <p className="text-2xl font-black text-rose-600 font-mono mt-0.5">{formatMoney(totalVault)}</p>
+            <p className="text-2xl font-black text-rose-600 font-mono mt-0.5">
+              {formatMoney(totalVault + totalCollecting)}
+            </p>
             <p className="text-[10px] text-rose-700/80 font-medium">
-              {vaultShipments.length} đơn tiền mặt tại quầy chờ nộp Sàn
+              {hubsWithVaultCount} Bưu cục giữ két ({formatMoney(totalVault)}) + Ngoài đường ({formatMoney(totalCollecting)})
             </p>
           </div>
 
-          {/* Card 4: Đã Nộp & Giải Ngân */}
+          {/* Card 3: Tài khoản Ký Quỹ Sàn (Escrow Pool) */}
           <div className="bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl space-y-1">
             <span className="text-[11px] text-emerald-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <span>✅</span> Đã Nộp Ký Quỹ & Trả Ví
+              <span>🏦</span> Tài Khoản Ký Quỹ Sàn (Escrow)
             </span>
-            <p className="text-2xl font-black text-emerald-600 font-mono mt-0.5">{formatMoney(totalSettled)}</p>
+            <p className="text-2xl font-black text-emerald-600 font-mono mt-0.5">
+              {formatMoney(totalSettled)}
+            </p>
             <p className="text-[10px] text-emerald-700/80 font-medium">
-              {settledShipments.length} đơn đã chốt an toàn vào Ví Shop
+              {settledShipments.length} đơn tiền đã chuyển khoản nộp về Sàn
+            </p>
+          </div>
+
+          {/* Card 4: Hoa hồng Sàn thu về (5%) */}
+          <div className="bg-indigo-50/60 border border-indigo-200/80 p-4 rounded-2xl space-y-1">
+            <span className="text-[11px] text-indigo-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span>💎</span> Hoa Hồng Sàn Thu Về (5%)
+            </span>
+            <p className="text-2xl font-black text-indigo-600 font-mono mt-0.5">
+              {formatMoney(Math.round(totalCodAll * 0.05))}
+            </p>
+            <p className="text-[10px] text-indigo-700/80 font-medium">
+              Doanh thu hoa hồng dịch vụ Sàn khấu trừ từ đơn hàng
             </p>
           </div>
         </div>
@@ -504,18 +651,18 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                   : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              <span>🏢</span> Sổ Quỹ Két Sắt Từng Bưu Cục ({destinationHubs.length} Hubs)
+              <span>⚠️</span> Thu Hồi Công Nợ Bưu Cục ({hubsWithVaultCount} Hubs Đang Giữ Két)
             </button>
 
             <button
-              onClick={() => setActiveTierView('SOCS')}
+              onClick={() => setActiveTierView('SELLERS')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
-                activeTierView === 'SOCS'
+                activeTierView === 'SELLERS'
                   ? 'bg-slate-900 text-white shadow-3xs'
                   : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              <span>🏭</span> Báo Cáo Theo Cụm Mega SOC ({megaSocs.length})
+              <span>🛍️</span> Đối Soát & Giải Ngân Cho Shop ({sellerSettlements.length} Shops)
             </button>
 
             <button
@@ -768,65 +915,174 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
         )}
 
         {/* ========================================================================= */}
-        {/* VIEW 2: GIÁM SÁT THEO CỤM VÙNG MEGA SOC */}
+        {/* VIEW 2: ĐỐI SOÁT DÒNG TIỀN & GIẢI NGÂN CHO SHOP (SELLER SETTLEMENT LEDGER) */}
         {/* ========================================================================= */}
-        {activeTierView === 'SOCS' && (
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {socClusters.map((c) => (
-              <div
-                key={c.soc.id}
-                className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-xs space-y-4"
-              >
-                <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">🏭</span>
-                      <h4 className="font-black text-slate-900 text-base">{c.soc.name}</h4>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Mã trạm: <b className="font-mono text-slate-700">{c.soc.code}</b> • Khu vực: {c.soc.province}
-                    </p>
-                  </div>
+        {activeTierView === 'SELLERS' && (
+          <div>
+            {/* Top summary & search for Sellers */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={sellerSearch}
+                    onChange={(e) => setSellerSearch(e.target.value)}
+                    placeholder="Tìm theo tên Shop, email, SĐT..."
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs w-64 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                  <span className="absolute left-2.5 top-1.8 text-slate-400 text-xs">🔍</span>
+                </div>
 
-                  <span className="px-3 py-1 bg-sky-50 text-sky-800 border border-sky-200 rounded-full text-xs font-bold">
-                    {c.totalChildHubs} Hubs Vệ Tinh
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    💰 COD Đã Thu: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.deliveredCod, 0))}
                   </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-2xl space-y-1 border border-slate-100">
-                    <span className="text-[11px] text-slate-500 font-bold uppercase">Tổng COD Qua Cụm</span>
-                    <p className="text-lg font-black text-slate-900 font-mono">{formatMoney(c.totalCod)}</p>
-                    <span className="text-[10px] text-slate-400">{c.totalShipments} bưu kiện</span>
-                  </div>
-
-                  <div className="bg-amber-50/50 p-3 rounded-2xl space-y-1 border border-amber-200">
-                    <span className="text-[11px] text-amber-800 font-bold uppercase">Đang Thu Ngoài Tuyến</span>
-                    <p className="text-lg font-black text-amber-600 font-mono">{formatMoney(c.totalCollecting)}</p>
-                    <span className="text-[10px] text-amber-700">Shipper đang giao</span>
-                  </div>
-
-                  <div className="bg-rose-50/50 p-3 rounded-2xl space-y-1 border border-rose-200">
-                    <span className="text-[11px] text-rose-800 font-bold uppercase">Tiền Trong Két Các Hub</span>
-                    <p className="text-lg font-black text-rose-600 font-mono">{formatMoney(c.totalVault)}</p>
-                    <span className="text-[10px] text-rose-700">Chờ nộp về tài khoản sàn</span>
-                  </div>
-
-                  <div className="bg-emerald-50/50 p-3 rounded-2xl space-y-1 border border-emerald-200">
-                    <span className="text-[11px] text-emerald-800 font-bold uppercase">Đã Nộp & Giải Ngân</span>
-                    <p className="text-lg font-black text-emerald-600 font-mono">{formatMoney(c.totalRemitted)}</p>
-                    <span className="text-[10px] text-emerald-700">Đã chốt sổ an toàn</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
-                  <span>Mạng lưới các bưu cục con:</span>
-                  <span className="font-bold text-sky-800">
-                    {c.childHubs.map((h) => cleanHubName(h.hub.name)).join(', ') || 'Chưa gán bưu cục'}
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200">
+                    💎 Hoa Hồng Sàn (5%): {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.platformFee, 0))}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                    🤝 Net Trả Shop: {formatMoney(sellerSettlements.reduce((sum, s) => sum + s.netPayable, 0))}
                   </span>
                 </div>
               </div>
-            ))}
+
+              <span className="text-[11px] text-slate-400 font-medium">
+                Quy chuẩn: Tự động khấu trừ 5% hoa hồng dịch vụ Sàn trước khi giải ngân vào Ví Shop
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-[1080px] w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4 min-w-64 whitespace-nowrap">Shop (Người Bán)</th>
+                    <th className="py-3 px-3 text-center w-32 whitespace-nowrap">Số Đơn Hàng</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Tổng COD Thu Hộ</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Hoa Hồng Sàn (5%)</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Thực Nhận Vào Ví Shop</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">Trạng Thái Ký Quỹ</th>
+                    <th className="py-3 px-4 text-right min-w-44 whitespace-nowrap">Thao Tác Kế Toán</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredSellerSettlements.map((item) => {
+                    const isDeliveredReady = item.deliveredCod > 0
+
+                    return (
+                      <tr key={item.sellerId} className="hover:bg-slate-50/80 transition">
+                        {/* Thông tin Shop */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs">
+                              🏪
+                            </span>
+                            <span className="font-black text-slate-900">{item.shopName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+                            <span>SĐT: {item.phone || '090xxxxxxx'}</span>
+                            <span>•</span>
+                            <span className="font-mono text-slate-400">ID: {item.sellerId.slice(0, 12)}...</span>
+                          </div>
+                        </td>
+
+                        {/* Số đơn */}
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold inline-block">
+                            {item.deliveredShipments} / {item.totalShipments} đơn giao
+                          </span>
+                        </td>
+
+                        {/* Tổng COD Thu Hộ */}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-xs whitespace-nowrap">
+                          {item.grossCod > 0 ? (
+                            <>
+                              <div>{formatMoney(item.grossCod)}</div>
+                              {item.collectingCod > 0 && (
+                                <span className="text-[10px] text-amber-600 font-sans font-normal">
+                                  ({formatMoney(item.collectingCod)} đang giao)
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
+
+                        {/* Hoa hồng sàn 5% */}
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-600 whitespace-nowrap">
+                          {item.platformFee > 0 ? (
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              +{formatMoney(item.platformFee)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
+
+                        {/* Thực nhận vào Ví Shop */}
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-indigo-700 whitespace-nowrap">
+                          {item.netPayable > 0 ? (
+                            formatMoney(item.netPayable)
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">0đ</span>
+                          )}
+                        </td>
+
+                        {/* Trạng thái Ký quỹ */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          {item.isSettled ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              ✓ Đã Giải Ngân Vào Ví
+                            </span>
+                          ) : isDeliveredReady ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              ⏳ Sẵn Sàng Giải Ngân
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
+                              🛵 Đang Đi Giao Hàng
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Thao tác kế toán */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isDeliveredReady && !item.isSettled ? (
+                              <button
+                                type="button"
+                                disabled={settlingSellerId === item.sellerId}
+                                onClick={() => handleSettleSeller(item)}
+                                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition text-xs flex items-center gap-1 cursor-pointer shadow-3xs whitespace-nowrap flex-shrink-0"
+                                title="Giải ngân số tiền Net vào ví doanh thu của Shop"
+                              >
+                                <span>⚡</span> Giải Ngân Ví
+                              </button>
+                            ) : item.isSettled ? (
+                              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                                ✓ Hoàn tất
+                              </span>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch(item.shopName)
+                                setActiveTierView('PARCELS')
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition text-xs font-semibold flex-shrink-0"
+                              title="Xem chi tiết các đơn hàng của Shop này"
+                            >
+                              📦
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -899,19 +1155,20 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4 min-w-36">Mã Vận Đơn</th>
-                    <th className="py-3 px-4 min-w-48">Khách Nhận & Địa Chỉ</th>
-                    <th className="py-3 px-4 min-w-40">Bưu Cục Phụ Trách</th>
-                    <th className="py-3 px-4 text-right min-w-28">Tiền Thu Hộ</th>
-                    <th className="py-3 px-4 min-w-40">Shipper Thu Tiền</th>
-                    <th className="py-3 px-4 text-center min-w-36">Trạng Thái Dòng Tiền</th>
-                    <th className="py-3 px-4 text-right min-w-28">Thao Tác</th>
+                    <th className="py-3 px-4 min-w-36 whitespace-nowrap">Mã Vận Đơn</th>
+                    <th className="py-3 px-4 min-w-44 whitespace-nowrap">Shop (Người Bán)</th>
+                    <th className="py-3 px-4 min-w-48 whitespace-nowrap">Khách Nhận & Địa Chỉ</th>
+                    <th className="py-3 px-4 min-w-40 whitespace-nowrap">Bưu Cục Phụ Trách</th>
+                    <th className="py-3 px-4 text-right min-w-28 whitespace-nowrap">Tiền Thu Hộ</th>
+                    <th className="py-3 px-4 min-w-40 whitespace-nowrap">Shipper Thu Tiền</th>
+                    <th className="py-3 px-4 text-center min-w-36 whitespace-nowrap">Trạng Thái Dòng Tiền</th>
+                    <th className="py-3 px-4 text-right min-w-28 whitespace-nowrap">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedParcels.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-slate-400 font-medium">
+                      <td colSpan={8} className="text-center py-12 text-slate-400 font-medium">
                         Không có vận đơn COD nào phù hợp với bộ lọc hiện tại.
                       </td>
                     </tr>
@@ -931,6 +1188,16 @@ export const LogisticsCodReconciliationTab: React.FC<LogisticsCodReconciliationT
                             <div className="text-[10px] text-slate-400 font-sans font-normal">
                               #{s.orderId}
                             </div>
+                          </td>
+
+                          {/* Shop Bán */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="font-bold text-slate-800 text-xs block">
+                              {shopMap.get(s.sellerId)?.name || (s.sellerId === 'seller-test-01' ? 'Shop Thử Nghiệm ZMX' : `Shop #${s.sellerId.slice(0, 8)}`)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              ID: {s.sellerId.slice(0, 8)}...
+                            </span>
                           </td>
 
                           {/* Khách nhận */}
