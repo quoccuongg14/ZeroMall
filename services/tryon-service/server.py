@@ -964,13 +964,14 @@ class TryOnSynthesizer:
                 identity_term = "male face and identity" if is_male else "female face and identity"
 
                 prompt = (
-                    f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, coordinating a complete stylish outfit: "
+                    f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, wearing a complete stylish outfit. "
+                    f"STRICT VISUAL MATCHING RULES: You must accurately replicate and transfer the exact appearance, color, fabric, pattern, and design from each reference image in additional_images: "
                     f"{', '.join(outfit_prompts)}. "
-                    f"Placement rules: Top garment strictly on the upper torso, bottom trousers strictly on the legs and lower body, and footwear/shoes strictly on the feet (never swap shoes with shirts or wear shoes on the upper body). "
-                    f"Seamlessly dress {gender_pronoun} in this complete coordinated outfit matching the reference garments. "
+                    f"Garment positioning: The upper garment must be worn exclusively on the upper torso, the lower trousers exclusively on the legs and waist, and the footwear strictly on the feet. "
+                    f"Do NOT invent or substitute different clothes or shoes; they must faithfully match the reference photos provided. "
                     f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image. "
                     f"Body proportions: {height_cm:.0f}cm, {weight_kg:.0f}kg. "
-                    f"Photorealistic 8k, ultra-detailed fabric drapery, professional commercial fashion lighting, flawless outfit harmony."
+                    f"Photorealistic 8k, ultra-detailed fabric drapery, professional commercial fashion studio lighting, flawless outfit harmony."
                 )
 
                 print(f"[*] Dispatching multi-item outfit swap to Mage Mango 3 Turbo ({len(additional_imgs)} items, prompt: {', '.join(outfit_prompts)})...")
