@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { Shipment, Hub, Driver } from './types'
+import { HubWorkloadModal } from './HubWorkloadModal'
 
 interface AdminControlTowerViewProps {
   shipments: Shipment[]
@@ -22,6 +23,7 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
   onNavigateToCod,
 }) => {
   const validShipments = shipments.filter((s) => s.status !== 'CANCELLED')
+  const [isHubWorkloadModalOpen, setIsHubWorkloadModalOpen] = useState(false)
 
   // 1. Phân loại bưu kiện theo phễu vận hành 5 chặng
   const pickupParcels = validShipments.filter((s) =>
@@ -311,13 +313,16 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
         </div>
 
         {/* Đội ngũ và mạng lưới */}
-        <div className="bg-white border border-slate-200/90 p-4.5 rounded-3xl shadow-3xs space-y-2">
+        <div
+          onClick={() => setIsHubWorkloadModalOpen(true)}
+          className="bg-white border border-slate-200/90 p-4.5 rounded-3xl shadow-3xs space-y-2 cursor-pointer hover:border-indigo-400 hover:shadow-sm transition group"
+        >
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 group-hover:text-indigo-600 transition">
               <span>🏢</span> Mạng Lưới & Đội Xe
             </span>
-            <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md text-[10px]">
-              SPX Network
+            <span className="text-indigo-700 font-bold bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white px-2 py-0.5 rounded-md text-[10px] transition">
+              Chi Tiết ➔
             </span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -331,61 +336,46 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
         </div>
       </div>
 
-      {/* 4. PHÂN BỔ TẢI TRỌNG TỪNG BƯU CỤC (HUB WORKLOAD BALANCE) */}
-      <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base">🏢</span>
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-              Tải Trọng & Tình Trạng Khai Thác Tại Từng Bưu Cục ({hubs.length} Hubs & Mega SOC)
-            </h3>
+      {/* 4. PHÂN BỔ TẢI TRỌNG TỪNG BƯU CỤC (HUB WORKLOAD BALANCE - COMPACT WIDGET) */}
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl shrink-0">
+            🏢
           </div>
-          <span className="text-[10px] text-slate-400">Tự động đồng bộ thời gian thực</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide">
+                Tải Trọng & Tình Trạng Khai Thác Tại Từng Bưu Cục
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+                {hubs.length} HUBS & MEGA SOC
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Giám sát tồn kho phân loại, đơn hàng đang giao và phân bổ lực lượng shipper tại {hubs.filter(h => h.type === 'SORTING_CENTER').length} Mega SOC & {hubs.filter(h => h.type === 'DESTINATION_HUB').length} Bưu Cục Phát
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {hubs.map((hub) => {
-            const hubParcels = validShipments.filter((s) => s.currentHubId === hub.id || s.currentHub?.code === hub.code)
-            const hubDrivers = drivers.filter((d) => d.hubId === hub.id || d.hub?.code === hub.code)
-            const deliveringCount = hubParcels.filter((s) => s.status === 'OUT_FOR_DELIVERY').length
-
-            return (
-              <div
-                key={hub.id}
-                className="p-4 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-2 hover:border-slate-300 transition"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="font-mono text-[10px] font-black bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
-                      {hub.code}
-                    </span>
-                    <h4 className="text-xs font-bold text-slate-900 mt-1">{hub.name}</h4>
-                    <p className="text-[10px] text-slate-400 truncate max-w-[200px]">{hub.address}</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    {hub.type}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-200/70 text-center">
-                  <div className="p-1.5 bg-white rounded-xl">
-                    <span className="text-[9px] text-slate-400 block">Tồn kho</span>
-                    <span className="font-mono font-black text-xs text-sky-700">{hubParcels.length}</span>
-                  </div>
-                  <div className="p-1.5 bg-white rounded-xl">
-                    <span className="text-[9px] text-slate-400 block">Đang giao</span>
-                    <span className="font-mono font-black text-xs text-orange-600">{deliveringCount}</span>
-                  </div>
-                  <div className="p-1.5 bg-white rounded-xl">
-                    <span className="text-[9px] text-slate-400 block">Shipper</span>
-                    <span className="font-mono font-black text-xs text-indigo-700">{hubDrivers.length}</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsHubWorkloadModalOpen(true)}
+          className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-2 shrink-0 cursor-pointer"
+        >
+          <span>📊</span>
+          <span>Xem Tải Trọng 14 Hubs & SOC</span>
+          <span className="text-indigo-200 font-mono">➔</span>
+        </button>
       </div>
+
+      {/* MODAL CHI TIẾT TẢI TRỌNG 14 HUBS & SOC */}
+      <HubWorkloadModal
+        isOpen={isHubWorkloadModalOpen}
+        onClose={() => setIsHubWorkloadModalOpen(false)}
+        hubs={hubs}
+        shipments={validShipments}
+        drivers={drivers}
+      />
 
       {/* 5. DANH SÁCH BƯU KIỆN MỚI CẦN XỬ LÝ (QUICK ACTION LIST) */}
       <div className="bg-white border border-slate-200/90 rounded-3xl p-5 shadow-sm space-y-3">
