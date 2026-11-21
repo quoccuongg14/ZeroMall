@@ -174,7 +174,16 @@ export class ReturnDeliveryService {
         evidences: { orderBy: { createdAt: 'desc' } },
         negotiations: { orderBy: { createdAt: 'desc' } },
         shipment: {
-          include: { pickupAddress: true },
+          include: {
+            pickupAddress: true,
+            assignments: {
+              include: { driver: true },
+            },
+            trackingLogs: {
+              orderBy: { timestamp: 'desc' },
+              take: 5,
+            },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -191,7 +200,16 @@ export class ReturnDeliveryService {
         evidences: { orderBy: { createdAt: 'desc' } },
         negotiations: { orderBy: { createdAt: 'desc' } },
         shipment: {
-          include: { pickupAddress: true },
+          include: {
+            pickupAddress: true,
+            assignments: {
+              include: { driver: true },
+            },
+            trackingLogs: {
+              orderBy: { timestamp: 'desc' },
+              take: 5,
+            },
+          },
         },
       },
     });
@@ -485,11 +503,22 @@ export class ReturnDeliveryService {
       if (driver) {
         driverInfo = ` bởi Shipper ${driver.name} (${driver.phone} - ${driver.vehicleNumber})`;
       }
+
+      await this.prisma.deliveryAssignment.create({
+        data: {
+          shipmentId: ret.shipmentId,
+          driverId: dto.driverId,
+          type: 'RETURN_PICKUP',
+          status: 'IN_PROGRESS',
+          note: dto.note || `Tài xế đã nhận hàng hoàn từ người mua (${returnTrackingNumber})`,
+        },
+      });
     }
 
     await this.prisma.shipmentTracking.create({
       data: {
         shipmentId: ret.shipmentId,
+        driverId: dto.driverId,
         status: 'RETURN_IN_TRANSIT',
         title: 'Shipper ZMX đã nhận hàng hoàn từ Người Mua',
         description: `Kiện hàng hoàn trả đã được thu hồi thành công${driverInfo}. Đang trên đường chuyển về kho Shop. Mã vận đơn hoàn: ${returnTrackingNumber}.`,
@@ -548,6 +577,19 @@ export class ReturnDeliveryService {
         data: {
           status: 'AT_ORIGIN_HUB',
           currentHubId: dto.hubId,
+        },
+      });
+
+      // Hoàn tất phân công lấy hàng hoàn (RETURN_PICKUP) của tài xế khi hàng đã về Hub
+      await this.prisma.deliveryAssignment.updateMany({
+        where: {
+          shipmentId: ret.shipmentId,
+          type: 'RETURN_PICKUP',
+          status: 'IN_PROGRESS',
+        },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
         },
       });
     }

@@ -189,34 +189,132 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
     }
   }
 
+  // Helper: kiểm tra assignment có đúng là của tài xế đang đăng nhập hay không
+  const isMyAssignment = useCallback(
+    (a: any) => {
+      if (!a) return false
+      const prof = effectiveProfile
+      const cleanPhone = (prof?.phone || currentUser?.phoneNumber || '').replace(/[^0-9]/g, '')
+      const aDriverPhone = (a.driver?.phone || a.driverPhone || '').replace(/[^0-9]/g, '')
+
+      if (prof?.id && (a.driverId === prof.id || a.driver?.id === prof.id)) return true
+      if (cleanPhone && aDriverPhone && cleanPhone === aDriverPhone) return true
+      return false
+    },
+    [effectiveProfile, currentUser]
+  )
+
+  // Kiểm tra đơn hoàn trả có thuộc phạm vi của tài xế đang đăng nhập hay không (để hiển thị tab Cần Lấy)
+  const isReturnBelongToDriver = useCallback(
+    (r: any) => {
+      const shipment = r.shipment
+
+      // 1. Nếu đơn đã có phân công trực tiếp cho tài xế này
+      if (shipment?.assignments?.some((a: any) => isMyAssignment(a))) {
+        return true
+      }
+
+      // 2. Nếu đơn thuộc cùng Bưu cục (Hub) của tài xế
+      const driverHubId = effectiveProfile?.hubId || currentUser?.hubId
+      if (driverHubId && shipment?.currentHubId && shipment.currentHubId === driverHubId) {
+        return true
+      }
+
+      // 3. Khớp địa bàn phụ trách (Tỉnh/Thành phố hoặc Quận/Huyện)
+      const driverProvince = (effectiveProfile?.assignedProvince || effectiveProfile?.hub?.province || '').trim().toLowerCase()
+      const driverDistrict = (effectiveProfile?.assignedDistrict || effectiveProfile?.hub?.district || '').trim().toLowerCase()
+      const buyerAddress = (shipment?.deliveryAddress || '').toLowerCase()
+
+      if (driverProvince && buyerAddress) {
+        const cleanDriverProv = driverProvince.replace(/^(thành phố|tỉnh)\s+/i, '').trim()
+        if (cleanDriverProv && buyerAddress.includes(cleanDriverProv)) {
+          if (driverDistrict) {
+            const cleanDriverDist = driverDistrict.replace(/^(quận|huyện|thị xã|thành phố)\s+/i, '').trim()
+            if (cleanDriverDist && buyerAddress.includes(cleanDriverDist)) {
+              return true
+            }
+          }
+          // Nếu đơn chưa gán bưu cục cụ thể mà cùng tỉnh thành
+          if (!shipment?.currentHubId) {
+            return true
+          }
+        }
+      }
+
+      return false
+    },
+    [effectiveProfile, currentUser, isMyAssignment]
+  )
+
+  // Kiểm tra kiện hàng hoàn trả này có ĐANG ĐƯỢC GIỮ TRÊN XE của chính tài xế này hay không
+  const isHoldingReturnByMe = useCallback(
+    (r: any) => {
+      const shipment = r.shipment
+      const prof = effectiveProfile
+      const myId = prof?.id || ''
+      const cleanPhone = (prof?.phone || currentUser?.phoneNumber || '').replace(/[^0-9]/g, '')
+      const myName = (prof?.name || currentUser?.name || '').trim().toLowerCase()
+
+      // 1. Phân công trực tiếp RETURN_PICKUP hoặc PICKUP còn đang active của tài xế này
+      if (shipment?.assignments?.some((a: any) => isMyAssignment(a) && a.status !== 'COMPLETED')) {
+        return true
+      }
+
+      // 2. Kiểm tra trackingLogs: log RETURN_IN_TRANSIT gần nhất có gắn driverId hoặc tên/SĐT tài xế này không
+      if (Array.isArray(shipment?.trackingLogs)) {
+        const transitLog = shipment.trackingLogs.find((t: any) => t.status === 'RETURN_IN_TRANSIT')
+        if (transitLog) {
+          if (myId && transitLog.driverId === myId) return true
+          const logDesc = (transitLog.description || '').toLowerCase()
+          if (cleanPhone && logDesc.includes(cleanPhone)) return true
+          if (myName && logDesc.includes(myName)) return true
+        }
+      }
+
+      // 3. Kiểm tra evidences: ghi chú lấy hàng có tên/SĐT tài xế này không
+      if (Array.isArray(r.evidences)) {
+        const pickedEvidence = r.evidences.find((e: any) => {
+          const desc = (e.description || '').toLowerCase()
+          return (cleanPhone && desc.includes(cleanPhone)) || (myName && desc.includes(myName))
+        })
+        if (pickedEvidence) return true
+      }
+
+      return false
+    },
+    [effectiveProfile, currentUser, isMyAssignment]
+  )
+
   // Lấy danh sách các đơn Trả Hàng (Cần thu hồi & Đang giữ trên xe)
   const fetchReturnPickups = useCallback(async () => {
     try {
       const data = await returnService.getReturns()
       if (Array.isArray(data)) {
-        // 1. Đơn cần đến nhà Người Mua để thu hồi
+        // 1. Đơn cần đến nhà Người Mua để thu hồi (chỉ đơn thuộc phạm vi phụ trách của tài xế)
         setReturnPickups(
           data.filter(
             (r) =>
               r.status === 'RETURN_SHIPPING' &&
               r.resolution !== 'REFUND_ONLY' &&
-              (r.returnMethod === 'ZMX_PICKUP' || !r.returnMethod)
+              (r.returnMethod === 'ZMX_PICKUP' || !r.returnMethod) &&
+              isReturnBelongToDriver(r)
           )
         )
-        // 2. Đơn hoàn trả đã lấy từ khách, đang giữ trên xe chờ nhập kho Bưu Cục
+        // 2. Đơn hoàn trả đã lấy từ khách, đang giữ trên xe chờ nhập kho Bưu Cục (chỉ đơn tài xế này đang giữ)
         setHoldingReturnTasks(
           data.filter(
             (r) =>
               r.status === 'RETURN_IN_TRANSIT' &&
               r.resolution !== 'REFUND_ONLY' &&
-              (r.returnMethod === 'ZMX_PICKUP' || !r.returnMethod)
+              (r.returnMethod === 'ZMX_PICKUP' || !r.returnMethod) &&
+              isHoldingReturnByMe(r)
           )
         )
       }
     } catch (e) {
       console.warn('Cannot fetch return pickups for driver:', e)
     }
-  }, [])
+  }, [isReturnBelongToDriver, isHoldingReturnByMe])
 
   // Kiểm tra trạng thái điểm danh hôm nay từ backend
   const fetchAttendance = async () => {
@@ -283,9 +381,11 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
   const handleDriverConfirmReturnPickup = async (ret: ReturnData) => {
     if (!window.confirm(`Xác nhận bạn đã đến địa chỉ Người Mua và nhận bưu kiện hoàn trả #${ret.returnNumber}?`)) return
     try {
+      const driverName = effectiveProfile?.name || currentUser?.name || 'ZMX'
+      const driverPhone = effectiveProfile?.phone || currentUser?.phoneNumber || ''
       const res = await returnService.shipperConfirmPickup(ret.id, {
-        driverId: driverProfile?.id,
-        note: `Tài xế ${currentUser?.name || driverProfile?.name || 'ZMX'} đã thu hồi hàng hoàn tại nhà khách`,
+        driverId: effectiveProfile?.id,
+        note: `Tài xế ${driverName} (${driverPhone}) đã thu hồi hàng hoàn tại nhà khách`,
       })
       alert(res.message || 'Xác nhận thu hồi hàng hoàn thành công!')
       fetchReturnPickups()
@@ -360,12 +460,6 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
 
   // ── Delivery fail modal ──
   const [failModal, setFailModal] = useState<{ id: string; trackingNumber: string } | null>(null)
-
-  // Helper: kiểm tra assignment có đúng là của tài xế đang đăng nhập hay không
-  const isMyAssignment = (a: any) =>
-    (driverProfile?.id && (a.driverId === driverProfile.id || a.driver?.id === driverProfile.id)) ||
-    (driverProfile?.phone && a.driver?.phone === driverProfile.phone) ||
-    (currentUser?.phoneNumber && a.driver?.phone === currentUser.phoneNumber)
 
   const myShipments = shipments.filter((s) => s.assignments?.some(isMyAssignment))
 
