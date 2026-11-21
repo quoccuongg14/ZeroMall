@@ -22,6 +22,7 @@ export const SystemRevenueComparisonChart: React.FC<SystemRevenueComparisonChart
   const [viewMode, setViewMode] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY')
   const [metricMode, setMetricMode] = useState<'BOTH' | 'GMV' | 'COMMISSION'>('BOTH')
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [displayFormat, setDisplayFormat] = useState<'CHART' | 'TABLE'>('CHART')
 
   // 1. Phân tích danh sách năm thực tế từ CSDL
   const availableYears = useMemo(() => {
@@ -266,6 +267,30 @@ export const SystemRevenueComparisonChart: React.FC<SystemRevenueComparisonChart
               ))}
             </select>
           )}
+
+          {/* Chuyển Đổi Hiển Thị: Dạng Biểu Đồ vs Dạng Bảng Đối Soát */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shadow-2xs text-xs font-bold">
+            <button
+              onClick={() => setDisplayFormat('CHART')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
+                displayFormat === 'CHART'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📊</span> Biểu Đồ Cột
+            </button>
+            <button
+              onClick={() => setDisplayFormat('TABLE')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer select-none flex items-center gap-1.5 ${
+                displayFormat === 'TABLE'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-black'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📋</span> Bảng Đối Soát
+            </button>
+          </div>
         </div>
       </div>
 
@@ -315,7 +340,8 @@ export const SystemRevenueComparisonChart: React.FC<SystemRevenueComparisonChart
       </div>
 
       {/* 3. Giao Diện Biểu Đồ Cột Đôi (Interactive SVG Bar Chart) */}
-      <div className="p-6 relative select-none">
+      {displayFormat === 'CHART' && (
+        <div className="p-6 relative select-none">
         {/* Chú thích màu sắc (Legend) */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs font-bold text-slate-600">
           <div className="flex flex-wrap items-center gap-4">
@@ -464,64 +490,67 @@ export const SystemRevenueComparisonChart: React.FC<SystemRevenueComparisonChart
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. Bảng Đối Soát Chi Tiết Tăng Trưởng Đi Kèm (Data Breakdown Table) */}
-      <div className="border-t border-slate-100 bg-slate-50/40 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-            <span>📋</span> Bảng Đối Soát Chi Tiết & Tỷ Lệ Tăng Trưởng
-          </h4>
-          <span className="text-[11px] font-bold text-slate-400">
-            Dữ liệu kết xuất từ CSDL thời gian thực
-          </span>
-        </div>
+      {displayFormat === 'TABLE' && (
+        <div className="p-6 bg-slate-50/40 animate-in fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <span>📋</span> Bảng Đối Soát Chi Tiết & Tỷ Lệ Tăng Trưởng
+            </h4>
+            <span className="text-[11px] font-bold text-slate-400">
+              Dữ liệu kết xuất từ CSDL thời gian thực
+            </span>
+          </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-                <th className="py-3 px-4">Kỳ Báo Cáo</th>
-                <th className="py-3 px-4">Số Đơn Hàng</th>
-                <th className="py-3 px-4">Tổng GMV Toàn Sàn</th>
-                <th className="py-3 px-4">Doanh Thu Chiết Khấu Sàn</th>
-                <th className="py-3 px-4 text-right">Tăng Trưởng GMV</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {chartData.map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50/60 transition">
-                  <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    {row.label}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="font-bold text-slate-800">{row.orderCount}</span> đơn
-                  </td>
-                  <td className="py-3 px-4 font-black text-emerald-700">
-                    {formatVND(row.gmv)}
-                  </td>
-                  <td className="py-3 px-4 font-black text-indigo-700">
-                    {formatVND(row.commission)}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    {row.gmvGrowth === null || row.gmvGrowth === undefined ? (
-                      <span className="text-slate-400 font-bold">—</span>
-                    ) : row.gmvGrowth >= 0 ? (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        +{row.gmvGrowth.toFixed(1)}% ↗
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
-                        {row.gmvGrowth.toFixed(1)}% ↘
-                      </span>
-                    )}
-                  </td>
+          <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Kỳ Báo Cáo</th>
+                  <th className="py-3 px-4">Số Đơn Hàng</th>
+                  <th className="py-3 px-4">Tổng GMV Toàn Sàn</th>
+                  <th className="py-3 px-4">Doanh Thu Chiết Khấu Sàn</th>
+                  <th className="py-3 px-4 text-right">Tăng Trưởng GMV</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {chartData.map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50/60 transition">
+                    <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                      {row.label}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-bold text-slate-800">{row.orderCount}</span> đơn
+                    </td>
+                    <td className="py-3 px-4 font-black text-emerald-700">
+                      {formatVND(row.gmv)}
+                    </td>
+                    <td className="py-3 px-4 font-black text-indigo-700">
+                      {formatVND(row.commission)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {row.gmvGrowth === null || row.gmvGrowth === undefined ? (
+                        <span className="text-slate-400 font-bold">—</span>
+                      ) : row.gmvGrowth >= 0 ? (
+                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          +{row.gmvGrowth.toFixed(1)}% ↗
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                          {row.gmvGrowth.toFixed(1)}% ↘
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
