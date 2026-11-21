@@ -358,24 +358,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <span>🎧</span> Cổng CSKH & Tuân Thủ
             </a>
             <button
-              onClick={() => {
-                const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
-                const buyerPort = window.location.port ? `:${window.location.port}` : ''
-                const rawUser = localStorage.getItem('zm_user') || ''
-                const rawToken = localStorage.getItem('zm_token') || ''
-                const testShopId = '2ed31737-7ce2-4ed1-b32c-97f2c21d9988'
-                if (isSubdomain) {
-                  window.open(`${window.location.protocol}//zeromall.local${buyerPort}/shop/${testShopId}?sso_user=${encodeURIComponent(rawUser)}&sso_token=${encodeURIComponent(rawToken)}`, '_blank')
-                } else {
-                  window.open(`/shop/${testShopId}`, '_blank')
-                }
-              }}
-              className="text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-1.5 cursor-pointer px-3.5 py-1.5 rounded-lg shadow-3xs"
-              title="Mở trực tiếp gian hàng ngoài Chợ kèm Thanh Điều Hành ZERO CONTROL"
-            >
-              <span>⚡</span> Trải nghiệm Thanh ZERO CONTROL
-            </button>
-            <button
               onClick={onBackToHome}
               className="text-xs font-bold text-emerald-600 hover:text-emerald-500 transition flex items-center gap-1.5 cursor-pointer bg-emerald-50 border border-emerald-100 px-3.5 py-1.5 rounded-lg shadow-3xs"
             >

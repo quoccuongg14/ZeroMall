@@ -4,13 +4,12 @@ import { SystemRevenueComparisonChart } from './analytics/SystemRevenueCompariso
 
 interface SystemReportsTabProps {
   allOrders: any[]
-  users: any[]
+  users?: any[]
   commissionRate: number
 }
 
 export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
   allOrders,
-  users,
   commissionRate
 }) => {
   const now = new Date()
@@ -54,7 +53,7 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
 
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
-  const [activeStatDetail, setActiveStatDetail] = useState<'GMV' | 'COMMISSION' | 'ORDERS' | 'USERS' | 'REFUNDS'>('GMV')
+  const [activeStatDetail, setActiveStatDetail] = useState<'GMV' | 'COMMISSION'>('GMV')
   const [commTabFilter, setCommTabFilter] = useState<'EARNED' | 'PENDING' | 'IN_TRANSIT' | 'REFUNDED'>('EARNED')
 
   const getFilterLabel = () => {
@@ -115,7 +114,6 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
   }
 
   const filteredOrders = filterByRange(allOrders);
-  const filteredUsers = filterByRange(users);
 
   const getOrderCommRate = (o: any) => o.commissionRate ?? 5;
   const getOrderItemSubtotal = (o: any) => {
@@ -132,10 +130,7 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
 
   const validGmvOrders = filteredOrders.filter(isValidGmvOrder);
   const totalGMV = validGmvOrders.reduce((sum, o) => sum + getOrderItemSubtotal(o), 0);
-  const orderCount = validGmvOrders.length;
-  const userCount = filteredUsers.length;
-  const refundCount = filteredOrders.filter(o => o.status === 'REFUNDED' || o.status === 'RETURNED' || o.status === 'RETURN_PENDING').length;
-  const refundRate = filteredOrders.length > 0 ? ((refundCount / filteredOrders.length) * 100).toFixed(1) : '0.0';
+  const aov = validGmvOrders.length > 0 ? Math.round(totalGMV / validGmvOrders.length) : 0;
   const getOrderCommAmount = (o: any) => {
     const itemSubtotal = getOrderItemSubtotal(o);
     const shopDiscount = o.shopDiscountAmount || 0;
@@ -375,8 +370,8 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
         </div>
       </div>
 
-      {/* 5 CARD CHỈ SỐ CHÍNH */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* 4 CARD CHỈ SỐ TÀI CHÍNH & DOANH THU THUẦN TÚY */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
         {/* CARD 1: GMV */}
         <div 
@@ -387,15 +382,16 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
               : 'bg-white border-slate-200/60 hover:border-slate-350'
           }`}
         >
+          <div className="absolute right-3 top-3 w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-xs">🌱</div>
           <p className="text-[10px] text-slate-450 font-bold uppercase tracking-wider">Tổng GMV Toàn Sàn</p>
           <p className="text-2xl font-black text-emerald-600 mt-1.5">{totalGMV.toLocaleString('vi-VN')}đ</p>
-          <p className="text-[9px] text-slate-400 font-bold mt-1">Doanh số thực tế trong kỳ</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Doanh số phát sinh trong kỳ</p>
           {activeStatDetail === 'GMV' && (
             <span className="absolute bottom-1 right-2 text-xs text-emerald-600">✓</span>
           )}
         </div>
 
-        {/* CARD 2: COMMISSION - Doanh Thu Chiết Khấu Sàn (Ngang hàng với GMV) */}
+        {/* CARD 2: COMMISSION - Doanh Thu Chiết Khấu Sàn (Thực thu) */}
         <div
           onClick={() => setActiveStatDetail('COMMISSION')}
           className={`border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden ${
@@ -404,67 +400,35 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
               : 'bg-white border-slate-200/60 hover:border-violet-300'
           }`}
         >
-          <div className="absolute right-2 top-2 w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center text-[10px]">💰</div>
+          <div className="absolute right-3 top-3 w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-xs">💰</div>
           <p className="text-[10px] text-violet-600 font-black uppercase tracking-wider">Doanh Thu Chiết Khấu Sàn</p>
           <p className="text-2xl font-black text-violet-700 mt-1.5">{Math.round(totalCommission).toLocaleString('vi-VN')}đ</p>
-          <p className="text-[9px] text-slate-400 font-bold mt-1">Đã thu từ đơn COMPLETED</p>
-          {pendingCommissionCard > 0 && (
-            <p className="text-[9px] text-amber-500 font-bold mt-0.5">+{Math.round(pendingCommissionCard).toLocaleString('vi-VN')}đ đang tạm giữ</p>
-          )}
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Đã thu từ {completedOrdersForComm.length} đơn COMPLETED</p>
           {activeStatDetail === 'COMMISSION' && (
             <span className="absolute bottom-1 right-2 text-xs text-violet-600">✓</span>
           )}
         </div>
 
-        {/* CARD 3: ORDERS */}
+        {/* CARD 3: ESCROW - Chiết Khấu Đang Tạm Giữ 7 Ngày */}
         <div 
-          onClick={() => setActiveStatDetail('ORDERS')}
-          className={`border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden ${
-            activeStatDetail === 'ORDERS' 
-              ? 'bg-emerald-50/20 border-emerald-500 shadow-emerald-50/50 ring-2 ring-emerald-500/20' 
-              : 'bg-white border-slate-200/60 hover:border-slate-350'
-          }`}
+          onClick={() => setActiveStatDetail('COMMISSION')}
+          className="border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden bg-white border-slate-200/60 hover:border-amber-300"
         >
-          <p className="text-[10px] text-slate-450 font-bold uppercase tracking-wider">Tổng Số Đơn Hàng</p>
-          <p className="text-2xl font-black text-slate-800 mt-1.5">{orderCount}</p>
-          <p className="text-[9px] text-slate-400 font-bold mt-1">Đơn đặt hàng phát sinh</p>
-          {activeStatDetail === 'ORDERS' && (
-            <span className="absolute bottom-1 right-2 text-xs text-emerald-600">✓</span>
-          )}
+          <div className="absolute right-3 top-3 w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-xs">⏳</div>
+          <p className="text-[10px] text-amber-600 font-black uppercase tracking-wider">Chiết Khấu Đang Tạm Giữ</p>
+          <p className="text-2xl font-black text-amber-600 mt-1.5">{Math.round(pendingCommissionCard).toLocaleString('vi-VN')}đ</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Bảo chứng 7 ngày ({heldOrdersForComm.length} đơn DELIVERED)</p>
         </div>
 
-        {/* CARD 4: USERS */}
+        {/* CARD 4: AOV - Giá Trị Đơn Trung Bình */}
         <div 
-          onClick={() => setActiveStatDetail('USERS')}
-          className={`border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden ${
-            activeStatDetail === 'USERS' 
-              ? 'bg-emerald-50/20 border-emerald-500 shadow-emerald-50/50 ring-2 ring-emerald-500/20' 
-              : 'bg-white border-slate-200/60 hover:border-slate-350'
-          }`}
+          onClick={() => setActiveStatDetail('GMV')}
+          className="border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden bg-white border-slate-200/60 hover:border-sky-300"
         >
-          <p className="text-[10px] text-slate-450 font-bold uppercase tracking-wider">Tổng Thành Viên</p>
-          <p className="text-2xl font-black text-slate-800 mt-1.5">{userCount}</p>
-          <p className="text-[9px] text-slate-400 font-bold mt-1">Người dùng đăng ký mới</p>
-          {activeStatDetail === 'USERS' && (
-            <span className="absolute bottom-1 right-2 text-xs text-emerald-600">✓</span>
-          )}
-        </div>
-
-        {/* CARD 5: REFUNDS */}
-        <div 
-          onClick={() => setActiveStatDetail('REFUNDS')}
-          className={`border rounded-xl p-6 shadow-2xs cursor-pointer transition-all duration-200 hover:shadow-sm active:scale-98 relative overflow-hidden ${
-            activeStatDetail === 'REFUNDS' 
-              ? 'bg-rose-50/20 border-rose-500 shadow-rose-50/50 ring-2 ring-rose-500/20' 
-              : 'bg-white border-slate-200/60 hover:border-rose-350'
-          }`}
-        >
-          <p className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Tỷ Lệ Trả Hàng Hoàn Tiền</p>
-          <p className="text-2xl font-black text-rose-600 mt-1.5">{refundRate}%</p>
-          <p className="text-[9px] text-slate-400 font-bold mt-1">Tỷ lệ khiếu nại hoàn thành</p>
-          {activeStatDetail === 'REFUNDS' && (
-            <span className="absolute bottom-1 right-2 text-xs text-rose-600">✓</span>
-          )}
+          <div className="absolute right-3 top-3 w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-xs">🎯</div>
+          <p className="text-[10px] text-sky-600 font-black uppercase tracking-wider">Giá Trị Đơn Trung Bình (AOV)</p>
+          <p className="text-2xl font-black text-sky-700 mt-1.5">{aov.toLocaleString('vi-VN')}đ</p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Bình quân trên {validGmvOrders.length} đơn phát sinh</p>
         </div>
       </div>
 
@@ -616,334 +580,6 @@ export const SystemReportsTab: React.FC<SystemReportsTabProps> = ({
                 </table>
               </div>
             </div>
-          </div>
-        )}
-
-        {activeStatDetail === 'ORDERS' && (
-          <div className="space-y-6">
-            <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                <span>📦</span> Chi tiết số lượng đơn hàng và trạng thái đơn
-              </h4>
-              <span className="text-[10px] font-bold text-indigo-655 bg-indigo-50 px-2 py-0.5 rounded uppercase">
-                Kỳ lọc: {getFilterLabel()}
-              </span>
-            </div>
-
-            {(() => {
-              const statuses = ['PENDING_PAYMENT', 'PROCESSING', 'SHIPPING', 'COMPLETED', 'CANCELLED', 'REFUNDED'];
-              const statusLabels: Record<string, string> = {
-                PENDING_PAYMENT: 'Chờ thanh toán',
-                PROCESSING: 'Chờ xử lý',
-                SHIPPING: 'Đang giao hàng',
-                COMPLETED: 'Đã hoàn thành',
-                CANCELLED: 'Đã hủy đơn',
-                REFUNDED: 'Đã hoàn tiền'
-              };
-              const statusColors: Record<string, string> = {
-                PENDING_PAYMENT: 'bg-amber-555',
-                PROCESSING: 'bg-indigo-555',
-                SHIPPING: 'bg-blue-555',
-                COMPLETED: 'bg-emerald-555',
-                CANCELLED: 'bg-rose-555',
-                REFUNDED: 'bg-purple-555'
-              };
-
-              const summary = statuses.map(st => {
-                const list = filteredOrders.filter(o => o.status === st);
-                const count = list.length;
-                const amount = list.reduce((s, o) => s + (o.totalAmount || 0), 0);
-                const pct = orderCount > 0 ? (count / orderCount) * 100 : 0;
-                return { status: st, label: statusLabels[st] || st, count, amount, pct, color: statusColors[st] || 'bg-slate-500' };
-              });
-
-              return (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-                    {summary.map(item => (
-                      <div key={item.status} className="bg-slate-50/55 border border-slate-100 rounded-xl p-4 text-center space-y-1.5">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${item.color}`} />
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</span>
-                        </div>
-                        <p className="text-xl font-black text-slate-755">{item.count}</p>
-                        <p className="text-[9px] text-slate-500 font-extrabold">{item.pct.toFixed(1)}%</p>
-                        <p className="text-[9px] text-emerald-650 font-black truncate">{item.amount.toLocaleString('vi-VN')}đ</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-3">
-                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Mười đơn hàng đặt mới nhất trong kỳ</h5>
-                    <div className="overflow-x-auto max-h-[300px]">
-                      <table className="w-full text-xs text-left text-slate-700">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase text-[9px] tracking-wider">
-                            <th className="pb-2">Mã đơn hàng</th>
-                            <th className="pb-2">Ngày giờ</th>
-                            <th className="pb-2">Khách hàng</th>
-                            <th className="pb-2">Thanh toán</th>
-                            <th className="pb-2">Trạng thái</th>
-                            <th className="pb-2 text-right">Tổng tiền</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {[...filteredOrders]
-                            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                            .slice(0, 10)
-                            .map(order => (
-                              <tr key={order.id} className="hover:bg-slate-50/10">
-                                <td className="py-2 font-mono text-[10px] text-slate-800 font-bold">{order.id}</td>
-                                <td className="py-2 text-slate-500">{new Date(order.createdAt).toLocaleString('vi-VN')}</td>
-                                <td className="py-2 font-semibold text-slate-655">{order.buyerName}</td>
-                                <td className="py-2 font-mono text-[9px] text-slate-500 uppercase">{order.paymentMethod}</td>
-                                <td className="py-2">
-                                  <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${
-                                    order.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-650' : 
-                                    order.status === 'SHIPPING' ? 'bg-blue-50 text-blue-650' : 
-                                    order.status === 'CANCELLED' ? 'bg-rose-50 text-rose-650' : 'bg-amber-50 text-amber-655'
-                                  }`}>
-                                    {order.status}
-                                  </span>
-                                </td>
-                                <td className="py-2 text-right font-black text-slate-750">{Number(order.totalAmount).toLocaleString('vi-VN')}đ</td>
-                              </tr>
-                            ))}
-                          {filteredOrders.length === 0 && (
-                            <tr>
-                              <td colSpan={6} className="text-center py-6 text-slate-400 font-bold">Không tìm thấy đơn hàng nào trong thời gian này</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {activeStatDetail === 'USERS' && (
-          <div className="space-y-6">
-            <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                <span>👥</span> Chi tiết thành viên đăng ký hệ thống
-              </h4>
-              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">
-                Kỳ lọc: {getFilterLabel()}
-              </span>
-            </div>
-
-            {(() => {
-              const roles = ['BUYER', 'SHOP_OWNER', 'PLATFORM_SUPPORT', 'ADMIN'];
-              const roleLabels: Record<string, string> = {
-                BUYER: 'Người mua (Buyer)',
-                SHOP_OWNER: 'Chủ shop (Seller)',
-                PLATFORM_SUPPORT: 'Nhân viên CSKH',
-                ADMIN: 'Quản trị viên'
-              };
-
-              const summary = roles.map(rl => {
-                const count = filteredUsers.filter(u => u.role === rl).length;
-                const pct = userCount > 0 ? (count / userCount) * 100 : 0;
-                return { role: rl, label: roleLabels[rl] || rl, count, pct };
-              });
-
-              const activeCount = filteredUsers.filter(u => u.status === 'ACTIVE').length;
-              const blockedCount = filteredUsers.filter(u => u.status === 'BLOCKED').length;
-
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Phân bổ vai trò thành viên</h5>
-                      <div className="space-y-3">
-                        {summary.map(item => (
-                          <div key={item.role} className="space-y-1 text-xs">
-                            <div className="flex justify-between font-bold text-slate-700">
-                              <span>{item.label}</span>
-                              <span>{item.count} thành viên ({item.pct.toFixed(1)}%)</span>
-                            </div>
-                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                                style={{ width: `${item.pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 border-t border-slate-100 pt-4">
-                      <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trạng thái tài khoản hoạt động</h5>
-                      <div className="flex gap-4 text-xs font-bold">
-                        <div className="bg-emerald-50 text-emerald-650 px-4 py-2.5 rounded-xl border border-emerald-100 flex-1 text-center">
-                          <p className="text-[9px] uppercase font-black text-emerald-500">Đang hoạt động</p>
-                          <p className="text-lg font-black mt-1">{activeCount}</p>
-                        </div>
-                        <div className="bg-rose-50 text-rose-650 px-4 py-2.5 rounded-xl border border-rose-100 flex-1 text-center">
-                          <p className="text-[9px] uppercase font-black text-rose-500">Đang bị khóa</p>
-                          <p className="text-lg font-black mt-1">{blockedCount}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách thành viên đăng ký mới</h5>
-                    <div className="overflow-y-auto max-h-[300px]">
-                      <table className="w-full text-xs text-left text-slate-700">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase text-[9px] tracking-wider">
-                            <th className="pb-2">Tên</th>
-                            <th className="pb-2">Email</th>
-                            <th className="pb-2">Vai trò</th>
-                            <th className="pb-2 text-right">Ngày đăng ký</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {[...filteredUsers]
-                            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                            .map(user => (
-                              <tr key={user.id} className="hover:bg-slate-50/10">
-                                <td className="py-2 font-bold text-slate-800 truncate max-w-[100px]">{user.name}</td>
-                                <td className="py-2 text-slate-600 truncate max-w-[120px]">{user.email}</td>
-                                <td className="py-2">
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                    user.role === 'ADMIN' ? 'bg-red-50 text-red-655' : 
-                                    user.role === 'SHOP_OWNER' ? 'bg-blue-50 text-blue-655' : 'bg-slate-50 text-slate-655'
-                                  }`}>
-                                    {user.role}
-                                  </span>
-                                </td>
-                                <td className="py-2 text-right text-slate-500 font-semibold">{new Date(user.createdAt).toLocaleDateString('vi-VN')}</td>
-                              </tr>
-                            ))}
-                          {filteredUsers.length === 0 && (
-                            <tr>
-                              <td colSpan={4} className="text-center py-6 text-slate-400 font-bold">Không tìm thấy thành viên đăng ký nào trong thời gian này</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {activeStatDetail === 'REFUNDS' && (
-          <div className="space-y-6">
-            <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-              <h4 className="text-xs font-black text-rose-600 uppercase tracking-wide flex items-center gap-2">
-                <span>⚖️</span> Chi tiết khiếu nại Trả hàng / Hoàn tiền
-              </h4>
-              <span className="text-[10px] font-bold text-rose-650 bg-rose-50 px-2 py-0.5 rounded uppercase">
-                Kỳ lọc: {getFilterLabel()}
-              </span>
-            </div>
-
-            {(() => {
-              const refundOrders = filteredOrders.filter(o => 
-                o.status === 'REFUNDED' || o.status === 'RETURNED' || o.status === 'RETURN_PENDING' || o.status === 'RETURN_DISPUTED'
-              );
-
-              const pendingCount = refundOrders.filter(o => o.status === 'RETURN_PENDING').length;
-              const disputedCount = refundOrders.filter(o => o.status === 'RETURN_DISPUTED').length;
-              const completedRefundCount = refundOrders.filter(o => o.status === 'REFUNDED' || o.status === 'RETURNED').length;
-
-              const reasonCounts: Record<string, number> = {};
-              refundOrders.forEach(o => {
-                if (o.returnReason) {
-                  reasonCounts[o.returnReason] = (reasonCounts[o.returnReason] || 0) + 1;
-                }
-              });
-              const reasonList = Object.entries(reasonCounts)
-                .map(([reason, count]) => ({ reason, count }))
-                .sort((a, b) => b.count - a.count);
-
-              return (
-                <div className="space-y-6">
-                  <div className="flex gap-4 text-xs font-bold">
-                    <div className="bg-amber-50 text-amber-655 px-4 py-3.5 rounded-xl border border-amber-100 flex-1 text-center">
-                      <p className="text-[9px] uppercase font-black text-amber-500">Chờ Duyệt Hoàn Tiền</p>
-                      <p className="text-xl font-black mt-1">{pendingCount}</p>
-                    </div>
-                    <div className="bg-indigo-50 text-indigo-650 px-4 py-3.5 rounded-xl border border-indigo-100 flex-1 text-center">
-                      <p className="text-[9px] uppercase font-black text-indigo-500">Đang Tranh Chấp</p>
-                      <p className="text-xl font-black mt-1">{disputedCount}</p>
-                    </div>
-                    <div className="bg-emerald-50 text-emerald-650 px-4 py-3.5 rounded-xl border border-emerald-100 flex-1 text-center">
-                      <p className="text-[9px] uppercase font-black text-emerald-500">Đã Hoàn Tiền Thành Công</p>
-                      <p className="text-xl font-black mt-1">{completedRefundCount}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nguyên nhân trả hàng phổ biến</h5>
-                      <div className="space-y-3">
-                        {reasonList.map(item => {
-                          const pct = refundOrders.length > 0 ? (item.count / refundOrders.length) * 100 : 0;
-                          return (
-                            <div key={item.reason} className="space-y-1 text-xs">
-                              <div className="flex justify-between font-bold text-slate-700">
-                                <span>{item.reason}</span>
-                                <span>{item.count} đơn ({pct.toFixed(1)}%)</span>
-                              </div>
-                              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-rose-500 rounded-full" 
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {reasonList.length === 0 && (
-                          <p className="text-xs text-slate-400 font-bold py-4 text-center">Chưa có thông tin lý do trả hàng</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách chi tiết đơn hàng trả hàng/hoàn tiền</h5>
-                      <div className="overflow-y-auto max-h-[300px]">
-                        <table className="w-full text-xs text-left text-slate-700">
-                          <thead>
-                            <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase text-[9px] tracking-wider">
-                              <th className="pb-2">Mã đơn</th>
-                              <th className="pb-2">Khách hàng</th>
-                              <th className="pb-2">Lý do</th>
-                              <th className="pb-2 text-right">Số tiền</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {refundOrders.map(order => (
-                              <tr key={order.id} className="hover:bg-slate-50/10">
-                                <td className="py-2 font-mono text-[10px] text-slate-800 font-bold">{order.id}</td>
-                                <td className="py-2 text-slate-600 truncate max-w-[120px]">{order.buyerEmail}</td>
-                                <td className="py-2 font-semibold text-slate-655 truncate max-w-[120px]" title={order.returnReason}>{order.returnReason}</td>
-                                <td className="py-2 text-right font-black text-rose-600">{Number(order.totalAmount).toLocaleString('vi-VN')}đ</td>
-                              </tr>
-                            ))}
-                            {refundOrders.length === 0 && (
-                              <tr>
-                                <td colSpan={4} className="text-center py-6 text-slate-400 font-bold">Không tìm thấy yêu cầu trả hàng nào trong thời gian này</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         )}
 
