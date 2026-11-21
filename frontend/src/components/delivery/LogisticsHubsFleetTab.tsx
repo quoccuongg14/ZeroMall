@@ -1180,38 +1180,35 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
 
                         {/* 6. Trạng thái ca trực & Thay đổi nhanh */}
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex flex-col items-center gap-1.5">
-                            {info.operationalStatus === 'BUSY' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
-                                🟢 ĐANG ĐI GIAO
+                          {info.operationalStatus === 'BUSY' ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-3xs animate-pulse">
+                                🟢 ĐANG ĐI GIAO ({info.activeShipments.length})
                               </span>
-                            ) : info.operationalStatus === 'AVAILABLE' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                🟡 SẴN SÀNG
-                              </span>
-                            ) : info.operationalStatus === 'OFFLINE' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                ⚪ NGOẠI TUYẾN
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
-                                🔴 TẠM KHÓA
-                              </span>
-                            )}
-
-                            {/* Dropdown chỉnh trạng thái live từ Admin */}
-                            <select
-                              value={driver.status}
-                              disabled={updatingDriverId === driver.id}
-                              onChange={(e) => handleUpdateDriverStatus(driver, e.target.value)}
-                              className="text-[10px] font-bold px-2 py-0.5 bg-white border border-slate-200 rounded-lg shadow-3xs cursor-pointer focus:outline-none focus:border-emerald-600"
-                              title="Thay đổi trạng thái ca trực của tài xế"
-                            >
-                              <option value="AVAILABLE">🟡 Sẵn sàng nhận đơn</option>
-                              <option value="OFFLINE">⚪ Ngoại tuyến (Nghỉ ca)</option>
-                              <option value="SUSPENDED">🔴 Tạm khóa / Đình chỉ</option>
-                            </select>
-                          </div>
+                              <span className="text-[10px] text-slate-400 font-medium">Đang chạy tuyến giao</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
+                              {/* Dropdown chỉnh trạng thái live từ Admin */}
+                              <select
+                                value={driver.status}
+                                disabled={updatingDriverId === driver.id}
+                                onChange={(e) => handleUpdateDriverStatus(driver, e.target.value)}
+                                className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border shadow-3xs cursor-pointer focus:outline-none transition ${
+                                  driver.status === 'AVAILABLE'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                    : driver.status === 'OFFLINE'
+                                    ? 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
+                                    : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                                }`}
+                                title="Thay đổi trạng thái ca trực của tài xế"
+                              >
+                                <option value="AVAILABLE">🟡 Sẵn sàng nhận đơn</option>
+                                <option value="OFFLINE">⚪ Ngoại tuyến (Nghỉ ca)</option>
+                                <option value="SUSPENDED">🔴 Tạm khóa / Đình chỉ</option>
+                              </select>
+                            </div>
+                          )}
                         </td>
 
                         {/* 7. Thao tác */}
