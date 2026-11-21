@@ -18,6 +18,7 @@ export const useTryOnLogic = ({
   product,
   cart,
   onAddToCart,
+  initialBundle,
 }: VirtualTryOnModalProps) => {
   // 1. Ảnh người dùng & Thông số thể hình
   const [userPhoto, setUserPhoto] = useState<string>(() => {
@@ -97,6 +98,19 @@ export const useTryOnLogic = ({
   // 3. Món đồ được chọn để ướm thử & Nguồn cấp tủ đồ
   const [selectedOutfit, setSelectedOutfit] = useState<OutfitSlots>(() => {
     const init: OutfitSlots = { top: null, bottom: null, shoes: null, accessory: null }
+    if (initialBundle && Array.isArray(initialBundle.items) && initialBundle.items.length > 0) {
+      initialBundle.items.forEach((it) => {
+        const slot = it.slot || detectItemSlot(it.product)
+        if (slot && slot in init && it.product) {
+          init[slot] = it.product
+        }
+      })
+      if (product) {
+        const pSlot = detectItemSlot(product) || 'top'
+        if (!init[pSlot]) init[pSlot] = product
+      }
+      return init
+    }
     if (product) {
       const slot = detectItemSlot(product) || 'top'
       init[slot] = product
@@ -132,7 +146,7 @@ export const useTryOnLogic = ({
   // 5. Danh sách 100 Set Phối Đồ AI Đẹp Nhất
   const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
   const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
-  const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(null)
+  const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(() => initialBundle?.id || null)
   const [rightColTab, setRightColTab] = useState<'outfits100' | 'wardrobe' | 'scanner'>('wardrobe')
   const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
   const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
@@ -229,16 +243,40 @@ export const useTryOnLogic = ({
     }, 300)
   }
 
-  // Khi mở modal hoặc khi product thay đổi
+  // Khi mở modal hoặc khi product/initialBundle thay đổi
   useEffect(() => {
-    if (isOpen && product) {
-      const slot = detectItemSlot(product) || 'top'
-      setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
-      setActiveOutfitSlot(slot)
-      setSelectedPant(product)
-      setSourceTab('catalog')
+    if (isOpen) {
+      if (initialBundle && Array.isArray(initialBundle.items) && initialBundle.items.length > 0) {
+        const bundleOutfit: OutfitSlots = { top: null, bottom: null, shoes: null, accessory: null }
+        initialBundle.items.forEach((it) => {
+          const slot = it.slot || detectItemSlot(it.product)
+          if (slot && slot in bundleOutfit && it.product) {
+            bundleOutfit[slot] = it.product
+          }
+        })
+        if (product) {
+          const pSlot = detectItemSlot(product) || 'top'
+          if (!bundleOutfit[pSlot]) bundleOutfit[pSlot] = product
+        }
+        setSelectedOutfit(bundleOutfit)
+        setSelectedOutfitBundleId(initialBundle.id)
+        const primary = bundleOutfit.top || bundleOutfit.bottom || bundleOutfit.shoes || bundleOutfit.accessory || product
+        if (primary) {
+          setSelectedPant(primary)
+        }
+        if (product) {
+          setActiveOutfitSlot(detectItemSlot(product) || 'top')
+        }
+        setSourceTab('catalog')
+      } else if (product) {
+        const slot = detectItemSlot(product) || 'top'
+        setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
+        setActiveOutfitSlot(slot)
+        setSelectedPant(product)
+        setSourceTab('catalog')
+      }
     }
-  }, [isOpen, product])
+  }, [isOpen, product, initialBundle])
 
   // Tải danh sách trang phục thời trang từ CSDL thực tế
   useEffect(() => {
@@ -288,11 +326,13 @@ export const useTryOnLogic = ({
           const filtered = effectivePants.filter(p => p.id !== product.id)
           effectivePants = [product, ...filtered]
           setAvailablePants(effectivePants)
-          const slot = detectItemSlot(product) || 'top'
-          setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
-          setActiveOutfitSlot(slot)
-          setSelectedPant(product)
-          setSourceTab('catalog')
+          if (!initialBundle) {
+            const slot = detectItemSlot(product) || 'top'
+            setSelectedOutfit(prev => ({ ...prev, [slot]: product }))
+            setActiveOutfitSlot(slot)
+            setSelectedPant(product)
+            setSourceTab('catalog')
+          }
         } else {
           setAvailablePants(effectivePants)
           if (cartItems.length > 0) {
@@ -725,31 +765,39 @@ export const useTryOnLogic = ({
     })
 
     setSelectedOutfit(newOutfit)
+    setSelectedOutfitBundleId(bundle.id)
     const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
 
-    triggerToast(`✓ Đã chọn Set [${bundle.title}]. Hãy bấm "✨ THỬ SET NÀY" để xem lên người bạn!`)
+    triggerToast(`✓ Đã nạp 4 món của [${bundle.title}] vào Bảng Phối Đồ!`)
   }
 
   const handleExecuteTryOnBundle = (bundle: ScoredOutfitBundle) => {
     setIsOutfitModalOpen(false)
-    if (!userPhoto) {
-      triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
-      fileInputRef.current?.click()
-      return
-    }
 
     const newOutfit: OutfitSlots = { top: null, bottom: null, shoes: null, accessory: null }
     bundle.items.forEach((it) => {
       const slot = it.slot || detectItemSlot(it.product)
-      if (slot && slot in newOutfit) {
+      if (slot && slot in newOutfit && it.product) {
         newOutfit[slot] = it.product
       }
     })
 
     setSelectedOutfit(newOutfit)
+    setSelectedOutfitBundleId(bundle.id)
+    const primary = newOutfit.bottom || newOutfit.top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    if (primary) {
+      setSelectedPant(primary)
+    }
+
+    if (!userPhoto) {
+      triggerToast('✓ Đã nạp 4 món vào Bảng Phối Đồ! Hãy tải ảnh của bạn để AI ướm thử lên người.')
+      fileInputRef.current?.click()
+      return
+    }
+
     setActiveTab('photo')
     handleRunTryOn(undefined, undefined, undefined, undefined, undefined, newOutfit)
   }

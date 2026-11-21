@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import type { Product, VariationGroup, VariationRow } from '../../components/buyer/FlashSale'
 import { ProductGallery } from '../../components/buyer/product-detail/ProductGallery'
 import { ProductPurchasePanel } from '../../components/buyer/product-detail/ProductPurchasePanel'
-import { ProductOutfitRecommendations } from '../../components/buyer/product-detail/ProductOutfitRecommendations'
+import { ProductOutfitRecommendations, type ScoredOutfitBundle } from '../../components/buyer/product-detail/ProductOutfitRecommendations'
 import { VirtualTryOnModal } from '../../components/buyer/ai/VirtualTryOnModal'
 import { ShopInfoCard } from '../../components/buyer/product-detail/ShopInfoCard'
 import { ProductDescriptionSection } from '../../components/buyer/product-detail/ProductDescriptionSection'
@@ -114,6 +114,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const id = slugWithId?.split('-i.').pop()
   const [product, setProduct] = useState<Product | null>(null)
   const [isTryOnModalOpen, setIsTryOnModalOpen] = useState(false)
+  const [selectedBundleForTryOn, setSelectedBundleForTryOn] = useState<ScoredOutfitBundle | null>(null)
 
   // TanStack Query Cache cho chi tiết sản phẩm (cache 5 phút, không refetch khi back/forward)
   const { data: rawProductData, isLoading: loadingProduct } = useProductDetailQuery(id)
@@ -952,7 +953,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         <ProductOutfitRecommendations
           product={product}
           onAddToCart={onAddToCart}
-          onOpenTryOnModal={() => setIsTryOnModalOpen(true)}
+          onOpenTryOnModal={(bundle) => {
+            setSelectedBundleForTryOn(bundle || null)
+            setIsTryOnModalOpen(true)
+          }}
         />
       )}
 
@@ -1024,8 +1028,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       {/* Online AI Try-On Modal */}
       <VirtualTryOnModal
         isOpen={isTryOnModalOpen}
-        onClose={() => setIsTryOnModalOpen(false)}
+        onClose={() => {
+          setIsTryOnModalOpen(false)
+          setSelectedBundleForTryOn(null)
+        }}
         product={product}
+        initialBundle={selectedBundleForTryOn}
         cart={cart}
         onAddToCart={onAddToCart}
       />
