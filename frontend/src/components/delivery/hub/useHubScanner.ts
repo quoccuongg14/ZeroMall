@@ -187,14 +187,23 @@ export function useHubScanner(
           }
         }
       } else if (stationTab === 'INBOUND_RECEIVING') {
+        const isSoc = currentHub?.type === 'SORTING_CENTER'
+        const nextStatus = isSoc ? 'SORTING' : 'AT_DESTINATION_HUB'
         await onUpdateStatus(
           targetShipment.id,
-          'AT_DESTINATION_HUB',
+          nextStatus,
           undefined,
           currentHub?.id,
-          `Xe tải trung chuyển đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
+          isSoc
+            ? `Nhân viên SOC đã quét nhận bưu kiện vào sàn phân loại ${currentHub?.name}, sẵn sàng đóng xe tuyến.`
+            : `Xe tải trung chuyển đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
         )
-        setScanMessage({ type: 'success', text: `🏢 Đã kiểm tra Seal & nhập bưu cục phát: ${targetShipment.trackingNumber}` })
+        setScanMessage({
+          type: 'success',
+          text: isSoc
+            ? `⚡ Đã nhập sàn phân loại SOC: ${targetShipment.trackingNumber}`
+            : `🏢 Đã kiểm tra Seal & nhập bưu cục phát: ${targetShipment.trackingNumber}`,
+        })
       } else if (stationTab === 'DISPATCH_LASTMILE') {
         onOpenLastMileSingle(targetShipment)
       }

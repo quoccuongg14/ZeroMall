@@ -242,11 +242,22 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   const sortingList = useMemo(
     () => [
       ...shipments.filter(
-        (s) => ['AT_ORIGIN_HUB', 'SORTING'].includes(s.status) && s.currentHubId === currentHub?.id
+        (s) =>
+          ['AT_ORIGIN_HUB', 'SORTING'].includes(s.status) &&
+          s.currentHubId === currentHub?.id
       ),
+      // Tại SOC: Nếu có đơn đang lưu tại SOC cần đóng xe chuyển tiếp liên tỉnh
+      ...(isSoc
+        ? shipments.filter(
+            (s) =>
+              s.status === 'AT_DESTINATION_HUB' &&
+              s.currentHubId === currentHub?.id &&
+              !isDestinedForCurrentHub(s, currentHub)
+          )
+        : []),
       ...returnAtHubAsShipments,
     ],
-    [shipments, returnAtHubAsShipments, currentHub]
+    [shipments, returnAtHubAsShipments, currentHub, isSoc]
   )
 
   // Helper map shipment kèm thông tin hoàn hàng (nếu có)

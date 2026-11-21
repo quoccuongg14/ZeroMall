@@ -558,12 +558,15 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                               if (foundTrip) {
                                 onOpenReconciliation(foundTrip)
                               } else {
+                                const nextStatus = isSoc ? 'SORTING' : 'AT_DESTINATION_HUB'
                                 onUpdateStatus(
                                   s.id,
-                                  'AT_DESTINATION_HUB',
+                                  nextStatus,
                                   undefined,
                                   currentHub?.id,
-                                  `Xe tải [${truck}] đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
+                                  isSoc
+                                    ? `Nhân viên kho [${currentUser.name}] đã tiếp nhận kiện hàng vào sàn phân loại ${currentHub?.name}, sẵn sàng quét DWS và đóng xe.`
+                                    : `Xe tải [${truck}] đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
                                 )
                               }
                             }}
@@ -574,15 +577,18 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                             <span>Đối Soát Chuyến</span>
                           </button>
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const nextStatus = isSoc ? 'SORTING' : 'AT_DESTINATION_HUB'
                               onUpdateStatus(
                                 s.id,
-                                'AT_DESTINATION_HUB',
+                                nextStatus,
                                 undefined,
                                 currentHub?.id,
-                                `Xe tải trung chuyển đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
+                                isSoc
+                                  ? `Nhân viên kho [${currentUser.name}] đã tiếp nhận kiện hàng vào sàn phân loại ${currentHub?.name}, sẵn sàng quét DWS và đóng xe.`
+                                  : `Xe tải trung chuyển đã đến và bàn giao bưu kiện vào ${currentHub?.name}`
                               )
-                            }
+                            }}
                             disabled={actionLoading}
                             className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[11px] transition cursor-pointer border border-slate-200"
                             title="Nhập nhanh kiện này"
