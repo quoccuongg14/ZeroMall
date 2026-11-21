@@ -10,6 +10,55 @@ interface AdminLinehaulFleetViewProps {
 
 type FleetFilter = 'ALL' | 'INTERNAL' | '3PL' | 'RUNNING'
 
+// Helper làm gọn tên bưu cục/SOC để hiển thị trực quan, không bị cắt dấu ...
+export const cleanHubName = (name: string): string => {
+  return (name || '')
+    .replace(/^Trung Tâm Phân Loại\s+/i, '')
+    .replace(/^Bưu Cục Giao Hàng\s+/i, '')
+    .replace(/^Kho Trung Chuyển\s+/i, '')
+    .replace(/^Bưu Cục\s+/i, '')
+    .replace(/^Kho Tổng\s+/i, '')
+    .trim()
+}
+
+// Helper phân định tuyến Linehaul liên tỉnh chuẩn mạng lưới TMĐT (không trùng xuất phát & đích đến)
+export const resolveLinehaulRoute = (originHub: { id?: string; code?: string; province?: string }, hubs: Hub[]): Hub => {
+  const code = (originHub?.code || '').toUpperCase()
+  const prov = (originHub?.province || '').toLowerCase()
+
+  // 1. Xuất phát từ miền Nam (HCM01 Bắc Củ Chi SOC) -> Tuyến trục đi Mê Linh SOC (HN01)
+  if (code === 'HCM01' || prov.includes('hồ chí minh')) {
+    return hubs.find((h) => h.code === 'HN01') || hubs.find((h) => h.code === 'DNG01') || hubs[0]
+  }
+
+  // 2. Xuất phát từ miền Bắc (HN01 Mê Linh SOC) -> Tuyến trục đi Bắc Củ Chi SOC (HCM01)
+  if (code === 'HN01' || prov.includes('hà nội')) {
+    return hubs.find((h) => h.code === 'HCM01') || hubs.find((h) => h.code === 'DNG01') || hubs[0]
+  }
+
+  // 3. Xuất phát từ miền Trung (DNG01 Hòa Cầm SOC) -> Tuyến liên miền về Mê Linh SOC (HN01)
+  if (code === 'DNG01' || prov.includes('đà nẵng')) {
+    return hubs.find((h) => h.code === 'HN01') || hubs.find((h) => h.code === 'HCM01') || hubs[0]
+  }
+
+  // 4. Xuất phát từ Tây Nam Bộ (CT01 Trà Nóc SOC) -> Tuyến về Kho Tổng Nam Bộ (HCM01 Bắc Củ Chi SOC)
+  if (code === 'CT01' || prov.includes('cần thơ')) {
+    return hubs.find((h) => h.code === 'HCM01') || hubs.find((h) => h.id !== originHub.id) || hubs[0]
+  }
+
+  // 5. Xuất phát từ Hub vệ tinh (Biên Hòa Hub DN01, Hòa Bình...) -> Về Mega SOC Củ Chi (HCM01) hoặc Mê Linh (HN01)
+  if (prov.includes('đồng nai') || prov.includes('bình dương')) {
+    return hubs.find((h) => h.code === 'HCM01') || hubs[0]
+  }
+  if (prov.includes('hòa bình') || prov.includes('hoà bình') || prov.includes('bắc ninh')) {
+    return hubs.find((h) => h.code === 'HN01') || hubs[0]
+  }
+
+  // Fallback an toàn: Tìm 1 Mega SOC khác với originHub
+  const otherSoc = hubs.find((h) => h.type === 'SORTING_CENTER' && h.id !== originHub.id)
+  return otherSoc || hubs.find((h) => h.id !== originHub.id) || hubs[0]
+}
+
 export const AdminLinehaulFleetView: React.FC<AdminLinehaulFleetViewProps> = ({
   hubs,
   drivers = [],
@@ -53,12 +102,17 @@ export const AdminLinehaulFleetView: React.FC<AdminLinehaulFleetViewProps> = ({
         : 'Đội Xe Nội Bộ ZeroExpress (SPX Fleet)'
 
       // 2. Hub xuất phát của tài xế
-      const originHub =
+      const originHub: Hub =
         hubs.find((h) => h.id === driver.hubId) ||
-        hubs.find((h) => h.code === 'HCM01') || {
+        hubs.find((h) => h.code === 'HCM01') ||
+        hubs[0] || {
           id: 'hub-hcm-01',
           name: 'Trung Tâm Phân Loại Bắc Củ Chi SOC',
           code: 'HCM01',
+          type: 'SORTING_CENTER',
+          address: 'Huyện Củ Chi',
+          province: 'Hồ Chí Minh',
+          district: 'Huyện Củ Chi',
         }
 
       // 3. Tìm các bưu kiện thực tế đang nằm trên xe tải này
@@ -86,33 +140,29 @@ export const AdminLinehaulFleetView: React.FC<AdminLinehaulFleetViewProps> = ({
           .toFixed(1)
       )
 
-      // 4. Nhận diện Hub đích thực tế từ các đơn hàng trên xe
-      let destinationHub = hubs.find((h) => h.code === 'HN01') || {
-        id: 'hub-hn-01',
-        name: 'Trung Tâm Phân Loại Mê Linh SOC',
-        code: 'HN01',
-      }
+      // 4. Nhận diện Hub đích thực tế từ các đơn hàng trên xe hoặc theo lộ trình mạng lưới
+      let destinationHub: Hub
 
       if (isRunning && assignedShipments[0]) {
         const destAddr = (assignedShipments[0].deliveryAddress || '').toLowerCase()
-        if (destAddr.includes('hà nội') || destAddr.includes('bắc') || destAddr.includes('mê linh')) {
-          destinationHub = hubs.find((h) => h.code === 'HN01') || destinationHub
-        } else if (destAddr.includes('đồng nai') || destAddr.includes('biên hòa')) {
-          destinationHub = hubs.find((h) => h.code === 'DN01') || destinationHub
-        } else if (destAddr.includes('đà nẵng') || destAddr.includes('hòa cầm')) {
-          destinationHub = hubs.find((h) => h.code === 'DNG01') || destinationHub
-        } else if (destAddr.includes('cần thơ') || destAddr.includes('ninh kiều')) {
-          destinationHub = hubs.find((h) => h.code === 'CT01') || destinationHub
+        if ((destAddr.includes('hà nội') || destAddr.includes('mê linh')) && originHub.code !== 'HN01') {
+          destinationHub = hubs.find((h) => h.code === 'HN01') || resolveLinehaulRoute(originHub, hubs)
+        } else if ((destAddr.includes('đồng nai') || destAddr.includes('biên hòa')) && originHub.code !== 'DN01') {
+          destinationHub = hubs.find((h) => h.code === 'DN01') || resolveLinehaulRoute(originHub, hubs)
+        } else if ((destAddr.includes('đà nẵng') || destAddr.includes('hòa cầm')) && originHub.code !== 'DNG01') {
+          destinationHub = hubs.find((h) => h.code === 'DNG01') || resolveLinehaulRoute(originHub, hubs)
+        } else if ((destAddr.includes('cần thơ') || destAddr.includes('ninh kiều')) && originHub.code !== 'CT01') {
+          destinationHub = hubs.find((h) => h.code === 'CT01') || resolveLinehaulRoute(originHub, hubs)
+        } else {
+          destinationHub = resolveLinehaulRoute(originHub, hubs)
         }
       } else {
-        // Mặc định tuyến liên tỉnh trục chính theo khu vực đóng quân của xe
-        if (originHub.code === 'HCM01') {
-          destinationHub = hubs.find((h) => h.code === 'HN01') || destinationHub
-        } else if (originHub.code === 'HN01') {
-          destinationHub = hubs.find((h) => h.code === 'HCM01') || destinationHub
-        } else {
-          destinationHub = hubs.find((h) => h.type === 'SORTING_CENTER') || destinationHub
-        }
+        destinationHub = resolveLinehaulRoute(originHub, hubs)
+      }
+
+      // Đảm bảo tuyệt đối không bao giờ trùng nhau giữa xuất phát và đích đến
+      if (destinationHub.id === originHub.id || destinationHub.code === originHub.code) {
+        destinationHub = resolveLinehaulRoute(originHub, hubs)
       }
 
       // 5. Trích xuất mã Seal chì an ninh từ lịch sử đơn hàng hoặc sinh theo quy chuẩn
@@ -377,23 +427,28 @@ export const AdminLinehaulFleetView: React.FC<AdminLinehaulFleetViewProps> = ({
                 </span>
               </div>
 
-              {/* Lộ Trình Tuyến Đường */}
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-slate-600">Xuất phát:</span>
-                  <span className="font-mono text-slate-900 font-bold truncate max-w-[200px]" title={route.originHub.name}>
-                    [{route.originHub.code}] {route.originHub.name}
-                  </span>
+              {/* Lộ Trình Tuyến Đường Trực Quan */}
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 text-xs">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span className="text-[11px] text-slate-500 w-16 shrink-0 font-medium">Xuất phát:</span>
+                    <span className="font-bold text-slate-900 font-mono text-xs truncate" title={route.originHub.name}>
+                      [{route.originHub.code}] {cleanHubName(route.originHub.name)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
+                    <span className="text-[11px] text-slate-500 w-16 shrink-0 font-medium">Đích đến:</span>
+                    <span className="font-bold text-indigo-700 font-mono text-xs truncate" title={route.destinationHub.name}>
+                      [{route.destinationHub.code}] {cleanHubName(route.destinationHub.name)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-slate-600">Đích đến:</span>
-                  <span className="font-mono text-indigo-700 font-bold truncate max-w-[200px]" title={route.destinationHub.name}>
-                    [{route.destinationHub.code}] {route.destinationHub.name}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
-                  <span>Khởi hành: {route.departureTime}</span>
-                  <span>Dự kiến: {route.estimatedArrival}</span>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-200/70">
+                  <span>Khởi hành: <b>{route.departureTime}</b></span>
+                  <span>Dự kiến: <b>{route.estimatedArrival}</b></span>
                 </div>
               </div>
 
