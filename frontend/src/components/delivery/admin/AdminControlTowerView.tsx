@@ -53,7 +53,7 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
   const successRate = totalFinished > 0 ? ((deliveredParcels.length / totalFinished) * 100).toFixed(1) : '98.5'
   const slaRate = 97.8
 
-  // 4. Danh sách cảnh báo rủi ro (Urgent Operational Alerts)
+  // 4. Danh sách cảnh báo rủi ro vận hành nghiêm trọng (Urgent Operational Alerts)
   const alerts: Array<{ type: 'danger' | 'warning' | 'info'; title: string; desc: string; actionText?: string; onAction?: () => void }> = []
 
   if (failedParcels.length > 0) {
@@ -63,26 +63,6 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
       desc: 'Cần liên hệ người nhận để tái phát (Re-attempt) hoặc tạo lệnh chuyển hoàn về Shop (RTO).',
       actionText: 'Xử lý đơn hoàn',
       onAction: () => onNavigateToShipmentsWithFilter && onNavigateToShipmentsWithFilter('FAILED'),
-    })
-  }
-
-  if (collectingCodAmount > 0) {
-    alerts.push({
-      type: 'warning',
-      title: `Đang có ${formatMoney(collectingCodAmount)} tiền mặt COD đang trên đường giao`,
-      desc: 'Giám sát hành trình shipper thu COD và nhắc nhở nộp tiền về quầy bưu cục cuối ca.',
-      actionText: 'Kiểm tra két COD',
-      onAction: onNavigateToCod,
-    })
-  }
-
-  if (pickupParcels.length > 0) {
-    alerts.push({
-      type: 'info',
-      title: `Có ${pickupParcels.length} kiện hàng mới từ Shop đang chờ lấy`,
-      desc: 'Cần điều phối shipper First-Mile đến kho người bán lấy hàng trước giờ cắt hàng (Cut-off time 16:00).',
-      actionText: 'Điều phối lấy hàng',
-      onAction: () => onNavigateToShipmentsWithFilter && onNavigateToShipmentsWithFilter('PICKUP'),
     })
   }
 
@@ -273,7 +253,10 @@ export const AdminControlTowerView: React.FC<AdminControlTowerViewProps> = ({
         </div>
 
         {/* Tiền COD trên đường */}
-        <div className="bg-white border border-slate-200/90 p-4.5 rounded-3xl shadow-3xs space-y-2">
+        <div
+          onClick={onNavigateToCod}
+          className="bg-white border border-slate-200/90 p-4.5 rounded-3xl shadow-3xs space-y-2 cursor-pointer hover:border-amber-400 hover:shadow-sm transition"
+        >
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
               <span>🛵</span> COD Đang Giao Trên Đường
