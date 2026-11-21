@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { API_BASE_URL } from '../../config/api.config'
 import { LinehaulDispatchModal } from './LinehaulDispatchModal'
 import { LinehaulInboundReconciliationModal } from './LinehaulInboundReconciliationModal'
 import { LastMileDispatchModal } from './LastMileDispatchModal'
@@ -9,6 +10,7 @@ import type {
   StationTab,
   HubOperatorStationProps,
   LinehaulTrip,
+  Hub,
 } from './hub/types'
 import {
   extractLinehaulInfo,
@@ -26,6 +28,7 @@ import { HubCashierDesk } from './hub/HubCashierDesk'
 import { SocDashboard } from './hub/SocDashboard'
 import { HubCreateEditModal } from './HubCreateEditModal'
 import { DriverCreateModal } from './hub/DriverCreateModal'
+import { HubDriversManageModal } from './hub/HubDriversManageModal'
 
 export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   currentUser,
@@ -82,6 +85,36 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   const [isAddDriverModalOpen, setIsAddDriverModalOpen] = useState(false)
   const [driverModalVehicleType, setDriverModalVehicleType] = useState<'MOTORBIKE' | 'VAN' | 'TRUCK'>('MOTORBIKE')
   const [isAddHubModalOpen, setIsAddHubModalOpen] = useState(false)
+  const [editingHub, setEditingHub] = useState<Hub | null>(null)
+  const [isDriversManageModalOpen, setIsDriversManageModalOpen] = useState(false)
+
+  // Danh sách shipper phụ trách bưu cục hiện tại
+  const hubDrivers = useMemo(() => {
+    if (!currentHub) return []
+    return (drivers || []).filter(
+      (d) => (d.hubId === currentHub.id || d.hub?.id === currentHub.id) && d.vehicleType !== 'TRUCK'
+    )
+  }, [drivers, currentHub])
+
+  // Xóa Bưu cục con trực thuộc SOC
+  const handleDeleteChildHub = async (hub: Hub) => {
+    const confirmMsg = `Bạn có chắc chắn muốn xóa Bưu cục con [${hub.name}] (${hub.code}) khỏi hệ thống?\n\nLưu ý: Bưu cục chỉ có thể xóa khi không còn kiện hàng tồn và không còn tài xế trực thuộc.`
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/delivery/hubs/${hub.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.message || 'Không thể xóa bưu cục')
+      }
+      alert(`Đã xóa bưu cục [${hub.name}] thành công!`)
+      onRefresh()
+    } catch (err: any) {
+      alert(`Lỗi xóa bưu cục: ${err.message || 'Đã có lỗi xảy ra'}`)
+    }
+  }
 
   // 1. Nhận Từ Shipper
   const pickupInboundList = useMemo(
@@ -551,7 +584,10 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         {isSoc ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setIsAddHubModalOpen(true)}
+              onClick={() => {
+                setEditingHub(null)
+                setIsAddHubModalOpen(true)
+              }}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
               title="Thiết lập thêm bưu cục giao hàng vệ tinh trực thuộc SOC này"
             >
@@ -578,15 +614,24 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => {
-              setDriverModalVehicleType('MOTORBIKE')
-              setIsAddDriverModalOpen(true)
-            }}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
-          >
-            <span>➕</span> Tuyển / Thêm Tài Xế Mới
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsDriversManageModalOpen(true)}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              title="Xem thông tin, sửa hồ sơ, đổi mật khẩu và quản lý danh sách Shipper"
+            >
+              <span>🛵</span> Quản Lý Shipper ({hubDrivers.length})
+            </button>
+            <button
+              onClick={() => {
+                setDriverModalVehicleType('MOTORBIKE')
+                setIsAddDriverModalOpen(true)
+              }}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <span>➕</span> Tuyển Shipper Mới
+            </button>
+          </div>
         )}
       </div>
 
@@ -619,11 +664,19 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           linehaulTrips={linehaulTrips}
           dockTrucks={dockTrucks}
           onRefresh={onRefresh}
-          onAddChildHub={() => setIsAddHubModalOpen(true)}
+          onAddChildHub={() => {
+            setEditingHub(null)
+            setIsAddHubModalOpen(true)
+          }}
           onAddTruckDriver={() => {
             setDriverModalVehicleType('TRUCK')
             setIsAddDriverModalOpen(true)
           }}
+          onEditChildHub={(hub) => {
+            setEditingHub(hub)
+            setIsAddHubModalOpen(true)
+          }}
+          onDeleteChildHub={handleDeleteChildHub}
         />
       ) : stationTab === 'HUB_CASHIER' ? (
         <HubCashierDesk
@@ -797,14 +850,32 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
         onSuccess={onRefresh}
         initialVehicleType={driverModalVehicleType}
       />
-      {/* MODAL THIẾT LẬP BƯU CỤC CON (DÀNH CHO ĐIỀU PHỐI VIÊN SOC) */}
+      {/* MODAL 6: QUẢN LÝ SHIPPER CHO BƯU CỤC CON */}
+      <HubDriversManageModal
+        isOpen={isDriversManageModalOpen}
+        onClose={() => setIsDriversManageModalOpen(false)}
+        currentHub={currentHub}
+        drivers={drivers}
+        onRefresh={onRefresh}
+        onAddDriver={() => {
+          setIsDriversManageModalOpen(false)
+          setDriverModalVehicleType('MOTORBIKE')
+          setIsAddDriverModalOpen(true)
+        }}
+      />
+
+      {/* MODAL THIẾT LẬP / CHỈNH SỬA BƯU CỤC CON (DÀNH CHO ĐIỀU PHỐI VIÊN SOC) */}
       <HubCreateEditModal
         isOpen={isAddHubModalOpen}
-        onClose={() => setIsAddHubModalOpen(false)}
-        editingHub={null}
+        onClose={() => {
+          setIsAddHubModalOpen(false)
+          setEditingHub(null)
+        }}
+        editingHub={editingHub}
         onSuccess={() => {
           onRefresh()
           setIsAddHubModalOpen(false)
+          setEditingHub(null)
         }}
         initialParentSocId={currentHub?.id}
       />

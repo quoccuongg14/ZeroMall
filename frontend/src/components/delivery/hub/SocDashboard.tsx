@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { Hub, Shipment, LinehaulTrip, DockTruck } from './types'
 
 interface SocDashboardProps {
@@ -12,6 +12,8 @@ interface SocDashboardProps {
   onRefresh: () => void
   onAddChildHub?: () => void
   onAddTruckDriver?: () => void
+  onEditChildHub?: (hub: Hub) => void
+  onDeleteChildHub?: (hub: Hub) => void
 }
 
 export const SocDashboard: React.FC<SocDashboardProps> = ({
@@ -25,7 +27,10 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
   onRefresh,
   onAddChildHub,
   onAddTruckDriver,
+  onEditChildHub,
+  onDeleteChildHub,
 }) => {
+  const [viewingChildHub, setViewingChildHub] = useState<Hub | null>(null)
   // Danh sách các Bưu Cục Con (Hub Phát) trực thuộc SOC này
   const childHubs = useMemo(() => {
     return hubs.filter(
@@ -274,10 +279,35 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
                           🛵 {chShippers.length} Shipper
                         </span>
+                        <button
+                          onClick={() => setViewingChildHub(ch)}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="Xem thông tin chi tiết bưu cục con"
+                        >
+                          👁️ Xem
+                        </button>
+                        {onEditChildHub && (
+                          <button
+                            onClick={() => onEditChildHub(ch)}
+                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                            title="Sửa thông tin bưu cục con"
+                          >
+                            ✏️ Sửa
+                          </button>
+                        )}
+                        {onDeleteChildHub && (
+                          <button
+                            onClick={() => onDeleteChildHub(ch)}
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                            title="Xóa bưu cục con"
+                          >
+                            🗑️ Xóa
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -487,6 +517,167 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
           )}
         </div>
       </div>
+
+      {/* MODAL CHI TIẾT BƯU CỤC CON (HUD CON) */}
+      {viewingChildHub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs text-left animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 relative max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl shrink-0 font-bold">
+                  🏢
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-900">{viewingChildHub.name}</h3>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      {viewingChildHub.code}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Trực thuộc: <b className="text-indigo-900">{currentHub.name}</b> ({currentHub.code})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingChildHub(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4 overflow-y-auto pr-1">
+              {/* Thông tin hành chính */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Loại hình:</span>
+                  <span className="font-bold text-slate-900">Bưu cục phát vệ tinh (Destination Hub)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Trạng thái:</span>
+                  <span className="font-bold text-emerald-600 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Đang hoạt động
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Khu vực quản lý:</span>
+                  <span className="font-bold text-slate-900">
+                    {viewingChildHub.ward ? `${viewingChildHub.ward}, ` : ''}{viewingChildHub.district}, {viewingChildHub.province}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-medium">Địa chỉ trụ sở:</span>
+                  <span className="font-bold text-slate-900 text-right max-w-[260px]">
+                    {viewingChildHub.address || 'Chưa cập nhật'}
+                  </span>
+                </div>
+                {viewingChildHub.latitude && viewingChildHub.longitude && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Tọa độ GPS:</span>
+                    <span className="font-mono text-slate-700">
+                      {Number(viewingChildHub.latitude).toFixed(5)}, {Number(viewingChildHub.longitude).toFixed(5)}
+                    </span>
+                  </div>
+                )}
+                {viewingChildHub.email && (
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
+                    <span className="text-slate-500 font-medium">Tài khoản Bưu cục:</span>
+                    <span className="font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      {viewingChildHub.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Danh sách Shipper trực thuộc */}
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>🛵 Đội ngũ Shipper trực thuộc</span>
+                  <span className="font-mono text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    {(drivers || []).filter((d) => (d.hubId === viewingChildHub.id || d.hub?.id === viewingChildHub.id) && d.vehicleType !== 'TRUCK').length} Tài xế
+                  </span>
+                </h4>
+                {(() => {
+                  const hubShippers = (drivers || []).filter(
+                    (d) => (d.hubId === viewingChildHub.id || d.hub?.id === viewingChildHub.id) && d.vehicleType !== 'TRUCK'
+                  )
+                  if (hubShippers.length === 0) {
+                    return (
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 text-xs">
+                        Chưa có shipper nào được gán cho bưu cục này.
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {hubShippers.map((s: any) => (
+                        <div
+                          key={s.id}
+                          className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🛵</span>
+                            <div>
+                              <p className="font-bold text-slate-900">{s.name}</p>
+                              <p className="text-[11px] text-slate-500">📞 {s.phone} • {s.vehicleNumber || 'Chưa gắn biển số'}</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            s.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {s.status === 'AVAILABLE' ? 'Sẵn sàng' : s.status || 'Offline'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+
+            {/* ACTION FOOTER */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
+              {onDeleteChildHub ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hubToDelete = viewingChildHub
+                    setViewingChildHub(null)
+                    onDeleteChildHub(hubToDelete)
+                  }}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  🗑️ Xóa Bưu Cục Này
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewingChildHub(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  Đóng
+                </button>
+                {onEditChildHub && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const hubToEdit = viewingChildHub
+                      setViewingChildHub(null)
+                      onEditChildHub(hubToEdit)
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    ✏️ Chỉnh Sửa Thông Tin
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

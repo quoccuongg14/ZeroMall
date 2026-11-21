@@ -56,6 +56,7 @@ export interface Hub {
   code: string
   name: string
   type: string
+  status?: string
   province: string
   district: string
   ward?: string

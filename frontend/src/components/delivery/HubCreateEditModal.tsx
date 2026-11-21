@@ -10,18 +10,18 @@ export interface Hub {
   id: string
   code: string
   name: string
-  address: string
+  address?: string
   province: string
   district: string
   ward?: string
   latitude?: number
   longitude?: number
   type: string
-  status: string
+  status?: string
   email?: string | null
   parentSocId?: string | null
-  parentSoc?: Partial<Hub> | null
-  childHubs?: Hub[]
+  parentSoc?: any
+  childHubs?: any[]
   drivers?: any[]
   _count?: { shipments?: number; drivers?: number }
   createdAt?: string
