@@ -59,7 +59,9 @@ export const useVietnamAddress = () => {
     const dist = districts.find(d => d.code === distCode)
     if (dist) {
       setChosenDistrict(dist.name)
-      const sortedWards = [...dist.wards].sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+      const sortedWards = [...dist.wards].sort((a, b) =>
+        a.name.localeCompare(b.name, 'vi', { numeric: true })
+      )
       setWards(sortedWards)
     }
   }
@@ -125,18 +127,30 @@ export const useVietnamAddress = () => {
     setChosenDistrict(foundDist.name)
     setSelectedDistrictCode(foundDist.code)
 
-    const sortedWards = [...foundDist.wards].sort((a, b) => a.name.localeCompare(b.name, 'vi'))
-    setWards(sortedWards)
+    let sortedWards = [...foundDist.wards].sort((a, b) =>
+      a.name.localeCompare(b.name, 'vi', { numeric: true })
+    )
 
     // Khớp Phường / Xã
     const foundWard = sortedWards.find(w => cleanAdminName(w.name) === cleanW)
     if (foundWard) {
       setChosenWard(foundWard.name)
       setSelectedWardCode(foundWard.code)
+    } else if (wardName && wardName.trim()) {
+      // Cơ chế dự phòng thông minh: Nếu bản đồ trả về một phường/xã hợp lệ nhưng danh mục tĩnh thiếu,
+      // tự động bổ sung vào danh sách wards để người dùng chọn được ngay
+      const dynamicCode = 990000 + Math.floor(Math.random() * 10000)
+      const dynamicWard: WardItem = { name: wardName.trim(), code: dynamicCode }
+      sortedWards = [...sortedWards, dynamicWard].sort((a, b) =>
+        a.name.localeCompare(b.name, 'vi', { numeric: true })
+      )
+      setChosenWard(dynamicWard.name)
+      setSelectedWardCode(dynamicWard.code)
     } else {
       setChosenWard(wardName)
       setSelectedWardCode('')
     }
+    setWards(sortedWards)
   }
 
   return {
