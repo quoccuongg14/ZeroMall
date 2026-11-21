@@ -937,6 +937,16 @@ function App() {
               }
             />
             <Route
+              path="/cs-support"
+              element={
+                <AdminPortalWrapper
+                  user={user}
+                  handleAuthSuccess={handleAuthSuccess}
+                  handleLogout={handleLogout}
+                />
+              }
+            />
+            <Route
               path="/*"
               element={
                 <BuyerContainer

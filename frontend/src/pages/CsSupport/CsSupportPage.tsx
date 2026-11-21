@@ -408,6 +408,15 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            {user?.role === 'ADMIN' && (
+              <a
+                href="/admin"
+                className="text-xs font-black text-white bg-slate-900 hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer px-3.5 py-1.5 rounded-lg shadow-3xs"
+                title="Quay lại Cổng Quản trị Admin Vĩ mô"
+              >
+                <span>🛡️</span> Cổng Quản Trị Admin
+              </a>
+            )}
             <button
               onClick={onBackToHome}
               className="text-xs font-bold text-emerald-600 hover:text-emerald-500 transition flex items-center gap-1.5 cursor-pointer bg-emerald-50 border border-emerald-100 px-3.5 py-1.5 rounded-lg shadow-3xs"
