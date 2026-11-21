@@ -54,10 +54,45 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
   const [selectedDistrictName, setSelectedDistrictName] = useState<string>('')
   const [selectedWards, setSelectedWards] = useState<string[]>([])
 
+  // Linehaul Mega SOC states (Dành riêng cho Kho Tổng SOC)
+  const [destinationSocs, setDestinationSocs] = useState<Hub[]>([])
+  const [selectedDestSocId, setSelectedDestSocId] = useState<string>('')
+  const [loadingSocs, setLoadingSocs] = useState<boolean>(false)
+
   // Map state
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<any>(null)
   const circleInstanceRef = useRef<any>(null)
+
+  // Tải danh sách các Mega SOC khác từ CSDL khi ở trạm SOC
+  useEffect(() => {
+    if (!isOpen || !isSoc) return
+
+    setLoadingSocs(true)
+    fetch(`${API_BASE_URL}/delivery/hubs`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const socs = data.filter(
+            (h: any) =>
+              h.type === 'SORTING_CENTER' &&
+              h.id !== currentHub?.id &&
+              h.code !== currentHub?.code
+          )
+          setDestinationSocs(socs)
+          if (socs.length > 0) {
+            setSelectedDestSocId(socs[0].id)
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to fetch destination SOCs:', err))
+      .finally(() => setLoadingSocs(false))
+  }, [isOpen, isSoc, currentHub])
+
+  // Mega SOC đích hiện đang được chọn
+  const selectedDestSoc = useMemo(() => {
+    return destinationSocs.find((s) => s.id === selectedDestSocId) || destinationSocs[0] || null
+  }, [destinationSocs, selectedDestSocId])
 
   // Lấy dữ liệu Tỉnh/Thành của Bưu cục từ cây địa giới hành chính
   const hubProvinceData = useMemo(() => {
@@ -140,6 +175,11 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
   // Tính toán chuỗi tuyến đường phụ trách hoàn chỉnh
   const computedOperatingArea = useMemo(() => {
     if (isSoc) {
+      if (selectedDestSoc) {
+        return `Tuyến Linehaul: ${currentHub?.name} (${currentHub?.code}) ⇄ ${selectedDestSoc.name} (${selectedDestSoc.code})${
+          customRouteNote.trim() ? ` [${customRouteNote.trim()}]` : ''
+        }`
+      }
       return customRouteNote.trim() || `Tuyến xe tải xuất phát từ ${currentHub?.name}`
     }
 
@@ -158,7 +198,7 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
     }
 
     return parts.join(', ') || `${currentHub?.district || ''}, ${currentHub?.province || ''}`
-  }, [isSoc, customRouteNote, selectedWards, selectedDistrictName, currentHub])
+  }, [isSoc, selectedDestSoc, customRouteNote, selectedWards, selectedDistrictName, currentHub])
 
   // Khởi tạo bản đồ trực quan khi chuyển sang Tab MAP
   useEffect(() => {
@@ -234,6 +274,13 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
       const fallbackEmail = `shipper_${cleanPhone.replace(/[^0-9]/g, '')}@spx.zeromall.vn`
       const driverEmail = email.trim() || fallbackEmail
 
+      const assignedProvince = isSoc
+        ? selectedDestSoc?.province || currentHub?.province
+        : currentHub?.province
+      const assignedDistrict = isSoc
+        ? selectedDestSoc?.name || currentHub?.name
+        : selectedDistrictName || currentHub?.district
+
       const res = await fetch(`${API_BASE_URL}/delivery/drivers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -241,10 +288,10 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
           name: name.trim(),
           phone: cleanPhone,
           vehicleNumber: vehicleNumber.trim().toUpperCase(),
-          vehicleType,
+          vehicleType: isSoc ? 'TRUCK' : vehicleType,
           hubId: currentHub?.id,
-          assignedProvince: currentHub?.province,
-          assignedDistrict: selectedDistrictName || currentHub?.district,
+          assignedProvince,
+          assignedDistrict,
           operatingArea: computedOperatingArea,
           email: driverEmail,
           password: password.trim() || '123456',
@@ -354,31 +401,41 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
               <label className="block text-[11px] font-bold text-slate-700 mb-1">
                 Loại Phương Tiện Phân Cấp:
               </label>
-              <select
-                value={vehicleType}
-                onChange={(e) => setVehicleType(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 focus:bg-white transition"
-              >
-                {isSoc ? (
-                  <>
-                    <option value="TRUCK">🚛 Xe tải đường dài (Trung chuyển Linehaul liên tỉnh)</option>
-                    <option value="VAN">🚐 Xe Van / Bán tải (Trung chuyển nội bộ)</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="MOTORBIKE">🛵 Xe máy (Lấy & Giao nội thành tận nhà)</option>
-                    <option value="VAN">🚐 Xe Van / Bán tải (Hàng cồng kềnh / Gom Shop lớn)</option>
-                  </>
-                )}
-              </select>
+              {isSoc ? (
+                <div className="w-full px-3.5 py-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-black text-indigo-950 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🚛</span>
+                    <span>Xe tải đường dài (Linehaul liên tỉnh)</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-200 text-indigo-900 border border-indigo-300">
+                    Chỉ định Kho Tổng SOC
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 focus:bg-white transition"
+                >
+                  <option value="MOTORBIKE">🛵 Xe máy (Lấy & Giao nội thành tận nhà)</option>
+                  <option value="VAN">🚐 Xe Van / Bán tải (Hàng cồng kềnh / Gom Shop lớn)</option>
+                </select>
+              )}
             </div>
           </div>
 
-          {!isSoc && (
+          {!isSoc ? (
             <div className="bg-sky-50/70 border border-sky-200 rounded-2xl p-2.5 flex items-start gap-2">
               <span className="text-base shrink-0">ℹ️</span>
               <p className="text-[11px] text-sky-800 leading-relaxed font-medium">
                 <strong>Quy chuẩn bưu cục phát:</strong> Bưu cục (Delivery Hub) phụ trách phát bưu kiện chặng cuối (Last-mile) bằng Xe máy và Xe Van. Xe tải lớn chở tuyến Linehaul liên tỉnh do Trung tâm Mega SOC quản lý.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-2.5 flex items-start gap-2">
+              <span className="text-base shrink-0">ℹ️</span>
+              <p className="text-[11px] text-indigo-900 leading-relaxed font-medium">
+                <strong>Quy chuẩn Kho Tổng SOC:</strong> Mega SOC là trung tâm phân loại vùng, chỉ vận hành xe tải tuyến đường dài (Linehaul) trung chuyển liên tỉnh giữa các Mega SOC trong mạng lưới.
               </p>
             </div>
           )}
@@ -445,9 +502,11 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
           <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <span className="text-base">📍</span>
+                <span className="text-base">{isSoc ? '🚛' : '📍'}</span>
                 <span className="text-xs font-black text-slate-800">
-                  Tuyến Giao Nhận Phụ Trách ({currentHub?.province})
+                  {isSoc
+                    ? 'Thiết Lập Tuyến Xe Tải Linehaul Liên SOC'
+                    : `Tuyến Giao Nhận Phụ Trách (${currentHub?.province})`}
                 </span>
               </div>
 
@@ -479,94 +538,168 @@ export const DriverCreateModal: React.FC<DriverCreateModalProps> = ({
               )}
             </div>
 
-            {/* TAB 1: BỘ CHỌN KHU VỰC HÀNH CHÍNH & PHƯỜNG / XÃ */}
-            {activeTab === 'AREAS' ? (
+            {isSoc ? (
+              /* DÀNH CHO MEGA SOC: SƠ ĐỒ TUYẾN XE TẢI GIỮA SOC XUẤT PHÁT VÀ SOC ĐÍCH */
               <div className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Quận / Huyện Thuộc Tỉnh {currentHub?.province}:
-                    </label>
-                    <select
-                      value={selectedDistrictName}
-                      onChange={(e) => {
-                        setSelectedDistrictName(e.target.value)
-                        setSelectedWards([])
-                      }}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 transition"
-                    >
-                      {districts.map((d) => (
-                        <option key={d.code} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center gap-3">
+                  {/* Kho Đi (SOC hiện tại) */}
+                  <div className="flex-1 w-full bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                      🏭 KHO XUẤT PHÁT (SOC ĐI)
+                    </span>
+                    <div className="font-black text-xs text-slate-900 flex items-center gap-1.5">
+                      <span>{currentHub?.name}</span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        {currentHub?.code}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                      📍 {currentHub?.province}
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Ghi Chú Tuyến / Tên Trục Đường (Tùy Chọn):
+                  {/* Icon Chuyển Tuyến Linehaul */}
+                  <div className="shrink-0 flex flex-col items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-sm shadow-xs border border-indigo-200">
+                      ⇄
+                    </div>
+                    <span className="text-[9px] font-extrabold text-indigo-600 mt-0.5 uppercase tracking-tight">
+                      Linehaul
+                    </span>
+                  </div>
+
+                  {/* Kho Đến (Chọn SOC Tiếp Nhận từ Database) */}
+                  <div className="flex-1 w-full bg-white p-3 rounded-xl border border-indigo-200 shadow-xs">
+                    <label className="text-[10px] font-black text-indigo-600 uppercase tracking-wider block mb-1">
+                      🏭 KHO TIẾP NHẬN (SOC NHẬN) <span className="text-rose-500">*</span>:
                     </label>
-                    <input
-                      type="text"
-                      value={customRouteNote}
-                      onChange={(e) => setCustomRouteNote(e.target.value)}
-                      placeholder={isSoc ? "VD: Tuyến Hải Phòng ⇄ Hà Nội SOC" : "VD: Tuyến 01 - Chợ Đổ, Đường Quang Trung..."}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600 transition"
-                    />
+                    {loadingSocs ? (
+                      <div className="text-xs text-slate-400 py-1">Đang tải danh sách Kho Tổng...</div>
+                    ) : destinationSocs.length === 0 ? (
+                      <div className="text-xs text-amber-600 font-bold py-1">Chưa có Kho Tổng nào khác trong hệ thống</div>
+                    ) : (
+                      <select
+                        value={selectedDestSocId}
+                        onChange={(e) => setSelectedDestSocId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-indigo-50/50 border border-indigo-200 rounded-lg text-xs font-black text-slate-800 focus:outline-none focus:border-indigo-600 transition"
+                      >
+                        {destinationSocs.map((soc) => (
+                          <option key={soc.id} value={soc.id}>
+                            {soc.name} [{soc.code}] — {soc.province}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                      📍 Đích đến: <b>{selectedDestSoc?.province || 'Chọn SOC nhận'}</b>
+                    </p>
                   </div>
                 </div>
 
-                {!isSoc && wards.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-bold text-slate-700">
-                        Chọn Các Phường / Xã Thuộc Tuyến Đi Phát ({selectedWards.length}/{wards.length}):
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleSelectAllWards}
-                        className="text-[10px] text-emerald-700 hover:text-emerald-800 font-extrabold cursor-pointer"
-                      >
-                        {selectedWards.length === wards.length ? 'Bỏ chọn tất cả' : 'Chọn toàn bộ quận'}
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200/80">
-                      {wards.map((w) => {
-                        const isSelected = selectedWards.includes(w.name)
-                        return (
-                          <button
-                            key={w.code}
-                            type="button"
-                            onClick={() => handleToggleWard(w.name)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                              isSelected
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                            }`}
-                          >
-                            <span>{isSelected ? '✓' : '+'}</span>
-                            {w.name}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* Ghi chú thêm lộ trình cao tốc */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Ghi Chú Lộ Trình Tuyến Chạy / Ca Chạy (Tùy Chọn):
+                  </label>
+                  <input
+                    type="text"
+                    value={customRouteNote}
+                    onChange={(e) => setCustomRouteNote(e.target.value)}
+                    placeholder="VD: Chạy cao tốc QL5B, ca đêm 22h-05h..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-600 transition"
+                  />
+                </div>
               </div>
             ) : (
-              /* TAB 2: BẢN ĐỒ PHỦ SÓNG BƯU CỤC */
-              <div className="space-y-2">
-                <div
-                  ref={mapContainerRef}
-                  className="w-full h-48 rounded-xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100"
-                />
-                <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
-                  <span>🏢 Vị trí bưu cục: <b>{currentHub?.address}</b></span>
-                  <span className="text-emerald-700 font-bold">🟢 Bán kính phủ sóng phát: 3.5 km</span>
+              /* DÀNH CHO BƯU CỤC GIAO HÀNG PHÁT NỘI THÀNH */
+              activeTab === 'AREAS' ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Quận / Huyện Thuộc Tỉnh {currentHub?.province}:
+                      </label>
+                      <select
+                        value={selectedDistrictName}
+                        onChange={(e) => {
+                          setSelectedDistrictName(e.target.value)
+                          setSelectedWards([])
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-600 transition"
+                      >
+                        {districts.map((d) => (
+                          <option key={d.code} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Ghi Chú Tuyến / Tên Trục Đường (Tùy Chọn):
+                      </label>
+                      <input
+                        type="text"
+                        value={customRouteNote}
+                        onChange={(e) => setCustomRouteNote(e.target.value)}
+                        placeholder="VD: Tuyến 01 - Chợ Đổ, Đường Quang Trung..."
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-600 transition"
+                      />
+                    </div>
+                  </div>
+
+                  {wards.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-bold text-slate-700">
+                          Chọn Các Phường / Xã Thuộc Tuyến Đi Phát ({selectedWards.length}/{wards.length}):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleSelectAllWards}
+                          className="text-[10px] text-emerald-700 hover:text-emerald-800 font-extrabold cursor-pointer"
+                        >
+                          {selectedWards.length === wards.length ? 'Bỏ chọn tất cả' : 'Chọn toàn bộ quận'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200/80">
+                        {wards.map((w) => {
+                          const isSelected = selectedWards.includes(w.name)
+                          return (
+                            <button
+                              key={w.code}
+                              type="button"
+                              onClick={() => handleToggleWard(w.name)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                              }`}
+                            >
+                              <span>{isSelected ? '✓' : '+'}</span>
+                              {w.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              ) : (
+                /* TAB 2: BẢN ĐỒ PHỦ SÓNG BƯU CỤC */
+                <div className="space-y-2">
+                  <div
+                    ref={mapContainerRef}
+                    className="w-full h-48 rounded-xl border border-slate-200 overflow-hidden shadow-inner bg-slate-100"
+                  />
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                    <span>🏢 Vị trí bưu cục: <b>{currentHub?.address}</b></span>
+                    <span className="text-emerald-700 font-bold">🟢 Bán kính phủ sóng phát: 3.5 km</span>
+                  </div>
+                </div>
+              )
             )}
 
             {/* PREVIEW CHUỖI ĐỊA BÀN PHỤ TRÁCH THỰC TẾ */}
