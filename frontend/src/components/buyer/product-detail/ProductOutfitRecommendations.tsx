@@ -46,6 +46,19 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
         const weight = Number(localStorage.getItem('zeromall_tryon_user_weight')) || 68
         const gender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
 
+        const cacheKey = `zm_outfits_${product.id}_${gender}_${height}_${weight}`
+        const cached = sessionStorage.getItem(cacheKey)
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setOutfits(parsed)
+              setIsLoading(false)
+              return
+            }
+          } catch (_) {}
+        }
+
         const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/generate-top-outfits`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -67,6 +80,9 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
           const data = await res.json()
           if (data.success && Array.isArray(data.outfits)) {
             setOutfits(data.outfits)
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify(data.outfits))
+            } catch (_) {}
           }
         }
       } catch (e) {
