@@ -30,6 +30,7 @@ interface HubParcelTableProps {
   onUnloadSingleShipmentFromDock: (truckId: string, shipmentId: string, truckNumber: string) => void
   onSelectRouteForSorting: (hub: Hub) => void
   onOpenReconciliation: (trip: LinehaulTrip) => void
+  onHandoverToSoc?: (shipmentIds: string[]) => Promise<void>
   onUpdateStatus: (
     shipmentId: string,
     status: string,
@@ -91,22 +92,63 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
   onUnloadSingleShipmentFromDock,
   onSelectRouteForSorting,
   onOpenReconciliation,
+  onHandoverToSoc,
   onUpdateStatus,
 }) => {
+  const isSoc = currentHub?.type === 'SORTING_CENTER'
+  const parentSoc =
+    currentHub?.parentSoc ||
+    hubs.find((h) => h.id === currentHub?.parentSocId) ||
+    hubs.find(
+      (h) =>
+        h.type === 'SORTING_CENTER' &&
+        ((h.province && currentHub?.province && h.province.includes(currentHub.province)) ||
+          (currentHub?.province && h.province && currentHub.province.includes(h.province)))
+    ) ||
+    hubs.find((h) => h.type === 'SORTING_CENTER')
+
+  const currentTabTitle =
+    stationTab === 'SORTING_LINEHAUL'
+      ? !isSoc
+        ? '2. Bàn Giao Về SOC'
+        : '2. Phân Luồng & Đóng Xe Tuyến'
+      : TAB_TITLES[stationTab] || stationTab
+
   return (
     <>
       {/* Table Header with Batch Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-6 py-4 border-b border-slate-100">
         <div className="flex items-center gap-2.5 flex-wrap">
           <h3 className="font-black text-sm text-slate-800 flex items-center gap-2">
-            📋 {TAB_TITLES[stationTab]}
+            📋 {currentTabTitle}
           </h3>
           <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-black rounded-md border border-slate-200">
             {activeList.length} kiện
           </span>
 
-          {/* Batch Linehaul Dispatch Button (Tab 2) */}
-          {stationTab === 'SORTING_LINEHAUL' && selectedShipmentIds.size > 0 && (
+          {/* HUD -> SOC Handover Button & Info (Chỉ dành cho Bưu cục vệ tinh HUD) */}
+          {stationTab === 'SORTING_LINEHAUL' && !isSoc && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200/80 rounded-lg text-emerald-800 text-[11px] font-semibold">
+                <span>🏭 SOC Tiếp Nhận:</span>
+                <span className="font-bold underline">{parentSoc?.name || 'Trung Tâm Phân Loại SOC'}</span>
+              </div>
+              {selectedShipmentIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onHandoverToSoc && onHandoverToSoc(Array.from(selectedShipmentIds))}
+                  disabled={actionLoading}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-lg text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5 animate-pulse"
+                >
+                  <span>📤</span>
+                  <span>Bàn Giao Về {parentSoc?.name || 'SOC'} ({selectedShipmentIds.size} kiện)</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Batch Linehaul Dispatch Button (Chỉ dành cho SOC) */}
+          {stationTab === 'SORTING_LINEHAUL' && isSoc && selectedShipmentIds.size > 0 && (
             <button
               onClick={onOpenDispatchBatch}
               className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold rounded-lg text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5 animate-pulse"
@@ -116,8 +158,8 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
             </button>
           )}
 
-          {/* Quick Route Selectors (Tab 2) */}
-          {stationTab === 'SORTING_LINEHAUL' && (
+          {/* Quick Route Selectors (Chỉ dành cho SOC) */}
+          {stationTab === 'SORTING_LINEHAUL' && isSoc && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {hubs
                 .filter((h) => !currentHub?.id || h.id !== currentHub.id)
@@ -468,7 +510,16 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                         ))}
 
                       {stationTab === 'SORTING_LINEHAUL' &&
-                        (() => {
+                        (!isSoc ? (
+                          <button
+                            onClick={() => onHandoverToSoc && onHandoverToSoc([s.id])}
+                            disabled={actionLoading}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-lg text-[11px] transition cursor-pointer shadow-sm disabled:opacity-40 flex items-center gap-1 ml-auto"
+                            title={`Xuất kho bàn giao kiện hàng về ${parentSoc?.name || 'SOC tổng'}`}
+                          >
+                            <span>📤</span> Bàn Giao Về SOC
+                          </button>
+                        ) : (() => {
                           const dt = dockTrucks.find((t) => t.shipments.some((item) => item.id === s.id))
                           if (dt) {
                             return (
@@ -493,7 +544,7 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                               <span>🚛</span> Đóng Xe Tải
                             </button>
                           )
-                        })()}
+                        })())}
 
                       {stationTab === 'INBOUND_RECEIVING' && (
                         <div className="flex items-center gap-1.5 justify-end">

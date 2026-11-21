@@ -363,6 +363,50 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
     (msg) => setScanMessage(msg)
   )
 
+  // Bàn giao bưu kiện từ Bưu cục vệ tinh (HUD) về Trung tâm phân loại tổng (SOC)
+  const handleHandoverToSoc = async (shipmentIds: string[]) => {
+    if (shipmentIds.length === 0) return
+    const targetSoc =
+      currentHub?.parentSoc ||
+      hubs.find((h) => h.id === currentHub?.parentSocId) ||
+      hubs.find(
+        (h) =>
+          h.type === 'SORTING_CENTER' &&
+          ((h.province && currentHub?.province && h.province.includes(currentHub.province)) ||
+            (currentHub?.province && h.province && currentHub.province.includes(h.province)))
+      ) ||
+      hubs.find((h) => h.type === 'SORTING_CENTER')
+
+    const socName = targetSoc?.name || 'Trung Tâm Phân Loại (SOC)'
+    const confirmMsg = `Xác nhận xuất kho bàn giao ${shipmentIds.length} kiện hàng từ [${currentHub?.name || 'Bưu cục'}] về [${socName}] để phân loại tự động?`
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      for (const sId of shipmentIds) {
+        await onUpdateStatus(
+          sId,
+          'IN_TRANSIT',
+          undefined,
+          targetSoc?.id,
+          `Bưu cục [${currentHub?.name || 'HUD'}] đã xuất kho bàn giao kiện hàng cho xe trung chuyển về [${socName}] để phân loại tự động.`,
+          {
+            truckNumber: 'Xe trung chuyển nội bộ',
+            truckDriver: 'Đội xe trung chuyển ZMX',
+            targetHubId: targetSoc?.id,
+          }
+        )
+      }
+      setSelectedShipmentIds(new Set())
+      setScanMessage({
+        type: 'success',
+        text: `📤 Đã xuất kho bàn giao thành công ${shipmentIds.length} kiện về [${socName}]!`,
+      })
+      onRefresh()
+    } catch (err: any) {
+      alert(`Lỗi bàn giao về SOC: ${err.message || 'Lỗi không xác định'}`)
+    }
+  }
+
   // Danh sách bưu kiện tổng hợp tại kho để máy quét barcode tra cứu
   const allHubShipmentsForScanner = useMemo(() => {
     return [...shipments, ...returnAtHubAsShipments]
@@ -392,7 +436,8 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
     onUpdateStatus,
     onRefresh,
     handleOpenDispatchSingle,
-    handleOpenLastMileSingle
+    handleOpenLastMileSingle,
+    handleHandoverToSoc
   )
 
   // Gom nhóm chuyến xe
@@ -690,6 +735,8 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           {/* SECTION 2: SCANNER BAR */}
           <HubScannerBar
             stationTab={stationTab}
+            isSoc={isSoc}
+            currentHub={currentHub}
             dockTrucks={dockTrucks}
             activeScanDockTruckId={activeScanDockTruckId}
             setActiveScanDockTruckId={setActiveScanDockTruckId}
@@ -707,8 +754,8 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
 
           {/* SECTION 3: PARCEL TABLE & SUB-VIEWS */}
           <div className="bg-white border border-slate-200/80 rounded-3xl shadow-sm overflow-hidden">
-            {/* Banner Xe tại Dock (Tab 2) */}
-            {stationTab === 'SORTING_LINEHAUL' && (
+            {/* Banner Xe tại Dock (Tab 2) - Chỉ hiển thị tại SOC */}
+            {stationTab === 'SORTING_LINEHAUL' && isSoc && (
               <HubDockTruckList
                 dockTrucks={dockTrucks}
                 activeScanDockTruckId={activeScanDockTruckId}
@@ -784,6 +831,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
                 setSelectedShipmentIds(new Set(matching.map((s) => s.id)))
               }}
               onOpenReconciliation={(trip) => setReconcilingTrip(trip)}
+              onHandoverToSoc={handleHandoverToSoc}
               onUpdateStatus={onUpdateStatus}
             />
           </div>

@@ -52,6 +52,9 @@ export function extractLinehaulInfo(s: Shipment) {
 export function isDestinedForCurrentHub(s: Shipment, currentHub?: Hub | null): boolean {
   if (!currentHub) return true
 
+  // 1. Nếu kiện hàng đã được chuyển tiếp đích danh về Hub/SOC này
+  if (s.currentHubId && s.currentHubId === currentHub.id) return true
+
   // Với đơn hàng hoàn (Return reverse logistics), tuyến đích là Kho của Shop (pickupAddress của đơn gốc hoặc deliveryAddress đã map thành Kho Shop)
   let addr = (s.deliveryAddress || '').toLowerCase()
   if (s.isReturn || s.returnData || addr.startsWith('kho shop:') || addr.includes('gửi về shop:')) {
@@ -69,10 +72,29 @@ export function isDestinedForCurrentHub(s: Shipment, currentHub?: Hub | null): b
     addr = `${s.pickupAddress.province || ''} ${s.pickupAddress.district || ''} ${s.pickupAddress.address || ''}`.toLowerCase()
   }
 
-  const hubProv = (currentHub.province || '').toLowerCase()
-  const hubDist = (currentHub.district || '').toLowerCase()
-  const hubCode = (currentHub.code || '').toLowerCase()
+  const cleanAdminName = (str?: string | null) => {
+    if (!str) return ''
+    return str
+      .toLowerCase()
+      .replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '')
+      .replace(/^(quận|huyện|thị xã|tx\.?)\s+/i, '')
+      .replace(/^(phường|xã|thị trấn)\s+/i, '')
+      .trim()
+  }
 
+  const hubProv = cleanAdminName(currentHub.province)
+  const hubDist = cleanAdminName(currentHub.district)
+
+  // Khớp theo tỉnh thành hoặc quận huyện của Hub/SOC (toàn quốc)
+  if (hubProv && addr.includes(hubProv)) {
+    if (currentHub.type !== 'SORTING_CENTER' && hubDist) {
+      if (addr.includes(hubDist)) return true
+    } else {
+      return true
+    }
+  }
+
+  const hubCode = (currentHub.code || '').toLowerCase()
   if (hubCode === 'dn01' || hubProv.includes('đồng nai') || hubDist.includes('biên hòa')) {
     return addr.includes('đồng nai') || addr.includes('biên hòa')
   }

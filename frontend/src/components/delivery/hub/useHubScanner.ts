@@ -23,7 +23,8 @@ export function useHubScanner(
   ) => Promise<void>,
   onRefresh: () => void,
   onOpenDispatchSingle: (s: Shipment) => void,
-  onOpenLastMileSingle: (s: Shipment) => void
+  onOpenLastMileSingle: (s: Shipment) => void,
+  onHandoverToSoc?: (shipmentIds: string[]) => Promise<void>
 ) {
   const [scannedCode, setScannedCode] = useState('')
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
@@ -177,7 +178,13 @@ export function useHubScanner(
             text: `🎯 BẮN THÀNH CÔNG: [${targetShipment.trackingNumber}] ➔ Xe [${targetTruck.truckNumber}] (Tổng: ${targetTruck.shipments.length + 1} kiện trên xe)`,
           })
         } else {
-          onOpenDispatchSingle(targetShipment)
+          const isSoc = currentHub?.type === 'SORTING_CENTER'
+          if (!isSoc && onHandoverToSoc) {
+            await onHandoverToSoc([targetShipment.id])
+            playBeepSound()
+          } else {
+            onOpenDispatchSingle(targetShipment)
+          }
         }
       } else if (stationTab === 'INBOUND_RECEIVING') {
         await onUpdateStatus(

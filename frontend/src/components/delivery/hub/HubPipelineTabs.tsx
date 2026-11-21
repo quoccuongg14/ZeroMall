@@ -93,10 +93,10 @@ export const HubPipelineTabs: React.FC<HubPipelineTabsProps> = ({
     },
     {
       id: 'SORTING_LINEHAUL',
-      title: '2. Đóng Xe Tải Đi SOC',
-      desc: 'Gom kiện ngoại tỉnh, đóng xe tải xuất lên SOC phân loại',
+      title: '2. Bàn Giao Về SOC',
+      desc: 'Gom kiện xuất kho chuyển tiếp về SOC tổng phân loại',
       count: sortingCount,
-      icon: '🚛',
+      icon: '📤',
       activeColor: 'border-sky-500 bg-sky-50 ring-sky-200',
       countColor: 'text-sky-700 bg-sky-100 border-sky-300',
     },

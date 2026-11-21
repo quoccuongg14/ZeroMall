@@ -4,6 +4,8 @@ import { BarcodeCameraScanner } from '../BarcodeCameraScanner'
 
 interface HubScannerBarProps {
   stationTab: StationTab
+  isSoc?: boolean
+  currentHub?: any
   dockTrucks: DockTruck[]
   activeScanDockTruckId: string | null
   setActiveScanDockTruckId: (id: string) => void
@@ -60,6 +62,8 @@ const SCAN_CONFIG = {
 
 export const HubScannerBar: React.FC<HubScannerBarProps> = ({
   stationTab,
+  isSoc = false,
+  currentHub,
   dockTrucks,
   activeScanDockTruckId,
   setActiveScanDockTruckId,
@@ -74,21 +78,32 @@ export const HubScannerBar: React.FC<HubScannerBarProps> = ({
   actionLoading,
   onScanCode,
 }) => {
-  const currentCfg = SCAN_CONFIG[stationTab]
+  const isSocStation = isSoc || currentHub?.type === 'SORTING_CENTER'
+  const currentCfg = {
+    ...SCAN_CONFIG[stationTab],
+    ...(stationTab === 'SORTING_LINEHAUL' && !isSocStation
+      ? {
+          title: '2. Bàn Giao Về SOC',
+          placeholder: 'Quét mã vận đơn để XUẤT KHO BÀN GIAO VỀ SOC TỔNG...',
+          buttonLabel: '📤 Quét Bàn Giao',
+          buttonColor: 'bg-emerald-600 hover:bg-emerald-500',
+        }
+      : {}),
+  }
   const targetTruck = dockTrucks.find((t) => t.id === activeScanDockTruckId) || dockTrucks[0]
 
   const dynamicPlaceholder =
-    stationTab === 'SORTING_LINEHAUL' && dockTrucks.length > 0 && directScanMode && targetTruck
+    stationTab === 'SORTING_LINEHAUL' && isSocStation && dockTrucks.length > 0 && directScanMode && targetTruck
       ? `🔫 Bắn súng quét PDA liên thanh nạp thẳng vào Xe [${targetTruck.truckNumber}]...`
       : currentCfg.placeholder
 
   const dynamicButtonLabel =
-    stationTab === 'SORTING_LINEHAUL' && dockTrucks.length > 0 && directScanMode && targetTruck
+    stationTab === 'SORTING_LINEHAUL' && isSocStation && dockTrucks.length > 0 && directScanMode && targetTruck
       ? `⚡ Bắn Lên Xe [${targetTruck.truckNumber}]`
       : currentCfg.buttonLabel
 
   const dynamicButtonColor =
-    stationTab === 'SORTING_LINEHAUL' && dockTrucks.length > 0 && directScanMode
+    stationTab === 'SORTING_LINEHAUL' && isSocStation && dockTrucks.length > 0 && directScanMode
       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500'
       : currentCfg.buttonColor
 
@@ -128,8 +143,8 @@ export const HubScannerBar: React.FC<HubScannerBarProps> = ({
         </div>
       )}
 
-      {/* Chế độ Bắn Hàng Trực Tiếp Lên Xe Tuyến (Tab 2: SORTING_LINEHAUL) */}
-      {stationTab === 'SORTING_LINEHAUL' && dockTrucks.length > 0 && (
+      {/* Chế độ Bắn Hàng Trực Tiếp Lên Xe Tuyến (Tab 2: SORTING_LINEHAUL - Chỉ dành cho SOC) */}
+      {stationTab === 'SORTING_LINEHAUL' && isSocStation && dockTrucks.length > 0 && (
         <div className="p-3 bg-gradient-to-r from-sky-50 via-indigo-50 to-sky-50 border-2 border-sky-300 rounded-2xl space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs font-black text-sky-950">
