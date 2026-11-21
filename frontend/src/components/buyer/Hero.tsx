@@ -124,7 +124,7 @@ export const Hero: React.FC = () => {
       {/* Banner Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Carousel Banner (Khung 1) */}
-        <div className="lg:col-span-8 relative aspect-[21/9] sm:aspect-[21/8] lg:h-[320px] rounded-2xl overflow-hidden group shadow-sm border border-slate-200/50 bg-slate-50 select-none">
+        <div className="lg:col-span-8 relative aspect-[21/9] sm:aspect-[21/8] lg:aspect-auto lg:h-[320px] rounded-2xl overflow-hidden group shadow-sm border border-slate-200/50 bg-slate-50 select-none">
           {effectiveSlides.map((slide, idx) => (
             <div
               key={slide.id || idx}
@@ -211,11 +211,11 @@ export const Hero: React.FC = () => {
         </div>
 
         {/* Right Column: Stacked Banners (Khung 2 & 3) */}
-        <div className="lg:col-span-4 flex lg:flex-col gap-4 h-full">
+        <div className="lg:col-span-4 flex flex-col gap-4 lg:h-[320px]">
           {/* Sub banner 1 (Khung 2) */}
           <div
             onClick={() => handleBannerClick(sideTopBanner?.linkUrl || '/vouchers')}
-            className="flex-1 aspect-[21/9] lg:aspect-auto lg:h-[152px] rounded-2xl overflow-hidden relative shadow-sm border border-slate-200/50 bg-slate-50 group cursor-pointer"
+            className="relative flex-1 min-h-0 w-full h-[152px] lg:h-auto rounded-2xl overflow-hidden shadow-sm border border-slate-200/50 bg-slate-50 group cursor-pointer"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-black/55 to-transparent z-10 flex flex-col justify-center p-5 text-left text-white space-y-1">
               <span className="text-[9px] font-extrabold text-teal-300 tracking-wider uppercase">
@@ -231,14 +231,14 @@ export const Hero: React.FC = () => {
             <img
               src={sideTopBanner?.imageUrl || 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=400&auto=format&fit=crop&q=80'}
               alt={sideTopBanner?.title || 'Sub Banner 1'}
-              className="w-full h-full object-cover group-hover:scale-102 transition duration-300"
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition duration-300"
             />
           </div>
 
           {/* Sub banner 2 (Khung 3) */}
           <div
             onClick={() => handleBannerClick(sideBottomBanner?.linkUrl || '/category/thiet-bi-dien-tu')}
-            className="flex-1 aspect-[21/9] lg:aspect-auto lg:h-[152px] rounded-2xl overflow-hidden relative shadow-sm border border-slate-200/50 bg-slate-50 group cursor-pointer"
+            className="relative flex-1 min-h-0 w-full h-[152px] lg:h-auto rounded-2xl overflow-hidden shadow-sm border border-slate-200/50 bg-slate-50 group cursor-pointer"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-black/55 to-transparent z-10 flex flex-col justify-center p-5 text-left text-white space-y-1">
               <span className="text-[9px] font-extrabold text-emerald-300 tracking-wider uppercase">
@@ -254,7 +254,7 @@ export const Hero: React.FC = () => {
             <img
               src={sideBottomBanner?.imageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&auto=format&fit=crop&q=80'}
               alt={sideBottomBanner?.title || 'Sub Banner 2'}
-              className="w-full h-full object-cover group-hover:scale-102 transition duration-300"
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition duration-300"
             />
           </div>
         </div>

@@ -142,11 +142,13 @@ export const FlashSale: React.FC<FlashSaleProps> = ({ products, onSelectProduct 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="text-xl">⚡</span>
-            <span className="text-lg font-black text-orange-600 italic tracking-tight">FLASH SALE</span>
+            <span className="text-lg font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-800 bg-clip-text text-transparent italic tracking-tight">
+              FLASH SALE
+            </span>
           </div>
 
           {activeSlot?.timeSlot && (
-            <span className="bg-orange-50 text-orange-700 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-full border border-orange-200">
+            <span className="bg-emerald-50 text-emerald-800 font-extrabold text-[10px] uppercase px-2.5 py-0.5 rounded-full border border-emerald-200">
               {activeSlot.timeSlot}
             </span>
           )}
@@ -187,7 +189,7 @@ export const FlashSale: React.FC<FlashSaleProps> = ({ products, onSelectProduct 
               <div
                 key={p.id}
                 onClick={() => onSelectProduct(p)}
-                className="group bg-white border border-slate-200/80 hover:border-orange-500/50 rounded-2xl overflow-hidden shadow-2xs hover:shadow-lg hover:-translate-y-1 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between cursor-pointer"
+                className="group bg-white border border-slate-200/80 hover:border-emerald-500/50 rounded-2xl overflow-hidden shadow-2xs hover:shadow-lg hover:-translate-y-1 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between cursor-pointer"
               >
                 {/* Product Image */}
                 <div className="relative aspect-square w-full bg-slate-50 overflow-hidden">
@@ -208,7 +210,7 @@ export const FlashSale: React.FC<FlashSaleProps> = ({ products, onSelectProduct 
                   
                   {/* Modern Discount Tag */}
                   {discountPct > 0 && !isOutOfStock && (
-                    <div className="absolute top-2 right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow-sm">
+                    <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md shadow-sm">
                       -{discountPct}%
                     </div>
                   )}
@@ -216,22 +218,22 @@ export const FlashSale: React.FC<FlashSaleProps> = ({ products, onSelectProduct 
 
                 {/* Product Info */}
                 <div className="p-3.5 space-y-3 flex-1 flex flex-col justify-between">
-                  <h3 className="text-[11px] font-semibold text-slate-700 leading-snug line-clamp-3 min-h-[48px] group-hover:text-orange-600 transition" title={p.name}>
+                  <h3 className="text-[11px] font-semibold text-slate-700 leading-snug line-clamp-3 min-h-[48px] group-hover:text-emerald-700 transition" title={p.name}>
                     {p.name}
                   </h3>
                   
                   <div className="space-y-2">
                     <div className="flex items-baseline flex-wrap gap-1.5">
-                      <span className="text-sm font-black text-orange-600">{p.flashPrice}</span>
+                      <span className="text-sm font-black text-emerald-700">{p.flashPrice}</span>
                       {p.originalPrice && p.originalPrice !== p.flashPrice && (
                         <span className="text-[10px] text-slate-400 line-through font-medium">{p.originalPrice}</span>
                       )}
                     </div>
 
                     {/* Stock sold bar */}
-                    <div className="relative w-full h-3 bg-orange-50 rounded-full overflow-hidden text-center flex items-center justify-center border border-orange-100">
+                    <div className="relative w-full h-3 bg-emerald-50 rounded-full overflow-hidden text-center flex items-center justify-center border border-emerald-100">
                       <div
-                        className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${isOutOfStock ? 'bg-slate-400' : 'bg-gradient-to-r from-orange-400 to-red-500'}`}
+                        className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${isOutOfStock ? 'bg-slate-400' : 'bg-gradient-to-r from-emerald-500 to-teal-500'}`}
                         style={{ width: `${isOutOfStock ? 100 : Math.max(pct, 12)}%` }}
                       ></div>
                       <span className="relative z-10 text-[8px] font-black uppercase select-none leading-none pt-0.5 text-white drop-shadow-xs">

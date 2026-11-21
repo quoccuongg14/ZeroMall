@@ -157,11 +157,11 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
   }
 
   return (
-    <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-orange-500/10 mb-8 overflow-hidden relative selection:bg-white selection:text-orange-600 text-left">
+    <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-950 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-emerald-950/20 mb-8 overflow-hidden relative selection:bg-white selection:text-emerald-700 text-left">
       
       {/* Background Glow Decorations */}
       <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-16 -left-16 w-56 h-56 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-16 -left-16 w-56 h-56 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
 
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/20 relative z-10">
@@ -174,11 +174,11 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
               <h2 className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
                 Khung Giờ Vàng Săn Voucher
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-white text-orange-600 shadow-3xs animate-pulse">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 shadow-3xs animate-pulse">
                 FCFS Nhanh Tay
               </span>
             </div>
-            <p className="text-xs text-amber-100 font-semibold mt-0.5">
+            <p className="text-xs text-emerald-100/90 font-semibold mt-0.5">
               Bấm <strong>"Lưu Vào Ví"</strong> ngay để giữ chỗ • Khi thanh toán, <strong>ai chốt đơn trước được áp dụng trước</strong>!
             </p>
           </div>
@@ -187,7 +187,7 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
         {/* Khung Giờ & Đồng Hồ Đếm Ngược */}
         <div className="flex items-center gap-3 bg-black/25 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15 shrink-0">
           <div className="text-left">
-            <div className="text-[10px] font-black uppercase text-amber-200 tracking-wider">
+            <div className="text-[10px] font-black uppercase text-emerald-200 tracking-wider">
               Khung giờ tiếp theo
             </div>
             <div className="font-mono text-base font-black text-white tracking-widest">
@@ -210,13 +210,13 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
               key={slot.time}
               className={`py-2 px-3 rounded-xl text-center border transition-all ${
                 isCurrent
-                  ? 'bg-white text-orange-700 border-white shadow-md font-black scale-102'
-                  : 'bg-white/10 text-white/80 border-white/10 font-bold'
+                  ? 'bg-white text-emerald-900 border-white shadow-md font-black scale-102'
+                  : 'bg-white/10 text-white/80 border-white/10 font-bold hover:bg-white/15'
               }`}
             >
               <div className="text-xs font-black">{slot.label}</div>
               <div className="text-[10px] opacity-80 mt-0.5">
-                {isCurrent ? '🔥 Đang Diễn Ra' : 'Sắp Mở'}
+                {isCurrent ? '⚡ Đang Diễn Ra' : 'Sắp Mở'}
               </div>
             </div>
           );
@@ -239,7 +239,7 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
               {/* Top Row: Tag & Code */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-orange-100 text-orange-700">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
                     Sàn Trợ Giá
                   </span>
                   <span className="font-mono font-black text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
@@ -248,7 +248,7 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                 </div>
 
                 {/* Discount Value */}
-                <div className="text-xl font-black text-rose-600 tracking-tight">
+                <div className="text-xl font-black text-emerald-600 tracking-tight">
                   Giảm {v.type === 'percentage' ? `${v.value}%` : `${Number(v.value).toLocaleString('vi-VN')}₫`}
                   {v.maxDiscount ? ` (Tối đa ${Number(v.maxDiscount).toLocaleString('vi-VN')}₫)` : ''}
                 </div>
@@ -275,7 +275,7 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                         <span>Đã dùng <strong>{v.usedCount}/{v.usageLimit}</strong> ({usagePercent}%)</span>
                       )}
                     </span>
-                    <span className="text-orange-600 font-black">
+                    <span className="text-emerald-700 font-black">
                       {isExhausted ? 'HẾT' : 'FCFS'}
                     </span>
                   </div>
@@ -297,7 +297,7 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                   className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-3xs ${
                     isClaimed
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
-                      : 'bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-600 hover:to-rose-700 text-white shadow-orange-500/20 active:scale-98'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/20 active:scale-98'
                   }`}
                 >
                   {isClaiming ? (
