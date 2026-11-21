@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Product, VariationGroup, VariationRow } from '../FlashSale'
+import { isFashionProduct } from '../ai/tryon/tryonUtils'
 
 interface ProductPurchasePanelProps {
   product: Product
@@ -52,16 +53,7 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
   onOpenTryOnModal
 }) => {
   const navigate = useNavigate()
-  const isFashion = Boolean(
-    (product.category || '').toLowerCase().includes('thời trang') ||
-    (product.category || '').toLowerCase().includes('giày dép') ||
-    (product.category || '').toLowerCase().includes('túi ví') ||
-    (product.category || '').toLowerCase().includes('phụ kiện') ||
-    (product.category || '').toLowerCase().includes('đồng hồ') ||
-    ['áo', 'quần', 'váy', 'đầm', 'jean', 'jogger', 'bomber', 'jacket', 'sơ mi', 'thun', 'hoodie', 'blazer', 'polo', 'yếm', 'short', 'giày', 'sneaker', 'dép', 'sandal', 'boot', 'túi', 'ví', 'nón', 'mũ', 'đồng hồ'].some((k) =>
-      (product.name || '').toLowerCase().includes(k)
-    )
-  )
+  const isFashion = isFashionProduct(product)
   const variationGroups: VariationGroup[] = product.variationGroups && product.variationGroups.length > 0
     ? product.variationGroups
     : (product.variants && product.variants.length > 0 ? [{ name: 'Phân loại', options: product.variants }] : [])

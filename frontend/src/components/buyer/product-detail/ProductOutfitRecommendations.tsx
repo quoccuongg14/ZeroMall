@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { TRYON_SERVICE_URL } from '../../../config/api.config'
 import type { Product } from '../FlashSale'
 import { ProductOutfitModal, type ScoredOutfitBundle, type OutfitItem } from './ProductOutfitModal'
+import { isFashionProduct } from '../ai/tryon/tryonUtils'
 
 // Re-export types for backward compatibility
 export type { ScoredOutfitBundle, OutfitItem }
@@ -21,17 +22,8 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
 
-  // Kiểm tra sản phẩm có phải thời trang
-  const isFashion = Boolean(
-    (product.category || '').toLowerCase().includes('thời trang') ||
-    (product.category || '').toLowerCase().includes('giày dép') ||
-    (product.category || '').toLowerCase().includes('túi ví') ||
-    (product.category || '').toLowerCase().includes('phụ kiện') ||
-    (product.category || '').toLowerCase().includes('đồng hồ') ||
-    ['áo', 'quần', 'váy', 'đầm', 'jean', 'jogger', 'bomber', 'jacket', 'sơ mi', 'thun', 'hoodie', 'blazer', 'polo', 'yếm', 'short', 'giày', 'sneaker', 'dép', 'sandal', 'boot', 'túi', 'ví', 'nón', 'mũ', 'đồng hồ'].some((k) =>
-      (product.name || '').toLowerCase().includes(k)
-    )
-  )
+  // Kiểm tra sản phẩm có phải thời trang (loại trừ điện thoại, phụ kiện công nghệ, đồ gia dụng...)
+  const isFashion = isFashionProduct(product)
 
   useEffect(() => {
     if (!product || !isFashion) {

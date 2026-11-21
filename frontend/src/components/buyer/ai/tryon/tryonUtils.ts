@@ -5,16 +5,54 @@ export const formatDisplayPrice = formatCurrencyVND
 // Các danh mục và sản phẩm phi thời trang (Điện tử, Gia dụng, Sách, Mỹ phẩm, v.v.)
 export const NON_FASHION_CATS = [
   'gia-dung', 'gia dụng', 'may-anh', 'máy ảnh', 'may-tinh-laptop', 'máy tính',
-  'dien-thoai-phu-kien', 'điện thoại', 'thiet-bi-dien-tu', 'thiết bị điện tử',
-  'sach-vpp', 'sách', 'me-va-be', 'mẹ & bé', 'sac-dep', 'sắc đẹp', 'suc-khoe', 'sức khỏe'
+  'dien-thoai-phu-kien', 'điện thoại', 'dien thoai', 'thiet-bi-dien-tu', 'thiết bị điện tử',
+  'sach-vpp', 'sách', 'me-va-be', 'mẹ & bé', 'sac-dep', 'sắc đẹp', 'suc-khoe', 'sức khỏe',
+  'oto-xe-may', 'ô tô', 'xe máy', 'the-thao-da-ngoai', 'bach-hoa', 'bách hóa', 'dien-may'
 ]
 
 export const NON_FASHION_WORDS = [
   'bàn là', 'bàn ủi', 'nồi cơm', 'nồi chiên', 'máy giặt', 'tủ lạnh', 'bếp điện', 'bếp từ', 'chảo chống dính',
-  'điện thoại', 'máy tính', 'laptop', 'màn hình', 'chuột máy tính', 'chuột gaming', 'bàn phím', 'cáp sạc', 'sạc dự phòng',
+  'điện thoại', 'máy tính', 'laptop', 'màn hình', 'chuột máy tính', 'chuột gaming', 'bàn phím',
+  'cáp sạc', 'sạc dự phòng', 'củ sạc', 'dây sạc', 'tai nghe', 'loa bluetooth', 'cường lực', 'ốp lưng', 'op lung', 'bao da',
+  'giá đỡ điện thoại', 'hub chuyển', 'adapter', 'webcam', 'mic thu âm',
   'son môi', 'kem dưỡng', 'serum', 'sữa rửa mặt', 'nước hoa', 'dầu gội', 'sữa tắm', 'phấn phủ',
   'sách giáo khoa', 'tiểu thuyết', 'vở viết', 'bút bi', 'tã bỉm', 'sữa bột'
 ]
+
+// Hàm kiểm tra nghiêm ngặt xem một sản phẩm có phải là sản phẩm thời trang hay không
+export const isFashionProduct = (product: any): boolean => {
+  if (!product) return false
+  const cat = (product.category || '').toLowerCase().trim()
+  const slug = (product.categoryRef?.slug || '').toLowerCase().trim()
+  const name = ' ' + (product.name || '').toLowerCase().trim() + ' '
+
+  // 1. Blacklist tuyệt đối: Nếu danh mục hoặc tên chứa từ khóa phi thời trang
+  if (NON_FASHION_CATS.some(c => cat.includes(c) || slug.includes(c))) {
+    return false
+  }
+  if (NON_FASHION_WORDS.some(w => name.includes(w))) {
+    return false
+  }
+
+  // 2. Whitelist: Kiểm tra danh mục thời trang thực thụ
+  const isFashionCat = [
+    'thời trang', 'thoi-trang', 'thoi trang',
+    'giày dép', 'giay-dep', 'giay dep',
+    'túi ví', 'tui-vi', 'tui vi',
+    'phụ kiện thời trang', 'phu-kien-thoi-trang', 'trang sức', 'trang-suc'
+  ].some(c => cat.includes(c) || slug.includes(c))
+
+  // 3. Whitelist: Kiểm tra từ khóa trang phục rõ ràng trong tên
+  const isFashionName = [
+    'áo', 'ao ', 'quần', 'quan ', 'váy', 'đầm', 'jean', 'jogger', 'bomber', 'jacket',
+    'sơ mi', 'thun', 'hoodie', 'blazer', 'polo', 'yếm', 'short', 'croptop', 'cardigan',
+    'giày', 'sneaker', 'dép', 'sandal', 'boot', 'guốc',
+    'túi xách', 'túi đeo', 'túi tote', 'ví nữ', 'ví nam', 'balo', 'ba lô', 'clutch',
+    'nón', 'mũ', 'thắt lưng', 'dây nịt', 'kính râm', 'kính mát', 'khuyên tai', 'bông tai', 'vòng cổ', 'dây chuyền', 'lắc tay'
+  ].some(k => name.includes(k))
+
+  return isFashionCat || isFashionName || detectItemSlot(product) !== null
+}
 
 // Tính toán BMI và phân loại thể hình theo chuẩn nhân trắc học
 export const getBodyPhysiqueInfo = (bmiVal: number) => {
@@ -78,9 +116,10 @@ export const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory'
     return null
   }
 
-  // 1. MŨ NÓN & PHỤ KIỆN & TRANG SỨC & TÚI VÍ (Accessories)
-  const isAccCat = slug.includes('phu-kien') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
-                   cat.includes('phụ kiện') || cat.includes('túi ví') || cat.includes('đồng hồ')
+  // 1. MŨ NÓN & PHỤ KIỆN THỜI TRANG & TRANG SỨC & TÚI VÍ (Accessories)
+  const isAccCat = slug.includes('phu-kien-thoi-trang') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
+                   cat.includes('phụ kiện thời trang') || cat.includes('túi ví') || cat.includes('đồng hồ') ||
+                   (cat.includes('phụ kiện') && !cat.includes('điện thoại') && !cat.includes('máy tính') && !cat.includes('xe') && !cat.includes('công nghệ'))
   const isAccWords = [
     'mũ', 'nón', 'cap', 'beanie', 'snapback', 'bucket', 'beret',
     'kính', 'gọng kính', 'kính râm', 'kính mát', 'tròng kính',
