@@ -52,7 +52,7 @@ export interface Shipment {
   status: string
   createdAt: string
   currentHubId?: string
-  currentHub?: { id?: string; name: string; code: string }
+  currentHub?: { id?: string; name: string; code: string; type?: string }
   package?: PackageInfo
   assignments?: Assignment[]
   trackingLogs: TrackingLog[]

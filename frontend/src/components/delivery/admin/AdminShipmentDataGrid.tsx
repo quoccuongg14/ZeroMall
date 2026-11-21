@@ -12,6 +12,137 @@ const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
 
 type TimePreset = 'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'
 
+// Helper trích xuất lộ trình (Kho Gửi ➔ Kho/Khu Vực Nhận)
+const extractRouteInfo = (s: Shipment) => {
+  const originProvince = s.pickupAddress?.province || ''
+  const originDistrict = s.pickupAddress?.district || ''
+  const originName = s.pickupAddress?.name || ''
+  const originShort = (originProvince || originDistrict || originName || 'Kho Shop')
+    .replace('Tỉnh ', '')
+    .replace('Thành phố ', 'TP. ')
+
+  const parts = (s.deliveryAddress || '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  const destCity = parts[parts.length - 1] || 'Đích đến'
+  const destDistrict = parts.length >= 2 ? parts[parts.length - 2] : ''
+  const destShort = destCity.replace('Thành phố ', 'TP. ').replace('Tỉnh ', '')
+
+  return {
+    originShort,
+    destShort,
+    destDistrict,
+    destCity,
+    routeBadge: `${originShort} ➔ ${destShort}`,
+  }
+}
+
+// Helper phân biệt chính xác vai trò Shipper & Phương tiện theo từng giai đoạn
+const extractDispatchInfo = (s: Shipment) => {
+  const pickupAsn = s.assignments?.find((a) => a.type === 'PICKUP')
+  const deliveryAsn = s.assignments?.find((a) => a.type === 'DELIVERY')
+
+  if (['CREATED', 'WAITING_PICKUP'].includes(s.status)) {
+    return {
+      title: 'Chờ điều phối lấy hàng tại Shop',
+      sub: 'Chưa có tài xế nhận đơn',
+      icon: '⏳',
+      color: 'text-slate-500',
+    }
+  }
+
+  if (s.status === 'PICKUP_ASSIGNED') {
+    return {
+      title: `Shipper lấy: ${pickupAsn?.driver?.name || 'Tài xế'}`,
+      sub: `Xe: ${pickupAsn?.driver?.vehicleNumber || 'Xe máy'} • Đang đến kho Shop`,
+      icon: '🛵',
+      color: 'text-amber-700',
+    }
+  }
+
+  if (s.status === 'PICKED_UP') {
+    return {
+      title: `Đã lấy bởi: ${pickupAsn?.driver?.name || 'Shipper'}`,
+      sub: `Xe: ${pickupAsn?.driver?.vehicleNumber || 'Xe máy'} • Đang chuyển về ${s.currentHub?.name || 'Bưu cục gửi'}`,
+      icon: '📥',
+      color: 'text-amber-700',
+    }
+  }
+
+  if (['AT_ORIGIN_HUB', 'SORTING'].includes(s.status)) {
+    const isSoc = s.currentHub?.type === 'SORTING_CENTER'
+    return {
+      title: `Tại trung tâm: ${s.currentHub?.name || 'Kho xuất phát'}`,
+      sub: isSoc ? '⚡ Băng chuyền DWS đang phân loại' : '🏢 Lưu kho chờ đóng xe tải đi SOC',
+      icon: isSoc ? '🏭' : '🏢',
+      color: 'text-sky-700',
+    }
+  }
+
+  if (s.status === 'IN_TRANSIT') {
+    return {
+      title: 'Đang trên xe tải tuyến (Linehaul)',
+      sub: `Vận chuyển trung chuyển liên tỉnh ➔ ${s.currentHub?.name || 'Kho đích'}`,
+      icon: '🚛',
+      color: 'text-indigo-700',
+    }
+  }
+
+  if (s.status === 'AT_DESTINATION_HUB') {
+    return {
+      title: `Đã cập bến: ${s.currentHub?.name || 'Bưu cục phát'}`,
+      sub: 'Kiện đã nhập kho, chờ chia tuyến shipper',
+      icon: '🏢',
+      color: 'text-indigo-700',
+    }
+  }
+
+  if (s.status === 'DELIVERY_ASSIGNED') {
+    return {
+      title: `Đã gán Shipper phát: ${deliveryAsn?.driver?.name || 'Tài xế'}`,
+      sub: `Xe: ${deliveryAsn?.driver?.vehicleNumber || 'Xe máy'} • Chờ xuất ca đi giao`,
+      icon: '🛵',
+      color: 'text-orange-700',
+    }
+  }
+
+  if (s.status === 'OUT_FOR_DELIVERY') {
+    return {
+      title: `Shipper giao: ${deliveryAsn?.driver?.name || 'Tài xế'}`,
+      sub: `Xe: ${deliveryAsn?.driver?.vehicleNumber || 'Xe máy'} • Đang phát tận nhà`,
+      icon: '🛵',
+      color: 'text-orange-700',
+    }
+  }
+
+  if (['DELIVERED', 'COMPLETED'].includes(s.status)) {
+    const driverName = deliveryAsn?.driver?.name || pickupAsn?.driver?.name || 'Shipper ZMX'
+    const vehicle = deliveryAsn?.driver?.vehicleNumber || pickupAsn?.driver?.vehicleNumber || ''
+    return {
+      title: `Đã giao thành công bởi: ${driverName}`,
+      sub: vehicle ? `Biển số xe: ${vehicle} • Đã ký nhận POD` : 'Đã ký nhận POD',
+      icon: '✅',
+      color: 'text-emerald-700',
+    }
+  }
+
+  if (['DELIVERY_FAILED', 'RETURNING', 'RETURNED'].includes(s.status)) {
+    return {
+      title: s.status === 'DELIVERY_FAILED' ? 'Phát không thành công' : 'Đang chuyển hoàn về Shop',
+      sub: deliveryAsn?.driver?.name ? `Báo cáo bởi: ${deliveryAsn.driver.name}` : 'Đang điều phối xử lý',
+      icon: '⚠️',
+      color: 'text-rose-700',
+    }
+  }
+
+  return {
+    title: 'Đang xử lý vận đơn',
+    icon: '📦',
+    color: 'text-slate-500',
+  }
+}
+
 export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
   shipments,
   onSelectShipment,
@@ -85,7 +216,7 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
         }
       }
 
-      // D. Lọc theo từ khóa tìm kiếm
+      // D. Lọc theo từ khóa tìm kiếm (hỗ trợ tìm cả tỉnh thành, quận huyện đích)
       if (search.trim()) {
         const q = search.toLowerCase()
         return (
@@ -93,7 +224,8 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
           s.orderId.toLowerCase().includes(q) ||
           (s.buyerName && s.buyerName.toLowerCase().includes(q)) ||
           (s.buyerPhone && s.buyerPhone.includes(q)) ||
-          (s.deliveryAddress && s.deliveryAddress.toLowerCase().includes(q))
+          (s.deliveryAddress && s.deliveryAddress.toLowerCase().includes(q)) ||
+          (s.pickupAddress?.province && s.pickupAddress.province.toLowerCase().includes(q))
         )
       }
 
@@ -101,7 +233,7 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
     })
   }, [shipments, statusFilter, codFilter, timePreset, customStartDate, customEndDate, search])
 
-  // Reset trang về 1 khi bộ lọc thay đổi
+  // Phân trang an toàn
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPageSafe = Math.min(currentPage, totalPages)
 
@@ -126,13 +258,13 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
     { id: 'YESTERDAY', label: 'Hôm Qua' },
     { id: 'LAST_7_DAYS', label: '7 Ngày Qua' },
     { id: 'THIS_MONTH', label: 'Tháng Này' },
-    { id: 'CUSTOM', label: '📅 Tùy Chọn Khoảng Ngày' },
+    { id: 'CUSTOM', label: '📅 Tùy Chọn Ngày' },
   ]
 
   return (
     <div className="space-y-4 text-left animate-in fade-in duration-150">
-      {/* 1. Header Toolbar: Filters & Search */}
-      <div className="bg-white border border-slate-200/90 rounded-3xl p-4.5 shadow-sm space-y-3.5">
+      {/* 1. Header Toolbar: Bộ lọc phân cấp tinh gọn */}
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-4 sm:p-5 shadow-sm space-y-3.5">
         {/* ROW 1: Quick Filter Status Pills */}
         <div className="flex flex-wrap gap-1.5 w-full">
           {statusPills.map((pill) => {
@@ -165,32 +297,34 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
         </div>
 
         {/* ROW 2: TIME FILTER & SEARCH & COD */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pt-2 border-t border-slate-100">
-          {/* Bộ lọc thời gian nhanh (Quick Time Presets) */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pt-3 border-t border-slate-100">
+          {/* Bộ lọc thời gian Segmented Control */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wide mr-1">
-              Thời Gian:
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wide mr-1 flex items-center gap-1">
+              <span>🕒</span> Thời Gian:
             </span>
-            {timePillConfigs.map((t) => {
-              const active = timePreset === t.id
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    setTimePreset(t.id)
-                    setCurrentPage(1)
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    active
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-600'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
+            <div className="inline-flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1 border border-slate-200/60">
+              {timePillConfigs.map((t) => {
+                const active = timePreset === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setTimePreset(t.id)
+                      setCurrentPage(1)
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      active
+                        ? 'bg-white text-indigo-700 shadow-2xs font-black'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Search box & COD filter */}
@@ -209,7 +343,7 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
               <option value="PREPAID">Đã Thanh Toán Trước</option>
             </select>
 
-            <div className="w-full sm:w-64 relative">
+            <div className="w-full sm:w-72 relative">
               <input
                 type="text"
                 value={search}
@@ -217,7 +351,7 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
                   setSearch(e.target.value)
                   setCurrentPage(1)
                 }}
-                placeholder="Lọc mã đơn, người nhận, SĐT..."
+                placeholder="Lọc mã đơn, người nhận, SĐT, tỉnh thành..."
                 className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600"
               />
               {search && (
@@ -235,7 +369,7 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
 
         {/* ROW 3: Custom Date Range Inputs (khi chọn CUSTOM) */}
         {timePreset === 'CUSTOM' && (
-          <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-xs text-slate-700">
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs text-slate-700 animate-in fade-in duration-150">
             <div className="flex items-center gap-2">
               <span className="font-bold text-indigo-900">Từ Ngày:</span>
               <input
@@ -286,10 +420,10 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4">Mã Vận Đơn</th>
-                <th className="py-3 px-4">Người Nhận / Địa Chỉ</th>
+                <th className="py-3 px-4">Người Nhận & Tuyến Đường</th>
                 <th className="py-3 px-4">Kiện Hàng / Cước</th>
                 <th className="py-3 px-4">Tiền COD</th>
-                <th className="py-3 px-4">Trạng Thái & Shipper</th>
+                <th className="py-3 px-4">Trạng Thái & Điều Phối</th>
                 <th className="py-3 px-4 text-right">Thao Tác</th>
               </tr>
             </thead>
@@ -308,31 +442,53 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
                 </tr>
               ) : (
                 paginatedShipments.map((s) => {
-                  const latestAssignment = s.assignments && s.assignments[0]
+                  const route = extractRouteInfo(s)
+                  const dispatch = extractDispatchInfo(s)
+
                   return (
                     <tr
                       key={s.id}
                       onClick={() => onSelectShipment(s)}
                       className="hover:bg-slate-50/90 transition cursor-pointer group"
                     >
-                      {/* Cột 1: Mã Vận Đơn */}
+                      {/* Cột 1: Mã Vận Đơn & Thời Gian */}
                       <td className="py-3 px-4 font-mono font-bold text-emerald-700 space-y-0.5">
-                        <div className="text-sm group-hover:underline">{s.trackingNumber}</div>
+                        <div className="text-sm group-hover:underline text-emerald-800 font-black">
+                          {s.trackingNumber}
+                        </div>
                         <div className="text-[11px] text-slate-400 font-normal font-sans">
                           Đơn: #{s.orderId}
                         </div>
                         <div className="text-[10px] text-slate-400 font-normal font-sans">
-                          {new Date(s.createdAt).toLocaleString('vi-VN')}
+                          🕒 {new Date(s.createdAt).toLocaleString('vi-VN')}
                         </div>
                       </td>
 
-                      {/* Cột 2: Người Nhận */}
-                      <td className="py-3 px-4 space-y-0.5 max-w-xs">
-                        <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                          <span>{s.buyerName}</span>
-                          <span className="text-slate-500 font-normal text-xs">({s.buyerPhone})</span>
+                      {/* Cột 2: Người Nhận & Tuyến Đường Rõ Ràng */}
+                      <td className="py-3 px-4 space-y-1 min-w-[240px] max-w-sm">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-extrabold text-slate-900 text-sm">
+                            {s.buyerName}
+                          </span>
+                          <span className="text-slate-500 font-mono text-xs">({s.buyerPhone})</span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            📍 {route.routeBadge}
+                          </span>
                         </div>
-                        <div className="text-xs text-slate-600 line-clamp-1 leading-relaxed">
+
+                        {/* Điểm nhận khu vực nổi bật */}
+                        <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                          <span className="text-emerald-600">🎯</span>
+                          <span>
+                            {route.destDistrict ? `${route.destDistrict}, ` : ''}{route.destCity}
+                          </span>
+                        </div>
+
+                        {/* Địa chỉ chi tiết */}
+                        <div
+                          className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed"
+                          title={s.deliveryAddress}
+                        >
                           {s.deliveryAddress}
                         </div>
                       </td>
@@ -350,14 +506,14 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
                       {/* Cột 4: COD */}
                       <td className="py-3 px-4 font-mono font-bold text-sm">
                         {s.codAmount > 0 ? (
-                          <span className="text-emerald-700">{formatMoney(s.codAmount)}</span>
+                          <span className="text-emerald-700 font-black">{formatMoney(s.codAmount)}</span>
                         ) : (
                           <span className="text-slate-400 text-xs font-normal">Đã TT</span>
                         )}
                       </td>
 
-                      {/* Cột 5: Trạng Thái */}
-                      <td className="py-3 px-4 space-y-1">
+                      {/* Cột 5: Trạng Thái & Điều Phối Chuẩn Giai Đoạn */}
+                      <td className="py-3 px-4 space-y-1.5 min-w-[220px]">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold ${
                             s.status.includes('PICK')
@@ -376,22 +532,27 @@ export const AdminShipmentDataGrid: React.FC<AdminShipmentDataGridProps> = ({
                           {s.status === 'CREATED' && 'Mới Tạo'}
                           {s.status === 'WAITING_PICKUP' && 'Chờ Lấy Hàng'}
                           {s.status === 'PICKUP_ASSIGNED' && 'Đã Gán Lấy Hàng'}
-                          {s.status === 'PICKED_UP' && 'Đã Lấy Hàng'}
+                          {s.status === 'PICKED_UP' && 'Đã Lấy Hàng (First-Mile)'}
                           {s.status === 'AT_ORIGIN_HUB' && 'Tại Kho Xuất Phát'}
                           {s.status === 'SORTING' && 'Đang Phân Loại'}
-                          {s.status === 'IN_TRANSIT' && 'Đang Trung Chuyển'}
+                          {s.status === 'IN_TRANSIT' && 'Đang Trung Chuyển (Linehaul)'}
                           {s.status === 'AT_DESTINATION_HUB' && 'Đã Đến Kho Phát'}
-                          {s.status === 'DELIVERY_ASSIGNED' && 'Chờ Shipper Nhận'}
-                          {s.status === 'OUT_FOR_DELIVERY' && 'Đang Giao Hàng'}
+                          {s.status === 'DELIVERY_ASSIGNED' && 'Chờ Shipper Nhận Phát'}
+                          {s.status === 'OUT_FOR_DELIVERY' && 'Đang Giao Hàng (Last-Mile)'}
                           {s.status === 'DELIVERED' && 'Giao Thành Công'}
                           {s.status === 'DELIVERY_FAILED' && 'Giao Thất Bại'}
                         </span>
 
-                        {latestAssignment && (
-                          <div className="text-[11px] text-slate-500">
-                            🛵 Shipper: <b>{latestAssignment.driver.name}</b> ({latestAssignment.driver.vehicleNumber})
+                        {/* Chi tiết điều phối chính xác */}
+                        <div className="text-[11px] leading-tight space-y-0.5">
+                          <div className={`font-bold flex items-center gap-1 ${dispatch.color}`}>
+                            <span>{dispatch.icon}</span>
+                            <span>{dispatch.title}</span>
                           </div>
-                        )}
+                          {dispatch.sub && (
+                            <div className="text-[10px] text-slate-400 pl-4">{dispatch.sub}</div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Cột 6: Thao Tác */}
