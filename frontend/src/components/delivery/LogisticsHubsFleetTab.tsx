@@ -35,6 +35,9 @@ interface Hub {
 interface LogisticsHubsFleetTabProps {
   triggerAuditLog?: (action: string) => Promise<void>
   initialSubView?: 'HUBS' | 'DRIVERS'
+  shipments?: any[]
+  onViewStation?: (hub: Hub) => void
+  onViewShipments?: (hub: Hub) => void
 }
 
 // Helper phân loại Hub vào Cụm Mega SOC chủ quản theo địa lý chuẩn TMĐT
@@ -54,7 +57,10 @@ export const getParentSoc = (hub: { province?: string; code?: string }) => {
 
 export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
   triggerAuditLog,
-  initialSubView = 'HUBS'
+  initialSubView = 'HUBS',
+  shipments = [],
+  onViewStation,
+  onViewShipments,
 }) => {
   const [subView, setSubView] = useState<'HUBS' | 'DRIVERS'>(initialSubView)
   const [hubTypeFilter, setHubTypeFilter] = useState<'ALL' | 'DESTINATION_HUB' | 'SORTING_CENTER'>('ALL')
@@ -851,6 +857,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                   <th className="py-3 px-4">Tên Trạm / Cơ Sở</th>
                   <th className="py-3 px-4">Phân Loại Hạ Tầng</th>
                   <th className="py-3 px-4">Vị Trí & Khu Vực</th>
+                  <th className="py-3 px-4 text-center">Tải Trọng / Kiện Hàng</th>
                   <th className="py-3 px-4 text-center">Đội Ngũ Phụ Trách</th>
                   <th className="py-3 px-4 text-center">Trạng Thái</th>
                   <th className="py-3 px-4 text-right">Quản Trị Cơ Sở</th>
@@ -859,14 +866,14 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                       <div className="inline-block w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></div>
                       <p>Đang tải dữ liệu mạng lưới bưu cục...</p>
                     </td>
                   </tr>
                 ) : filteredHubs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                       Không tìm thấy bưu cục hoặc trạm nào phù hợp với bộ lọc.
                     </td>
                   </tr>
@@ -878,6 +885,15 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                     const vanDrivers = hubDrivers.filter(d => d.vehicleType === 'VAN')
                     const truckFleet = hubDrivers.filter(d => d.vehicleType === 'TRUCK')
                     const lastMileCount = motorDrivers.length + vanDrivers.length
+
+                    // Tải trọng bưu kiện thực tế tại trạm từ CSDL
+                    const hubParcels = (shipments || []).filter(
+                      (s: any) => s.currentHubId === hub.id || s.currentHub?.code === hub.code || s.currentHub?.id === hub.id
+                    )
+                    const inStockCount = hubParcels.filter((s: any) =>
+                      ['AT_ORIGIN_HUB', 'SORTING', 'AT_DESTINATION_HUB', 'AT_SORTING_CENTER', 'SORTED', 'WAITING_PICKUP', 'ARRIVED_HUB', 'READY_TO_DISPATCH'].includes(s.status)
+                    ).length
+                    const deliveringCount = hubParcels.filter((s: any) => s.status === 'OUT_FOR_DELIVERY').length
 
                     return (
                       <tr key={hub.id} className="hover:bg-slate-50/70 transition">
@@ -898,7 +914,14 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                             <span>{isSOC ? '🏭' : '🏢'}</span>
                             <span>{hub.name}</span>
                           </div>
-                          <div className="text-[11px] text-slate-400 font-medium">ID: {hub.id}</div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="text-[10px] text-slate-400 font-mono font-medium">ID: {hub.id}</span>
+                            {!isSOC && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-50 text-sky-800 border border-sky-200">
+                                <span>🏭</span> Trực thuộc: {getParentSoc(hub).shortName}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Infrastructure Type Badge */}
@@ -928,6 +951,29 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                           <p className="text-[11px] text-slate-500 font-medium">
                             {hub.district ? `${hub.district}, ` : ''}{hub.province}
                           </p>
+                        </td>
+
+                        {/* Tải Trọng / Kiện Hàng Thực Tế */}
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => onViewShipments?.(hub)}
+                            className="inline-flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 transition cursor-pointer min-w-32 text-center"
+                            title="Nhấp để lọc danh sách vận đơn của cơ sở này"
+                          >
+                            <span className="inline-flex items-center gap-1 text-xs font-black text-slate-900">
+                              <span>📦</span> {inStockCount} kiện tồn kho
+                            </span>
+                            {deliveringCount > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 mt-0.5">
+                                <span>🛵</span> {deliveringCount} đang phát
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                                {isSOC ? 'Kho trung chuyển' : '0 kiện đang phát'}
+                              </span>
+                            )}
+                          </button>
                         </td>
 
                         {/* Drivers Assigned Breakdown */}
@@ -970,36 +1016,45 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Nút Vào Trạm Khai Thác Live */}
+                            <button
+                              onClick={() => onViewStation?.(hub)}
+                              title={`Mở trạm vận hành và máy quét của ${hub.name}`}
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs"
+                            >
+                              <span>⚡</span> Vào Trạm
+                            </button>
+
                             {isSOC ? (
                               <button
                                 onClick={() => openAddDriverModal(hub, 'TRUCK')}
                                 title="Thêm tài xế xe tải tuyến cho kho SOC"
-                                className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg transition cursor-pointer text-xs font-bold flex items-center gap-1"
+                                className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
                               >
-                                <span>🚛</span> + Xe Tải Tuyến
+                                <span>🚛</span> + Tuyến
                               </button>
                             ) : (
                               <button
                                 onClick={() => openAddDriverModal(hub, 'MOTORBIKE')}
                                 title="Thêm Shipper giao hàng cho bưu cục này"
-                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition cursor-pointer text-xs font-bold flex items-center gap-1"
+                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1"
                               >
-                                <span>➕</span> Thêm Shipper
+                                <span>➕</span> Shipper
                               </button>
                             )}
                             <button
                               onClick={() => openEditHubModal(hub)}
                               title="Chỉnh sửa thông tin cơ sở"
-                              className="p-1.5 text-slate-600 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-xs font-semibold"
+                              className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition cursor-pointer text-sm font-semibold"
                             >
-                              ✏️ Sửa
+                              ✏️
                             </button>
                             <button
                               onClick={() => handleDeleteHub(hub)}
                               title="Xóa cơ sở"
-                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer text-xs font-semibold"
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer text-sm font-semibold"
                             >
-                              🗑️ Xóa
+                              🗑️
                             </button>
                           </div>
                         </td>
