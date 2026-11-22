@@ -326,6 +326,128 @@ class GarmentFitEngine:
 # ---------------------------------------------------------------------------
 class TryOnSynthesizer:
     @classmethod
+    def build_physique_morphology(cls, height_cm: float, weight_kg: float, gender: str = "male"):
+        """
+        Phân tích chuyên sâu chỉ số nhân trắc học và sinh prompt giải phẫu cơ thể
+        đáp ứng chuẩn xác các mức cân nặng từ gầy (BMI < 18.5) đến béo phì (BMI >= 30).
+        """
+        h_m = max(1.0, float(height_cm) / 100.0)
+        bmi = float(weight_kg) / (h_m * h_m)
+        is_male = str(gender).lower() == "male"
+        gender_pronoun = "his" if is_male else "her"
+        gender_noun = "Asian man" if is_male else "Asian woman"
+
+        # Hệ số nở bề ngang cơ thể so với chuẩn BMI 22
+        w_factor = min(1.40, max(0.78, math.sqrt(bmi / 22.0)))
+
+        if bmi < 18.5:
+            physique_label = "very skinny, slender, lean ectomorph"
+            physique_desc = (
+                f"noticeably very skinny, slender, lean ectomorph physique with thin slender legs, slim arms, narrow flat waist, and a lightweight skinny frame "
+                f"(Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
+            )
+            transform_instruction = (
+                f"MANDATORY BODY MORPHOLOGY OVERRIDE: The {gender_noun} MUST have a noticeably skinny, lean, slender ectomorph body frame. "
+                f"Do not make {gender_pronoun} body muscular, bulky, or thick; distinctly show thin arms, narrow flat waist, and slim slender legs. "
+                f"Clothing must fit loosely on {gender_pronoun} thin slender frame."
+            )
+        elif bmi < 22.5:
+            physique_label = "slim, trim and toned"
+            physique_desc = (
+                f"slim, trim, lean well-proportioned toned build with slender waist and trim legs "
+                f"(Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
+            )
+            transform_instruction = (
+                f"Physique: Well-proportioned slim, trim, fit build with trim waist and natural slender posture."
+            )
+        elif bmi < 26.0:
+            physique_label = "standard healthy average"
+            physique_desc = (
+                f"standard healthy well-proportioned average build "
+                f"(Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
+            )
+            transform_instruction = (
+                f"Physique: Standard healthy well-proportioned average build."
+            )
+        elif bmi < 29.5:
+            physique_label = "solid, broad-shouldered, stout, thick muscular"
+            physique_desc = (
+                f"solid, broad-shouldered, stout, heavier thick build with broad waist, thicker torso, and muscular heavy legs "
+                f"(Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
+            )
+            transform_instruction = (
+                f"MANDATORY BODY MORPHOLOGY OVERRIDE: The {gender_noun} has a heavy, broad, stout, solid thickset body frame. "
+                f"Modify {gender_pronoun} silhouette from the reference photo: show broad thick shoulders, a thicker torso and waist, and solid heavy legs. "
+                f"Do NOT make {gender_pronoun} skinny or slender."
+            )
+        else: # BMI >= 29.5 (Ví dụ: 1m75 100kg -> BMI 32.7)
+            physique_label = "heavily overweight, plus-size, chubby, stout with prominent heavy belly"
+            physique_desc = (
+                f"noticeably overweight, plus-size, chubby, heavy, full-figured large frame with rounded prominent heavy belly, wide thick waist, thick chubby torso, and thick heavy legs "
+                f"(Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
+            )
+            transform_instruction = (
+                f"CRITICAL BODY MORPHOLOGY & WEIGHT OVERRIDE (BMI {bmi:.1f} - {weight_kg:.0f}kg at {height_cm:.0f}cm): "
+                f"The {gender_noun} MUST be rendered with a REALISTIC HEAVILY OVERWEIGHT, PLUS-SIZE, CHUBBY, STOUT BODY FRAME. "
+                f"TRANSFORM {gender_pronoun.upper()} BODY SILHOUETTE COMPLETELY: Give {gender_pronoun} a distinctly large rounded protruding heavy belly, a wide thick waistline, fuller chubby cheeks with soft jawline, stout broad torso, heavy thicker arms, and full chubby thighs and legs. "
+                f"DO NOT depict {gender_pronoun} as skinny, slender, lean, or athletic! "
+                f"The clothes (upper shirt and lower pants) MUST visibly stretch and drape over {gender_pronoun} large round belly and thick heavy body."
+            )
+
+        return {
+            "bmi": bmi,
+            "w_factor": w_factor,
+            "physique_label": physique_label,
+            "physique_desc": physique_desc,
+            "transform_instruction": transform_instruction
+        }
+
+    @classmethod
+    def smooth_morph_person_body(cls, pil_img: Image.Image, bmi: float) -> Image.Image:
+        """
+        Kéo giãn/thu nhỏ bề ngang thân người dưới cổ theo tỷ lệ BMI
+        để ảnh nạp vào mô hình AI đã mang sẵn phom dáng gầy / mập chuẩn xác.
+        """
+        try:
+            w_factor = min(1.35, max(0.80, math.sqrt(bmi / 22.0)))
+            if abs(w_factor - 1.0) < 0.04:
+                return pil_img
+
+            orig_w, orig_h = pil_img.size
+            neck_y = int(orig_h * 0.22)
+            trans_h = int(orig_h * 0.12)
+
+            max_w = int(orig_w * max(1.0, w_factor))
+            canvas = Image.new("RGB", (max_w, orig_h), (245, 247, 250))
+
+            # Giữ nguyên đầu và tóc ở giữa
+            head = pil_img.crop((0, 0, orig_w, neck_y))
+            canvas.paste(head, ((max_w - orig_w) // 2, 0))
+
+            # Vùng chuyển tiếp mượt từ cổ sang vai/ngực
+            for y in range(neck_y, neck_y + trans_h, 4):
+                progress = (y - neck_y) / float(trans_h)
+                curr_factor = 1.0 + (w_factor - 1.0) * (progress ** 1.5)
+                step_h = min(4, neck_y + trans_h - y)
+                slice_img = pil_img.crop((0, y, orig_w, y + step_h))
+                new_w = int(orig_w * curr_factor)
+                scaled_slice = slice_img.resize((new_w, step_h), Image.Resampling.BILINEAR)
+                canvas.paste(scaled_slice, ((max_w - new_w) // 2, y))
+
+            # Phần thân chính (vai, ngực, bụng, eo, hông, chân)
+            body_y = neck_y + trans_h
+            body_h = orig_h - body_y
+            if body_h > 0:
+                main_body = pil_img.crop((0, body_y, orig_w, orig_h))
+                new_w = int(orig_w * w_factor)
+                scaled_main = main_body.resize((new_w, body_h), Image.Resampling.LANCZOS)
+                canvas.paste(scaled_main, ((max_w - new_w) // 2, body_y))
+
+            return canvas.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+        except Exception as e_morph:
+            print(f"[!] Warning smooth_morph_person_body: {e_morph}")
+            return pil_img
+    @classmethod
     def run_sota_diffusion(cls, user_image_data: str, garment_url: str, category: str, garment_id: str):
         """
         SOTA Open-Source AI Diffusion Virtual Try-On Engine (CVPR 2024 VTON):
@@ -489,6 +611,15 @@ class TryOnSynthesizer:
             if person_pil is None:
                 return None
 
+            # Phân tích hình thể nhân trắc học & Nắn chỉnh phom người thích ứng
+            morph_info = cls.build_physique_morphology(height_cm, weight_kg, gender)
+            physique_desc = morph_info["physique_desc"]
+            physique_label = morph_info["physique_label"]
+            transform_instruction = morph_info["transform_instruction"]
+
+            # Áp dụng Adaptive Silhouette Morphing để nắn phom người mẫu theo BMI trước khi gửi AI
+            person_pil = cls.smooth_morph_person_body(person_pil, morph_info["bmi"])
+
             # Giới hạn kích thước chuẩn tối ưu cho Mage Mango 1K (max 1280px)
             person_pil.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
@@ -510,25 +641,6 @@ class TryOnSynthesizer:
             gender_pronoun = "his" if is_male else "her"
             identity_term = "male face and identity" if is_male else "female face and identity"
 
-            # Phân tích BMI và thể trạng vóc dáng (gầy / thon / chuẩn / đậm / mập)
-            h_m = max(1.0, float(height_cm) / 100.0)
-            bmi = float(weight_kg) / (h_m * h_m)
-            if bmi < 18.5:
-                physique_desc = f"noticeably very skinny, slender, lean ectomorph physique with thin slender legs, slim arms, narrow flat waist, and a lightweight skinny frame (Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f}). Do not make the body muscular or broad; distinctly show a skinny 50kg slender body frame."
-                physique_label = "skinny slender lean"
-            elif bmi < 22.0:
-                physique_desc = f"slim and trim, lean well-proportioned build with slender waist and trim legs (Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
-                physique_label = "slim and trim"
-            elif bmi < 25.0:
-                physique_desc = f"standard healthy well-proportioned average build (Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
-                physique_label = "standard average"
-            elif bmi < 29.0:
-                physique_desc = f"solid, broad-shouldered, stout, heavier muscular and thick build with broader waist and thicker legs (Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f})."
-                physique_label = "solid stout broad"
-            else:
-                physique_desc = f"plus-size, noticeably chubby, heavy, full-figured large frame with rounded fuller belly, wide waist, and thick heavy legs (Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {bmi:.1f}). Distinctly full-bodied and chubby physique."
-                physique_label = "plus-size chubby full-figured"
-
             # Phân tích xem ảnh người dùng tải lên có phần thân dưới (quần/chân) hay chỉ là ảnh chân dung nửa thân trên (bust/portrait)
             is_portrait = True
             if person_pil is not None and shared_parser is not None:
@@ -545,8 +657,8 @@ class TryOnSynthesizer:
                     pass
 
             body_instruction = (
-                f"Physique and body proportions: The person has a {physique_desc}. "
-                f"His body frame, arms, waist, and legs must distinctly reflect this {physique_label} build. "
+                f"{transform_instruction} "
+                f"Physique Details: {physique_desc} "
             )
 
             # Xây dựng prompt có định hướng danh mục chặt chẽ & Tùy biến vóc dáng gầy/mập theo Chiều cao, Cân nặng
@@ -925,7 +1037,11 @@ class TryOnSynthesizer:
                     if os.path.exists(cur_user_png):
                         person_pil = GarmentExtractor.load_pil_image(cur_user_png)
 
+                morph_info = cls.build_physique_morphology(height_cm, weight_kg, gender)
+
                 if person_pil is not None:
+                    # Áp dụng Adaptive Silhouette Morphing để nắn phom người mẫu theo BMI trước khi gửi AI
+                    person_pil = cls.smooth_morph_person_body(person_pil, morph_info["bmi"])
                     person_pil.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
                     buf_u = io.BytesIO()
                     person_pil.convert("RGB").save(buf_u, format="JPEG", quality=90)
@@ -965,13 +1081,14 @@ class TryOnSynthesizer:
 
                 prompt = (
                     f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, wearing a complete stylish outfit. "
+                    f"BODY MORPHOLOGY & WEIGHT OVERRIDE: {morph_info['transform_instruction']} "
+                    f"Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {morph_info['bmi']:.1f}. "
                     f"STRICT VISUAL MATCHING RULES: You must accurately replicate and transfer the exact appearance, color, fabric, pattern, and design from each reference image in additional_images: "
                     f"{', '.join(outfit_prompts)}. "
                     f"Garment positioning: The upper garment must be worn exclusively on the upper torso, the lower trousers exclusively on the legs and waist, and the footwear strictly on the feet. "
                     f"Footwear color & style rule: The shoes must strictly match the EXACT color, tone, and design of the footwear reference image (e.g., if the shoe photo is red, burgundy, or maroon, the footwear on {gender_pronoun} feet MUST be red/burgundy; never substitute with black or another color). "
                     f"Do NOT invent or substitute different clothes or shoes; they must faithfully match the reference photos provided. "
-                    f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image. "
-                    f"Body proportions: {height_cm:.0f}cm, {weight_kg:.0f}kg. "
+                    f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image, while properly adapting {gender_pronoun} body frame to the requested {morph_info['physique_label']} proportions. "
                     f"Photorealistic 8k, ultra-detailed fabric drapery, professional commercial fashion studio lighting, flawless outfit harmony."
                 )
 
@@ -1000,6 +1117,9 @@ class TryOnSynthesizer:
 
         # 3. Fallback: Multi-Layer Anatomical Outfit Composite Engine (Chống dán sticker hộp, tách nền sạch 100%)
         try:
+            morph_info = cls.build_physique_morphology(height_cm, weight_kg, gender)
+            w_factor = morph_info["w_factor"]
+
             user_pil = GarmentExtractor.load_pil_image(user_image_data)
             if user_pil is None:
                 cur_user_png = os.path.join(TEMP_DIR, "current_user_tryon.png")
@@ -1008,7 +1128,7 @@ class TryOnSynthesizer:
             if user_pil is None:
                 user_pil = Image.new("RGBA", (600, 899), (245, 247, 250, 255))
             else:
-                user_pil = user_pil.convert("RGBA")
+                user_pil = cls.smooth_morph_person_body(user_pil.convert("RGB"), morph_info["bmi"]).convert("RGBA")
 
             target_w = 600
             target_h = int(user_pil.height * (target_w / max(1, user_pil.width)))
@@ -1059,13 +1179,13 @@ class TryOnSynthesizer:
 
                 if layer_type == "bottom":
                     # Quần / Chân váy: y ~ 50% - 82%
-                    pw = int(target_w * 0.54)
+                    pw = int(target_w * 0.54 * w_factor)
                     ph = min(int(target_h * 0.40), int(pw * ratio))
                     px = int((target_w - pw) / 2)
                     py = int(target_h * 0.50)
                 elif layer_type == "top":
                     # Áo / Áo khoác: y ~ 26% - 50%
-                    pw = int(target_w * 0.60)
+                    pw = int(target_w * 0.60 * w_factor)
                     ph = min(int(target_h * 0.32), int(pw * ratio))
                     px = int((target_w - pw) / 2)
                     py = int(target_h * 0.26)
