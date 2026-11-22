@@ -328,6 +328,22 @@ Answer concisely in 2-3 sentences.`,
       ruleDetectedProduct = 'Áo Blazer Nam Phong Cách Hàn Quốc';
       ruleCategory = 'Thời Trang Nam';
       ruleKeywords = ['áo blazer', 'blazer', 'áo blazer nam', 'áo vest', 'áo vest nam', 'bộ vest', 'bộ suit'];
+    } else if (/two-piece|sport|jersey|football|soccer|cycling|athletic|bóng đá|áo đá bóng|đồ thể thao|quần áo thể thao|áo đấu|\bwika\b|\brider\b/i.test(descLower) || (/\bkit\b/i.test(descLower) && /sport|riding|wika|cam|bóng/i.test(descLower))) {
+      ruleDetectedProduct = 'Bộ Quần Áo Thể Thao Nam';
+      ruleCategory = 'Thể Thao';
+      ruleKeywords = ['quần áo thể thao', 'đồ thể thao', 'áo thể thao', 'bộ thể thao', 'áo polo thể thao', 'quần jogger thể thao', 'thể thao'];
+    } else if (/denim shirt|button-down|dress shirt|sơ mi|collared shirt|oxford/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Sơ Mi Nam Tay Dài';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo sơ mi', 'sơ mi', 'áo sơ mi nam', 'áo sơ mi dài tay'];
+    } else if (/polo/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Polo Nam Thể Thao';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo polo', 'polo', 'áo thun polo', 'áo polo thể thao'];
+    } else if (/t-shirt|tshirt|\btee\b|áo thun|áo phông/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Thun Nam Cổ Tròn';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo thun', 'áo phông', 'áo thun nam', 'áo thun thể thao'];
     } else if (/hoodie|sweatshirt/i.test(descLower)) {
       ruleDetectedProduct = 'Áo Hoodie Nam Form Rộng';
       ruleCategory = 'Thời Trang Nam';
@@ -336,18 +352,10 @@ Answer concisely in 2-3 sentences.`,
       ruleDetectedProduct = 'Áo Khoác Nam';
       ruleCategory = 'Thời Trang Nam';
       ruleKeywords = ['áo khoác', 'áo bomber', 'áo khoác nam'];
-    } else if (/denim shirt|button-down|dress shirt|sơ mi/i.test(descLower) || (/\bshirt\b/i.test(descLower) && !/\bsuit\b/i.test(descLower) && !/t-shirt|tshirt|tee/i.test(descLower))) {
-      ruleDetectedProduct = 'Áo Sơ Mi Nam Tay Dài';
+    } else if (/\bshirt\b/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Thun / Áo Thể Thao Nam';
       ruleCategory = 'Thời Trang Nam';
-      ruleKeywords = ['áo sơ mi', 'sơ mi', 'áo sơ mi nam', 'áo sơ mi dài tay'];
-    } else if (/polo/i.test(descLower)) {
-      ruleDetectedProduct = 'Áo Polo Nam Thể Thao';
-      ruleCategory = 'Thời Trang Nam';
-      ruleKeywords = ['áo polo', 'polo', 'áo thun polo'];
-    } else if (/t-shirt|tee|áo thun|áo phông/i.test(descLower)) {
-      ruleDetectedProduct = 'Áo Thun Nam Cổ Tròn';
-      ruleCategory = 'Thời Trang Nam';
-      ruleKeywords = ['áo thun', 'áo phông', 'áo thun nam'];
+      ruleKeywords = ['áo thun', 'áo thể thao', 'áo nam', 'áo polo thể thao'];
     } else if (/dress|skirt|váy|đầm/i.test(descLower)) {
       ruleDetectedProduct = 'Váy Đầm Nữ Thời Trang';
       ruleCategory = 'Thời Trang Nữ';
@@ -371,10 +379,15 @@ Answer concisely in 2-3 sentences.`,
 
     let finalProduct = ruleDetectedProduct || structured?.productName || 'Sản phẩm tương tự';
     let finalCategory = ruleCategory || structured?.category || 'Thời Trang Nam';
-    let finalTerms = [
-      ...ruleKeywords,
-      ...(structured?.keywords || []),
-    ];
+    let finalTerms = ruleKeywords.length > 0 ? [...ruleKeywords] : (structured?.keywords || []);
+
+    // Bổ sung tên thương hiệu nếu xuất hiện trong mô tả
+    const KNOWN_BRANDS = ['wika', 'nike', 'adidas', 'puma', 'hanwha', 'hle', 't1', 'geng', 'apple', 'samsung'];
+    for (const b of KNOWN_BRANDS) {
+      if (descLower.includes(b)) {
+        finalTerms.unshift(b);
+      }
+    }
 
     // Khử trùng lặp từ khóa
     finalTerms = [...new Set(finalTerms.filter(t => t && t.length >= 2))].slice(0, 10);
@@ -411,7 +424,8 @@ Nhiệm vụ: Trích xuất thông tin để tìm kiếm sản phẩm trên sàn
 LƯU Ý QUAN TRỌNG:
 - Tất cả tên sản phẩm và từ khóa PHẢI bằng TIẾNG VIỆT (hoặc từ mượn quen thuộc như blazer, suit, vest, polo).
 - Nếu mô tả là suit jacket / blazer / formal suit -> Áo Blazer Nam hoặc Áo Vest Nam.
-- Tuyệt đối KHÔNG dùng từ khóa tiếng Anh thuần như "formal attire", "red pocket square", "dress suit".
+- Nếu mô tả là đồ thể thao / áo bóng đá / kit / jersey -> Bộ Quần Áo Bóng Đá Thể Thao Nam (Ngành Thể Thao).
+- Tuyệt đối KHÔNG dùng từ khóa tiếng Anh thuần như "formal attire", "red pocket square", "sportswear kit", "riding activities".
 
 Chỉ trả về JSON duy nhất:
 {

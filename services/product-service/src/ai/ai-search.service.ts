@@ -461,6 +461,10 @@ export class AiSearchService {
       'ban', 'bán', 'mua', 'dat', 'đặt', 'tim', 'tìm', 'kiem', 'kiếm', 'tuong', 'tương', 'tu', 'tự',
       'chi', 'tiet', 'tiết', 'vi', 'ví', 'du', 'dụ', 'sau', 'day', 'đây', 'dua', 'dựa', 'tren', 'trên',
       'hinh', 'hình', 'anh', 'ảnh', 'chiec', 'chiếc', 'cai', 'cái', 'co', 'có', 'nay', 'này',
+      // Màu sắc tiếng Anh và thuộc tính bổ trợ (Không được tính là từ khóa định danh sản phẩm đơn lẻ)
+      'blue', 'navy', 'red', 'black', 'white', 'orange', 'green', 'yellow', 'pink', 'purple',
+      'grey', 'gray', 'brown', 'dark', 'light', 'color', 'colors', 'camo', 'logo', 'size',
+      'cotton', 'unisex', 'men', 'women', 'style', 'activities', 'activity', 'outfit', 'wear', 'item', 'kit'
     ]);
 
     for (const term of searchTerms) {
@@ -593,6 +597,29 @@ export class AiSearchService {
       // Score tối đa 99, KHÔNG có tối thiểu (nếu thấp thì đúng là không liên quan)
       const finalScore = Math.min(score, 99);
 
+      // ===================================================================
+      // HÀNG RÀO KHÓA NGÀNH HÀNG (CATEGORY COMPATIBILITY GATE)
+      // Tuyệt đối không cho phép bàn phím / đồ điện tử xuất hiện khi tìm quần áo / đồ thể thao
+      // ===================================================================
+      if (isVisual && suggestedCategory) {
+        const catTarget = suggestedCategory.toLowerCase();
+        const pCat = p.category.toLowerCase();
+
+        const isTargetApparelOrSports = /thời trang|thể thao|giày dép|phụ kiện|túi ví|balo/i.test(catTarget);
+        const isProductElectronics = /thiết bị điện tử|máy tính|điện thoại|máy ảnh/i.test(pCat);
+        const isProductHome = /gia dụng|nhà cửa/i.test(pCat);
+
+        if (isTargetApparelOrSports && (isProductElectronics || isProductHome)) {
+          continue; // Loại bỏ hoàn toàn thiết bị điện tử, gia dụng
+        }
+
+        const isTargetElectronics = /thiết bị điện tử|máy tính|điện thoại|máy ảnh/i.test(catTarget);
+        const isProductApparel = /thời trang|giày dép|phụ kiện|túi ví|thể thao/i.test(pCat);
+        if (isTargetElectronics && isProductApparel) {
+          continue; // Loại bỏ quần áo khi đang tìm thiết bị điện tử
+        }
+      }
+
       // Visual search: Chỉ cần match ít nhất 1 từ khóa định danh chính (25đ) là hiển thị
       const minThreshold = isVisual ? 25 : 20;
       if (finalScore < minThreshold) {
@@ -630,6 +657,57 @@ export class AiSearchService {
         relevanceScore: finalScore,
         matchBadge: isVisual ? `${finalScore}% Khớp hình ảnh` : `${finalScore}% Khớp ngữ nghĩa`,
       });
+    }
+
+    // ===================================================================
+    // CƠ CHẾ GỢI Ý SẢN PHẨM TƯƠNG ĐỒNG (SMART SIMILARITY FALLBACK)
+    // Nếu là Visual Search mà chưa đủ sản phẩm (ví dụ nhãn hiệu ảnh chưa có trên sàn)
+    // -> Tự động gợi ý các sản phẩm cùng ngành hàng (suggestedCategory) để người dùng có lựa chọn thay thế
+    // ===================================================================
+    if (isVisual && suggestedCategory && scoredList.length < 4) {
+      const existingIds = new Set(scoredList.map(p => p.id));
+      const fallbackProducts = await this.prisma.product.findMany({
+        where: {
+          status: { not: 'hidden' },
+          stock: { gt: 0 },
+          category: { contains: suggestedCategory, mode: 'insensitive' },
+          id: { notIn: Array.from(existingIds) },
+        },
+        take: Math.min(limit - scoredList.length, 12),
+        orderBy: { sales: 'desc' },
+      });
+
+      for (const p of fallbackProducts) {
+        let parsedImages: string[] = [];
+        if (p.images) {
+          try {
+            parsedImages = JSON.parse(p.images);
+          } catch {
+            parsedImages = [p.images];
+          }
+        }
+        scoredList.push({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          originalPrice: p.originalPrice || undefined,
+          costPrice: p.costPrice || 0,
+          image: p.image || parsedImages[0] || '',
+          images: parsedImages,
+          category: p.category,
+          categoryId: p.categoryId || undefined,
+          brand: p.brand,
+          description: p.description,
+          stock: p.stock,
+          sales: p.sales,
+          sold: p.sales,
+          rating: 5,
+          shopId: p.shopId,
+          sku: p.sku || undefined,
+          relevanceScore: 78,
+          matchBadge: 'Sản phẩm tương tự cùng ngành hàng',
+        });
+      }
     }
 
     scoredList.sort((a, b) => b.relevanceScore - a.relevanceScore);
