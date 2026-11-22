@@ -230,7 +230,8 @@ export class AiSearchService {
       if (clipRes.ok) {
         const clipData: any = await clipRes.json();
         if (Array.isArray(clipData.embedding) && clipData.embedding.length === 512) {
-          const vectorProducts = await this.searchByImageVector(clipData.embedding, limit, 74.0);
+          // Ngưỡng >= 86.0 để đảm bảo hai ảnh thực sự tương đồng cao (tránh nhiễu nền ~74%)
+          const vectorProducts = await this.searchByImageVector(clipData.embedding, limit, 86.0);
           if (vectorProducts.length > 0) {
             const topProd = vectorProducts[0];
             return {
@@ -246,17 +247,7 @@ export class AiSearchService {
               message: '⚡ Tìm kiếm quang học chuẩn xác bằng Vector Embeddings (CLIP-ViT-B-32)',
             };
           } else {
-            return {
-              visualAnalysis: {
-                detectedProduct: 'Không tìm thấy sản phẩm tương đồng',
-                dominantColors: [],
-                searchTerms: [],
-              },
-              products: [],
-              totalMatches: 0,
-              source: 'clip-vector-engine',
-              message: 'ZeroAI không tìm thấy sản phẩm nào trên sàn có hình ảnh tương đồng.',
-            };
+            this.logger.log('CLIP vector similarity < 86% (chưa có sản phẩm trùng ảnh trên sàn), chuyển sang Vision AI...');
           }
         }
       }
@@ -314,24 +305,36 @@ export class AiSearchService {
     }
 
     // -------------------------------------------------------------------------
-    // BƯỚC 2: NẾU BỘ NÃO CHƯA CÓ -> GỌI GEMINI HOẶC OLLAMA ĐỂ PHÂN TÍCH
+    // BƯỚC 3: ƯU TIÊN GỌI OLLAMA VISION LOCAL (MINICPM-V + QWEN2.5) TRÊN MÁY MAC M4
+    // Chạy 100% On-device, 0 tốn tiền Token, bảo mật và phân tích trang phục chuẩn xác
     // -------------------------------------------------------------------------
-    const apiKey = dto.customApiKey || process.env.GEMINI_API_KEY;
-    let visualParsed = await this.geminiAi.parseVisual(apiKey, base64Data, mimeType);
-    let visualSource: 'gemini-ai' | 'local-ai-engine' = 'gemini-ai';
+    let visualParsed: any = null;
+    let visualSource: 'local-ai-engine' | 'gemini-ai' = 'local-ai-engine';
 
-    // Nếu Gemini không phản hồi, gọi Ollama Vision Local trên Mac M4
-    // Thứ tự: minicpm-v (OCR tốt) → moondream (nhẹ) → Qwen2.5 (mở rộng keyword)
-    if (!visualParsed) {
+    // 1. ƯU TIÊN HÀNG ĐẦU: Ollama Vision Local
+    try {
       const ollamaVisual = await this.localAi.parseVisualWithMoondream(base64Data);
-      if (ollamaVisual) {
+      if (ollamaVisual && ollamaVisual.detectedProduct) {
         visualParsed = {
           detectedProduct: ollamaVisual.detectedProduct,
           searchTerms: ollamaVisual.searchTerms,
           suggestedCategory: ollamaVisual.suggestedCategory || undefined,
-          dominantColors: [],
-        } as any;
+          dominantColors: (ollamaVisual as any).dominantColors || [],
+        };
         visualSource = 'local-ai-engine';
+        this.logger.log(`✅ Ollama Local Vision nhận diện thành công: "${visualParsed.detectedProduct}" (${visualParsed.suggestedCategory})`);
+      }
+    } catch (ollamaErr: any) {
+      this.logger.warn(`Ollama Vision Local lỗi: ${ollamaErr.message}`);
+    }
+
+    // 2. DỰ PHÒNG THỨ YẾU: Chỉ khi Ollama không khả dụng mới fallback sang Gemini
+    if (!visualParsed) {
+      this.logger.log('Ollama Vision không phản hồi, fallback dự phòng sang Gemini Vision...');
+      const apiKey = dto.customApiKey || process.env.GEMINI_API_KEY;
+      visualParsed = await this.geminiAi.parseVisual(apiKey, base64Data, mimeType);
+      if (visualParsed) {
+        visualSource = 'gemini-ai';
       }
     }
 
@@ -360,7 +363,7 @@ export class AiSearchService {
     const matchedProducts = await this.fetchAndScoreProducts(searchTerms, suggestedCategory, undefined, undefined, limit, true);
 
     // -------------------------------------------------------------------------
-    // BƯỚC 3: ĐỒNG THỜI NẠP TRI THỨC THỊ GIÁC CHO LẦN SAU (0 TOKEN)
+    // BƯỚC 4: ĐỒNG THỜI NẠP TRI THỨC THỊ GIÁC CHO LẦN SAU (0 TOKEN)
     // -------------------------------------------------------------------------
     this.cacheSearchResult('VISUAL', imageSig, detectedProduct, detectedProduct, searchTerms, suggestedCategory, matchedProducts.map(p => p.id), visualSource).catch(() => {});
 
@@ -376,8 +379,10 @@ export class AiSearchService {
       },
       products: matchedProducts,
       totalMatches: matchedProducts.length,
-      source: 'gemini-ai',
-      message: '📸 ZeroAI Visual Vision đã phân tích chi tiết hình ảnh',
+      source: visualSource,
+      message: visualSource === 'local-ai-engine'
+        ? '🧠 ZeroAI Local Engine (Ollama MiniCPM-V + Qwen2.5) đã nhận diện chi tiết hình ảnh'
+        : '📸 ZeroAI Visual Vision đã phân tích chi tiết hình ảnh',
     };
   }
 
@@ -464,11 +469,18 @@ export class AiSearchService {
         // Bỏ qua các term vô nghĩa là câu mô tả chung chung
         if (clean.length > 50 || clean.includes('dựa trên') || clean.includes('cho thấy')) continue;
         termSet.add(clean);
-        // Tách nhỏ cụm từ thành các từ khóa đơn lẻ (bỏ qua từ quá chung chung)
+        // Tách nhỏ cụm từ thành các từ khóa đơn lẻ và cụm từ ghép (bigram) có nghĩa tiếng Việt
         const tokens = clean.split(/[\s,.-]+/).filter((w) => w.length >= 2);
+        for (let i = 0; i < tokens.length - 1; i++) {
+          const bigram = `${tokens[i]} ${tokens[i + 1]}`.toLowerCase();
+          if (!GENERIC_WORDS.has(bigram)) {
+            termSet.add(bigram);
+            substantiveTerms.add(bigram);
+          }
+        }
         for (const tok of tokens) {
           const lower = tok.toLowerCase();
-          if (!GENERIC_WORDS.has(lower) && lower.length >= 2) {
+          if (!GENERIC_WORDS.has(lower) && lower.length >= 3) {
             termSet.add(tok);
             substantiveTerms.add(tok.toLowerCase());
           }

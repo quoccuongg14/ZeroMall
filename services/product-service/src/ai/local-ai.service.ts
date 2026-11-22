@@ -253,36 +253,34 @@ Trả về duy nhất JSON hợp lệ:
 
   /**
    * Gọi mô hình Ollama Vision Local để phân tích hình ảnh
-   * Thứ tự ưu tiên: minicpm-v (OCR tốt, đọc text trên áo) → moondream (nhẹ, fallback)
-   * Sau đó dùng Qwen2.5 để mở rộng keyword từ mô tả thô
+   * Ưu tiên: minicpm-v:latest (nhận diện vật thể, OCR, trang phục chi tiết) → moondream (fallback)
+   * Sau đó dùng Qwen2.5:1.5b để trích xuất chuẩn cấu trúc tiếng Việt cho e-commerce TMĐT
    */
-  async parseVisualWithMoondream(base64Image: string): Promise<{ detectedProduct: string; searchTerms: string[]; suggestedCategory?: string } | null> {
-    // Thử lần lượt các vision model
+  async parseVisualWithMoondream(base64Image: string): Promise<{
+    detectedProduct: string;
+    searchTerms: string[];
+    suggestedCategory?: string;
+    dominantColors?: string[];
+  } | null> {
     const visionModels = [
       {
-        model: 'minicpm-v',
-        prompt: `Bạn là chuyên gia nhận diện sản phẩm e-commerce. Phân tích hình ảnh này chi tiết:
-1. ĐỌC TẤT CẢ TEXT/LOGO/CHỮ xuất hiện trên sản phẩm (ví dụ: tên thương hiệu, tên đội, tên sự kiện trên áo/sản phẩm)
-2. Xác định loại sản phẩm chính (áo đấu, giày, điện thoại, ốp lưng, v.v.)
-3. Nhận diện thương hiệu, đội tuyển esports, tên người nổi tiếng nếu có
-4. Mô tả màu sắc, chất liệu, phong cách
-
-Trả lời chi tiết bằng tiếng Việt hoặc tiếng Anh, liệt kê rõ ràng tất cả text/logo nhìn thấy được.`,
-        timeout: 15000,
+        model: 'minicpm-v:latest',
+        prompt: `Look at this product photo carefully. Describe the product shown:
+1. What type of item/clothing is it (e.g. shirt, denim shirt, t-shirt, jacket, polo, pants, shoes, backpack, phone case, cap, etc.)?
+2. Color, patterns, details (e.g. blue denim, dots, buttons, collar, long sleeves, short sleeves).
+3. Any visible brand, logo or printed text if present.
+Answer concisely in 2-3 sentences.`,
+        timeout: 18000,
       },
       {
-        model: 'moondream',
-        prompt: `Look at this image carefully. Answer these questions:
-1. What is the main product shown? (clothing, shoes, phone, etc.)
-2. Read ALL text, logos, brand names, team names visible on the product or clothing
-3. What brand or team does this product belong to? (e.g. HLE, Hanwha Life, Nike, Adidas, T1, GenG)
-4. What colors are dominant?
-List every word and logo you can read on the product.`,
-        timeout: 8000,
+        model: 'moondream:latest',
+        prompt: `Describe what product is in this image: item type, color, material, patterns. Answer in 2 short sentences.`,
+        timeout: 10000,
       },
     ];
 
     let rawDescription = '';
+    let usedVisionModel = '';
 
     for (const vm of visionModels) {
       try {
@@ -305,8 +303,9 @@ List every word and logo you can read on the product.`,
         if (res.ok) {
           const data: any = await res.json();
           const text = (data.response || '').trim();
-          if (text && text.length > 5) {
+          if (text && text.length > 5 && !/สมิการง|รับมาย/.test(text)) {
             rawDescription = text;
+            usedVisionModel = vm.model;
             this.logger.log(`✅ Ollama Vision [${vm.model}] → ${text.substring(0, 120)}...`);
             break;
           }
@@ -318,7 +317,18 @@ List every word and logo you can read on the product.`,
 
     if (!rawDescription) return null;
 
-    // Trích xuất từ khóa nổi bật từ mô tả thô
+    // Dùng Qwen2.5 để phân tích mô tả sang dữ liệu e-commerce tiếng Việt
+    const structured = await this.parseVisualStructuredWithQwen(rawDescription);
+    if (structured && structured.productName) {
+      return {
+        detectedProduct: structured.productName,
+        searchTerms: structured.keywords,
+        suggestedCategory: structured.category,
+        dominantColors: structured.colors,
+      };
+    }
+
+    // Fallback: Trích xuất từ khóa nổi bật từ mô tả thô
     const STOP_WORDS = new Set([
       'this', 'that', 'with', 'from', 'shows', 'image', 'person', 'wearing', 'appears',
       'the', 'and', 'for', 'are', 'was', 'has', 'have', 'its', 'their', 'there',
@@ -372,35 +382,40 @@ List every word and logo you can read on the product.`,
       suggestedCategory = 'Thời Trang Nữ';
     }
 
-    // Tổ hợp searchTerms: thương hiệu nhận diện + từ khóa nổi bật
     const searchTerms = [...detectedBrands, ...uniqueWords.slice(0, 10)];
     const dedupedTerms = [...new Set(searchTerms.filter(t => t.length >= 2))].slice(0, 12);
 
-    // Dùng Qwen2.5 để mở rộng keyword nếu có thể
-    const expandedTerms = await this.expandVisualKeywordsWithQwen(rawDescription, dedupedTerms);
-
     return {
       detectedProduct: rawDescription.substring(0, 120),
-      searchTerms: expandedTerms.length > 0 ? expandedTerms : dedupedTerms,
+      searchTerms: dedupedTerms,
       suggestedCategory,
     };
   }
 
   /**
-   * Dùng Qwen2.5 để phân tích mô tả thô từ vision model và mở rộng thành keyword tìm kiếm
+   * Dùng Qwen2.5 để phân tích mô tả thị giác thành thông tin sản phẩm TMĐT tiếng Việt
    */
-  private async expandVisualKeywordsWithQwen(visualDescription: string, existingTerms: string[]): Promise<string[]> {
+  async parseVisualStructuredWithQwen(visualDescription: string): Promise<{
+    productName: string;
+    category?: string;
+    keywords: string[];
+    colors: string[];
+  } | null> {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 6000);
 
-      const prompt = `Từ mô tả hình ảnh sản phẩm sau, trích xuất TẤT CẢ tên thương hiệu, tên đội, tên người, model sản phẩm, và từ khóa tìm kiếm quan trọng.
+      const prompt = `Bạn là chuyên gia phân tích sản phẩm TMĐT ZeroMall Việt Nam.
+Từ mô tả hình ảnh sau: "${visualDescription}"
 
-Mô tả: "${visualDescription}"
-Các keyword hiện có: ${existingTerms.join(', ')}
-
-Trả về JSON duy nhất:
-{"keywords": ["danh sách 5-10 từ khóa tìm kiếm cụ thể nhất, ưu tiên tên thương hiệu/đội/người"]}`;
+Hãy trích xuất thông tin để tìm kiếm sản phẩm trên sàn TMĐT.
+Chỉ trả về JSON duy nhất:
+{
+  "productName": "Tên sản phẩm tiếng Việt chuẩn ngắn gọn (ví dụ: Áo Sơ Mi Denim Nam Tay Dài / Nón Lưỡi Trai / Giày Sneaker...)",
+  "category": "Ngành hàng chuẩn (Thời Trang Nam | Thời Trang Nữ | Giày Dép Nam | Giày Dép Nữ | Thể Thao | Điện Thoại & Phụ Kiện | Thiết Bị Điện Tử | Nhà Cửa | Gia Dụng | Balo & Túi Ví)",
+  "keywords": ["danh sách 5-8 từ khóa tìm kiếm tiếng Việt phổ biến, gồm tên loại sản phẩm, từ đồng nghĩa, kiểu dáng, màu sắc"],
+  "colors": ["Màu chính 1", "Màu chính 2"]
+}`;
 
       const res = await fetch(`${this.ollamaUrl}/api/generate`, {
         method: 'POST',
@@ -418,13 +433,16 @@ Trả về JSON duy nhất:
       if (res.ok) {
         const data: any = await res.json();
         const parsed = JSON.parse(data.response);
-        if (Array.isArray(parsed.keywords) && parsed.keywords.length > 0) {
-          return [...new Set([...existingTerms, ...parsed.keywords])].filter(k => k && k.length >= 2).slice(0, 12);
-        }
+        return {
+          productName: parsed.productName || parsed.name || 'Sản phẩm tương tự',
+          category: parsed.category || undefined,
+          keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+          colors: Array.isArray(parsed.colors) ? parsed.colors : [],
+        };
       }
-    } catch {
-      // Fallback to existing terms if Qwen fails
+    } catch (e: any) {
+      this.logger.warn(`Qwen2.5 visual extraction failed: ${e.message}`);
     }
-    return existingTerms;
+    return null;
   }
 }
