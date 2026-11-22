@@ -317,83 +317,79 @@ Answer concisely in 2-3 sentences.`,
 
     if (!rawDescription) return null;
 
-    // Dùng Qwen2.5 để phân tích mô tả sang dữ liệu e-commerce tiếng Việt
-    const structured = await this.parseVisualStructuredWithQwen(rawDescription);
-    if (structured && structured.productName) {
-      return {
-        detectedProduct: structured.productName,
-        searchTerms: structured.keywords,
-        suggestedCategory: structured.category,
-        dominantColors: structured.colors,
-      };
+    const descLower = rawDescription.toLowerCase();
+
+    // 1. Phân loại sản phẩm xác định từ mô tả quang học (Tránh nhầm Áo Sơ Mi lót bên trong với Áo Blazer/Suit bên ngoài)
+    let ruleDetectedProduct = '';
+    let ruleCategory = '';
+    let ruleKeywords: string[] = [];
+
+    if (/\bsuit\b|blazer|tuxedo|\bvest\b|formal attire|bộ suit|áo vest|áo blazer/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Blazer Nam Phong Cách Hàn Quốc';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo blazer', 'blazer', 'áo blazer nam', 'áo vest', 'áo vest nam', 'bộ vest', 'bộ suit'];
+    } else if (/hoodie|sweatshirt/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Hoodie Nam Form Rộng';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo hoodie', 'hoodie', 'áo nỉ'];
+    } else if (/bomber|windbreaker/i.test(descLower) || (/\bjacket\b|áo khoác/i.test(descLower) && !/\bsuit\b/i.test(descLower))) {
+      ruleDetectedProduct = 'Áo Khoác Nam';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo khoác', 'áo bomber', 'áo khoác nam'];
+    } else if (/denim shirt|button-down|dress shirt|sơ mi/i.test(descLower) || (/\bshirt\b/i.test(descLower) && !/\bsuit\b/i.test(descLower) && !/t-shirt|tshirt|tee/i.test(descLower))) {
+      ruleDetectedProduct = 'Áo Sơ Mi Nam Tay Dài';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo sơ mi', 'sơ mi', 'áo sơ mi nam', 'áo sơ mi dài tay'];
+    } else if (/polo/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Polo Nam Thể Thao';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo polo', 'polo', 'áo thun polo'];
+    } else if (/t-shirt|tee|áo thun|áo phông/i.test(descLower)) {
+      ruleDetectedProduct = 'Áo Thun Nam Cổ Tròn';
+      ruleCategory = 'Thời Trang Nam';
+      ruleKeywords = ['áo thun', 'áo phông', 'áo thun nam'];
+    } else if (/dress|skirt|váy|đầm/i.test(descLower)) {
+      ruleDetectedProduct = 'Váy Đầm Nữ Thời Trang';
+      ruleCategory = 'Thời Trang Nữ';
+      ruleKeywords = ['váy', 'đầm', 'váy nữ'];
+    } else if (/sneaker|running shoe|giày/i.test(descLower)) {
+      ruleDetectedProduct = 'Giày Sneaker Thể Thao';
+      ruleCategory = 'Giày Dép Nam';
+      ruleKeywords = ['giày thể thao', 'giày sneaker', 'giày nam'];
+    } else if (/backpack|balo|ba lô/i.test(descLower)) {
+      ruleDetectedProduct = 'Balo Thời Trang Nam Nữ';
+      ruleCategory = 'Balo & Túi Ví';
+      ruleKeywords = ['balo', 'ba lô', 'balo học sinh'];
+    } else if (/cap|hat|baseball cap|nón|mũ/i.test(descLower)) {
+      ruleDetectedProduct = 'Nón Lưỡi Trai Trơn';
+      ruleCategory = 'Phụ Kiện';
+      ruleKeywords = ['nón lưỡi trai', 'mũ lưỡi trai', 'nón'];
     }
 
-    // Fallback: Trích xuất từ khóa nổi bật từ mô tả thô
-    const STOP_WORDS = new Set([
-      'this', 'that', 'with', 'from', 'shows', 'image', 'person', 'wearing', 'appears',
-      'the', 'and', 'for', 'are', 'was', 'has', 'have', 'its', 'their', 'there',
-      'which', 'what', 'where', 'when', 'how', 'who', 'into', 'about', 'also',
-      'very', 'just', 'main', 'product', 'shown', 'answer', 'visible', 'dominant',
-      'colors', 'text', 'logo', 'brand', 'look', 'carefully', 'these', 'questions',
-      'read', 'list', 'every', 'word', 'they', 'does', 'been', 'being', 'could',
-      'would', 'should', 'might', 'like', 'seem', 'than', 'then', 'here', 'some',
-      'một', 'các', 'của', 'cho', 'này', 'trong', 'với', 'được', 'không', 'trên',
-      'hình', 'ảnh', 'sản', 'phẩm', 'chính', 'xuất', 'hiện', 'nhìn', 'thấy',
-    ]);
+    // 2. Dùng Qwen để phân tích thêm màu sắc và chi tiết thương hiệu
+    const structured = await this.parseVisualStructuredWithQwen(rawDescription);
 
-    const rawWords = rawDescription
-      .split(/[\s,.\-;:!?()\[\]{}'"\/]+/)
-      .filter((w: string) => w.length >= 2 && !STOP_WORDS.has(w.toLowerCase()))
-      .map((w: string) => w.replace(/^[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF]+|[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF]+$/g, ''))
-      .filter((w: string) => w.length >= 2);
-
-    const uniqueWords = [...new Set(rawWords)];
-
-    // Tìm các cụm từ khóa quan trọng (tên thương hiệu, tên đội)
-    const KNOWN_BRANDS_TEAMS = [
-      'HLE', 'Hanwha', 'Hanwha Life', 'Hanwha Life Esports', 'Gumayusi', 'Zeka', 'Delight',
-      'T1', 'Faker', 'GenG', 'Gen.G', 'DRX', 'KT', 'Dplus', 'BLG', 'JDG', 'TES',
-      'Nike', 'Adidas', 'Puma', 'New Balance', 'Converse', 'Vans',
-      'Apple', 'iPhone', 'Samsung', 'Galaxy', 'Xiaomi', 'OPPO', 'Huawei',
-      'Corsair', 'Logitech', 'Razer',
-      'MSI', 'LCK', 'LPL', 'Worlds', 'Esports', 'Fanmeeting',
-      'Wika', 'Wika Rider',
+    let finalProduct = ruleDetectedProduct || structured?.productName || 'Sản phẩm tương tự';
+    let finalCategory = ruleCategory || structured?.category || 'Thời Trang Nam';
+    let finalTerms = [
+      ...ruleKeywords,
+      ...(structured?.keywords || []),
     ];
 
-    const detectedBrands: string[] = [];
-    const descLower = rawDescription.toLowerCase();
-    for (const brand of KNOWN_BRANDS_TEAMS) {
-      if (descLower.includes(brand.toLowerCase())) {
-        detectedBrands.push(brand);
-      }
-    }
-
-    // Xác định danh mục từ mô tả
-    let suggestedCategory: string | undefined;
-    if (/esports|jersey|đấu|thể thao|sports|team|uniform|đội/i.test(rawDescription)) {
-      suggestedCategory = 'Thể Thao';
-    } else if (/shirt|áo|polo|hoodie|jacket|bomber|t-shirt|tshirt/i.test(rawDescription)) {
-      suggestedCategory = 'Thời Trang Nam';
-    } else if (/phone|điện thoại|iphone|samsung|galaxy|smartphone/i.test(rawDescription)) {
-      suggestedCategory = 'Điện Thoại & Phụ Kiện';
-    } else if (/shoe|giày|sneaker|boot|dép|sandal/i.test(rawDescription)) {
-      suggestedCategory = 'Giày Dép Nam';
-    } else if (/dress|váy|đầm|skirt/i.test(rawDescription)) {
-      suggestedCategory = 'Thời Trang Nữ';
-    }
-
-    const searchTerms = [...detectedBrands, ...uniqueWords.slice(0, 10)];
-    const dedupedTerms = [...new Set(searchTerms.filter(t => t.length >= 2))].slice(0, 12);
+    // Khử trùng lặp từ khóa
+    finalTerms = [...new Set(finalTerms.filter(t => t && t.length >= 2))].slice(0, 10);
 
     return {
-      detectedProduct: rawDescription.substring(0, 120),
-      searchTerms: dedupedTerms,
-      suggestedCategory,
+      detectedProduct: finalProduct,
+      searchTerms: finalTerms.length > 0 ? finalTerms : ['áo blazer', 'thời trang nam'],
+      suggestedCategory: finalCategory,
+      dominantColors: structured?.colors || [],
     };
   }
 
   /**
-   * Dùng Qwen2.5 để phân tích mô tả thị giác thành thông tin sản phẩm TMĐT tiếng Việt
+   * Dùng Qwen để phân tích mô tả thị giác thành thông tin sản phẩm TMĐT tiếng Việt
+   * Ưu tiên qwen2.5:14b (chính xác cao), fallback sang qwen2.5:1.5b
    */
   async parseVisualStructuredWithQwen(visualDescription: string): Promise<{
     productName: string;
@@ -401,18 +397,20 @@ Answer concisely in 2-3 sentences.`,
     keywords: string[];
     colors: string[];
   } | null> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
+    const qwenModels = ['qwen2.5:14b', 'qwen2.5:1.5b'];
 
-      const prompt = `Bạn là chuyên gia phân tích sản phẩm TMĐT ZeroMall Việt Nam.
+    for (const model of qwenModels) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+
+        const prompt = `Bạn là chuyên gia phân tích sản phẩm TMĐT ZeroMall Việt Nam.
 Từ mô tả hình ảnh sau: "${visualDescription}"
 
 Nhiệm vụ: Trích xuất thông tin để tìm kiếm sản phẩm trên sàn TMĐT Việt Nam.
 LƯU Ý QUAN TRỌNG:
-- Tất cả tên sản phẩm và từ khóa PHẢI bằng TIẾNG VIỆT (hoặc kèm từ mượn quen thuộc như blazer, polo, jean, sneaker, hoodie).
-- Nếu là đồ vest/suit/blazer nam: tên sản phẩm là "Áo Blazer Nam Phong Cách Hàn Quốc" hoặc "Bộ Vest Nam", keywords: ["áo blazer", "blazer", "áo blazer nam", "áo vest", "áo vest nam", "bộ vest"].
-- Nếu là áo sơ mi: ["áo sơ mi", "sơ mi", "áo sơ mi nam"].
+- Tất cả tên sản phẩm và từ khóa PHẢI bằng TIẾNG VIỆT (hoặc từ mượn quen thuộc như blazer, suit, vest, polo).
+- Nếu mô tả là suit jacket / blazer / formal suit -> Áo Blazer Nam hoặc Áo Vest Nam.
 - Tuyệt đối KHÔNG dùng từ khóa tiếng Anh thuần như "formal attire", "red pocket square", "dress suit".
 
 Chỉ trả về JSON duy nhất:
@@ -423,31 +421,34 @@ Chỉ trả về JSON duy nhất:
   "colors": ["Màu chính tiếng Việt"]
 }`;
 
-      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'qwen2.5:1.5b',
-          prompt,
-          format: 'json',
-          stream: false,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+        const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            prompt,
+            format: 'json',
+            stream: false,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
 
-      if (res.ok) {
-        const data: any = await res.json();
-        const parsed = JSON.parse(data.response);
-        return {
-          productName: parsed.productName || parsed.name || 'Sản phẩm tương tự',
-          category: parsed.category || undefined,
-          keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
-          colors: Array.isArray(parsed.colors) ? parsed.colors : [],
-        };
+        if (res.ok) {
+          const data: any = await res.json();
+          const parsed = JSON.parse(data.response);
+          if (parsed && (parsed.productName || parsed.keywords)) {
+            return {
+              productName: parsed.productName || parsed.name || 'Sản phẩm tương tự',
+              category: parsed.category || undefined,
+              keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+              colors: Array.isArray(parsed.colors) ? parsed.colors : [],
+            };
+          }
+        }
+      } catch {
+        // Thử model tiếp theo
       }
-    } catch (e: any) {
-      this.logger.warn(`Qwen2.5 visual extraction failed: ${e.message}`);
     }
     return null;
   }
