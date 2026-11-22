@@ -287,13 +287,16 @@ export const useTryOnLogic = ({
     const fetchRealFashion = async () => {
       setIsLoadingPants(true)
       try {
-        const [resNam, resNu, resGiayNam, resGiayNu, resPhuKien, resTuiVi] = await Promise.all([
+        const [resNam, resNu, resGiayNam, resGiayNu, resPhuKien, resTuiVi, resDongHo, resNon, resThatLung] = await Promise.all([
           fetch(`${API_BASE_URL}/products?category=thoi-trang-nam&limit=40`),
           fetch(`${API_BASE_URL}/products?category=thoi-trang-nu&limit=40`),
-          fetch(`${API_BASE_URL}/products?category=giay-dep-nam&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=giay-dep-nu&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=phu-kien-nu&limit=25`),
-          fetch(`${API_BASE_URL}/products?category=tui-vi-nu&limit=25`),
+          fetch(`${API_BASE_URL}/products?category=giay-dep-nam&limit=30`),
+          fetch(`${API_BASE_URL}/products?category=giay-dep-nu&limit=30`),
+          fetch(`${API_BASE_URL}/products?category=phu-kien-nu&limit=60`),
+          fetch(`${API_BASE_URL}/products?category=tui-vi-nu&limit=40`),
+          fetch(`${API_BASE_URL}/products?category=dong-ho&limit=40`),
+          fetch(`${API_BASE_URL}/products?search=n%C3%B3n&limit=20`),
+          fetch(`${API_BASE_URL}/products?search=th%E1%BA%AFt%20l%C6%B0ng&limit=20`),
         ])
 
         const parseList = async (res: Response) => {
@@ -302,16 +305,29 @@ export const useTryOnLogic = ({
           return Array.isArray(data) ? data : (data.products || [])
         }
 
-        const [listNam, listNu, listGiayNam, listGiayNu, listPhuKien, listTuiVi] = await Promise.all([
+        const [listNam, listNu, listGiayNam, listGiayNu, listPhuKien, listTuiVi, listDongHo, listNon, listThatLung] = await Promise.all([
           parseList(resNam),
           parseList(resNu),
           parseList(resGiayNam),
           parseList(resGiayNu),
           parseList(resPhuKien),
-          parseList(resTuiVi)
+          parseList(resTuiVi),
+          parseList(resDongHo),
+          parseList(resNon),
+          parseList(resThatLung)
         ])
 
-        const rawCombined = [...listNam, ...listNu, ...listGiayNam, ...listGiayNu, ...listPhuKien, ...listTuiVi]
+        const rawCombined = [
+          ...listNam,
+          ...listNu,
+          ...listGiayNam,
+          ...listGiayNu,
+          ...listPhuKien,
+          ...listTuiVi,
+          ...listDongHo,
+          ...listNon,
+          ...listThatLung
+        ]
         
         const uniqueMap = new Map<string, Product>()
         rawCombined.forEach(p => {

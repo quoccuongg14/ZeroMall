@@ -116,12 +116,58 @@ export const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory'
     return null
   }
 
-  // 1. MŨ NÓN & PHỤ KIỆN THỜI TRANG & TRANG SỨC & TÚI VÍ (Accessories)
-  const isAccCat = slug.includes('phu-kien-thoi-trang') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
-                   cat.includes('phụ kiện thời trang') || cat.includes('túi ví') || cat.includes('đồng hồ') ||
+  // 1. GIÀY DÉP (Footwear) - Ưu tiên hàng đầu để chống nhầm giày "mũi nhọn", "mũi vuông" sang phụ kiện
+  const isShoesCat = slug.includes('giay-dep') || cat.includes('giày dép') || cat.includes('giay dep')
+  const isShoesWords = [
+    'giày', 'giay', 'dép', 'dep', 'sneaker', 'sandal', 'guốc', 'guoc',
+    'cao gót', 'búp bê', 'loafer', 'derby', 'chelsea', 'boots', 'bốt', 'ủng', 'sục', 'mwc', 'slip-on', 'slip on', 'oxford'
+  ].some(k => name.includes(k))
+
+  if ((isShoesCat || isShoesWords) && !name.includes('hộp đựng') && !name.includes('túi đựng giày') && !name.includes('kệ để')) {
+    return 'shoes'
+  }
+
+  // 2. QUẦN & VÁY & ĐẦM (Bottoms / Lower Garments) - Ưu tiên trước accessory để tránh "quần túi hộp"
+  const isBottomWords = [
+    'quần', 'quan', 'jean', 'jeans', 'jogger', 'short', 'shorts', 'tây âu', 'quần tây',
+    'quần đùi', 'quần baggy', 'quần ống', 'quần culottes', 'quần legging',
+    'quần bò', 'quần lửng', 'quần nỉ', 'quần thun', 'boxer',
+    'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy tay bồng', 'váy công chúa', 'váy',
+    'đầm', 'dam', 'maxi', 'jumpsuit', 'set đồ bộ'
+  ].some(k => name.includes(k)) || (name.includes('kaki') && !name.includes('nón') && !name.includes('mũ') && !name.includes('áo') && !name.includes('khoác') && !name.includes('jacket'))
+
+  if (isBottomWords) {
+    return 'bottom'
+  }
+
+  // 3. ÁO (Tops / Upper Garments) - Ưu tiên trước accessory để tránh "áo hoodie có mũ" hay "áo có túi"
+  const isTopWords = [
+    'áo', 'ao', 'sơ mi', 'so mi', 'thun', 'polo', 'khoác', 'khoac', 'bomber', 'blazer',
+    'cardigan', 'hoodie', 'sweater', 'croptop', 'crop top', 'tank top', 'ba lỗ',
+    'gile', 'vest', 'bra', 'sát nách', 'cộc tay', 'tay phồng', 'len dệt kim', 'jacket', 'măng tô', 'áo gió', 'áo nỉ'
+  ].some(k => {
+    if (k === 'áo' || k === 'ao') {
+      return /(?:^|[^\p{L}])áo(?:[^\p{L}]|$)/ui.test(name) || name.includes(' áo ') || name.startsWith(' áo') || name.includes('áo-')
+    }
+    if (k === 'thun') {
+      return name.includes('thun') && !name.includes('dây thun') && !name.includes('cột tóc') && !name.includes('buộc tóc')
+    }
+    return name.includes(k)
+  })
+
+  if (isTopWords) {
+    return 'top'
+  }
+
+  // 4. MŨ NÓN & PHỤ KIỆN THỜI TRANG & TRANG SỨC & TÚI VÍ (Accessories)
+  const isAccCat = slug.includes('phu-kien') || slug.includes('tui-vi') || slug.includes('dong-ho') ||
+                   cat.includes('phụ kiện thời trang') || cat.includes('túi ví') || cat.includes('đồng hồ') || cat.includes('phụ kiện nữ') ||
                    (cat.includes('phụ kiện') && !cat.includes('điện thoại') && !cat.includes('máy tính') && !cat.includes('xe') && !cat.includes('công nghệ'))
+
+  // Khớp chính xác từ "mũ" (từ độc lập, không phải "mũi nhọn", "mũi vuông", "mũi giày")
+  const hasHatWord = /(?:^|[^\p{L}])(?:mũ|nón|cap|beanie|snapback|bucket|beret)(?:[^\p{L}]|$)/ui.test(name) && !name.includes('mũi')
+
   const isAccWords = [
-    'mũ', 'nón', 'cap', 'beanie', 'snapback', 'bucket', 'beret',
     'kính', 'gọng kính', 'kính râm', 'kính mát', 'tròng kính',
     'túi', 'ví', 'balo', 'ba lô', 'clutch', 'tote', 'túi xách', 'ví cầm tay', 'túi đeo',
     'khăn', 'cà vạt', 'caravat', 'nơ cổ',
@@ -131,48 +177,8 @@ export const detectItemSlot = (p: any): 'top' | 'bottom' | 'shoes' | 'accessory'
     'đồng hồ'
   ].some(k => name.includes(k))
 
-  if (isAccCat || isAccWords) {
+  if (isAccCat || isAccWords || hasHatWord) {
     return 'accessory'
-  }
-
-  // 2. GIÀY DÉP (Footwear)
-  const isShoesCat = slug.includes('giay-dep') || cat.includes('giày dép') || cat.includes('giay dep')
-  const isShoesWords = [
-    'giày', 'giay', 'dép', 'dep', 'sneaker', 'sandal', 'guốc', 'guoc',
-    'cao gót', 'búp bê', 'loafer', 'derby', 'chelsea', 'boots', 'bốt', 'ủng', 'sục', 'mwc', 'slip-on', 'slip on'
-  ].some(k => name.includes(k))
-
-  if ((isShoesCat || isShoesWords) && !name.includes('hộp đựng') && !name.includes('túi đựng giày') && !name.includes('kệ để')) {
-    return 'shoes'
-  }
-
-  // 3. QUẦN & VÁY & ĐẦM (Bottoms / Lower Garments)
-  const isBottomWords = [
-    'quần', 'quan', 'jean', 'jeans', 'jogger', 'short', 'shorts', 'kaki', 'tây âu', 'quần tây',
-    'quần đùi', 'quần baggy', 'quần ống', 'quần culottes', 'quần legging',
-    'quần bò', 'quần lửng', 'quần nỉ', 'quần thun', 'boxer',
-    'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy tay bồng', 'váy công chúa', 'váy',
-    'đầm', 'dam', 'maxi', 'jumpsuit', 'set đồ bộ'
-  ].some(k => name.includes(k))
-
-  if (isBottomWords) {
-    return 'bottom'
-  }
-
-  // 4. ÁO (Tops / Upper Garments)
-  const isTopWords = [
-    'áo', 'ao', 'sơ mi', 'so mi', 'thun', 'polo', 'khoác', 'khoac', 'bomber', 'blazer',
-    'cardigan', 'hoodie', 'sweater', 'croptop', 'crop top', 'tank top', 'ba lỗ',
-    'gile', 'vest', 'bra', 'sát nách', 'cộc tay', 'tay phồng', 'len dệt kim', 'jacket', 'măng tô', 'áo gió', 'áo nỉ'
-  ].some(k => {
-    if (k === 'áo' || k === 'ao') {
-      return /(?:^|[^\p{L}])áo(?:[^\p{L}]|$)/ui.test(name) || name.includes(' áo ') || name.startsWith(' áo') || name.includes('áo-')
-    }
-    return name.includes(k)
-  })
-
-  if (isTopWords) {
-    return 'top'
   }
 
   return null
@@ -184,16 +190,29 @@ export const detectProductGender = (p: any): 'male' | 'female' | 'unisex' => {
   const name = ' ' + (p.name || '').toLowerCase() + ' '
   const cat = ((p.category || '') + ' ' + (p.categoryRef?.slug || '')).toLowerCase()
 
-  // 1. Phân loại theo category / slug rõ ràng
+  // 1. Nếu là phụ kiện chung (Nón, Mũ, Kính mát, Đồng hồ, Thắt lưng, Balo, Khăn) mà không có từ "nữ" -> coi là UNISEX
+  const isGeneralAccessory = [
+    'nón', 'mũ', 'kính', 'đồng hồ', 'thắt lưng', 'dây nịt', 'balo', 'ba lô'
+  ].some(k => name.includes(k))
+
+  if (isGeneralAccessory) {
+    const hasNam = name.includes(' nam ') || name.includes(' nam') || name.includes('-nam')
+    const hasNu = name.includes(' nữ ') || name.includes(' nu ') || name.includes(' nữ') || name.includes('-nữ') || name.includes('đính đá') || name.includes('công chúa')
+    if (hasNam && !hasNu) return 'male'
+    if (hasNu && !hasNam) return 'female'
+    return 'unisex' // Mũ nón, nón lưỡi trai, kính râm, đồng hồ nam nữ tự động là unisex!
+  }
+
+  // 2. Phân loại theo category / slug rõ ràng
   const isMaleCat = cat.includes('thoi-trang-nam') || cat.includes('giay-dep-nam') || cat.includes('thời trang nam')
   const isFemaleCat = cat.includes('thoi-trang-nu') || cat.includes('giay-dep-nu') || cat.includes('phu-kien-nu') || cat.includes('tui-vi-nu') || cat.includes('thời trang nữ')
 
-  // 2. Từ khóa unisex
+  // 3. Từ khóa unisex
   if (name.includes('unisex') || name.includes('nam nữ') || name.includes('nam & nữ') || name.includes('nam/nữ')) {
     return 'unisex'
   }
 
-  // 3. Từ khóa đặc thù nữ
+  // 4. Từ khóa đặc thù nữ
   const strictlyFemaleWords = [
     'chân váy', 'váy xòe', 'váy chữ a', 'váy xếp ly', 'váy midi', 'váy maxi', 'váy body', 'váy yếm', 'váy hoa', 'váy',
     'đầm', 'dam', 'croptop', 'crop top', 'hai dây', 'pastel ngọt ngào', 'công chúa', 'bèo nhún', 'ren nữ', 'babydoll', 'yếm nữ'
@@ -202,7 +221,7 @@ export const detectProductGender = (p: any): 'male' | 'female' | 'unisex' => {
     return 'female'
   }
 
-  // 4. Từ khóa đặc thù nam
+  // 5. Từ khóa đặc thù nam
   const strictlyMaleWords = [
     'sơ mi nam', 'quần tây nam', 'quần đùi nam', 'boxer', 'kaki nam', 'vest nam', 'suit nam'
   ]
@@ -210,7 +229,7 @@ export const detectProductGender = (p: any): 'male' | 'female' | 'unisex' => {
     return 'male'
   }
 
-  // 5. Kiểm tra chữ "nam" vs "nữ" trong tên
+  // 6. Kiểm tra chữ "nam" vs "nữ" trong tên
   const hasNam = name.includes(' nam ') || name.includes(' nam') || name.includes('-nam')
   const hasNu = name.includes(' nữ ') || name.includes(' nu ') || name.includes(' nữ') || name.includes('-nữ')
 
