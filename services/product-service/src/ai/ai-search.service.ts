@@ -593,8 +593,8 @@ export class AiSearchService {
       // Score tối đa 99, KHÔNG có tối thiểu (nếu thấp thì đúng là không liên quan)
       const finalScore = Math.min(score, 99);
 
-      // Visual search yêu cầu ngưỡng cao hơn
-      const minThreshold = isVisual ? 40 : 20;
+      // Visual search: Chỉ cần match ít nhất 1 từ khóa định danh chính (25đ) là hiển thị
+      const minThreshold = isVisual ? 25 : 20;
       if (finalScore < minThreshold) {
         continue; // Điểm quá thấp, không hiển thị
       }

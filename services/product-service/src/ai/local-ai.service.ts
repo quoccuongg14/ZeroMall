@@ -408,13 +408,19 @@ Answer concisely in 2-3 sentences.`,
       const prompt = `Bạn là chuyên gia phân tích sản phẩm TMĐT ZeroMall Việt Nam.
 Từ mô tả hình ảnh sau: "${visualDescription}"
 
-Hãy trích xuất thông tin để tìm kiếm sản phẩm trên sàn TMĐT.
+Nhiệm vụ: Trích xuất thông tin để tìm kiếm sản phẩm trên sàn TMĐT Việt Nam.
+LƯU Ý QUAN TRỌNG:
+- Tất cả tên sản phẩm và từ khóa PHẢI bằng TIẾNG VIỆT (hoặc kèm từ mượn quen thuộc như blazer, polo, jean, sneaker, hoodie).
+- Nếu là đồ vest/suit/blazer nam: tên sản phẩm là "Áo Blazer Nam Phong Cách Hàn Quốc" hoặc "Bộ Vest Nam", keywords: ["áo blazer", "blazer", "áo blazer nam", "áo vest", "áo vest nam", "bộ vest"].
+- Nếu là áo sơ mi: ["áo sơ mi", "sơ mi", "áo sơ mi nam"].
+- Tuyệt đối KHÔNG dùng từ khóa tiếng Anh thuần như "formal attire", "red pocket square", "dress suit".
+
 Chỉ trả về JSON duy nhất:
 {
-  "productName": "Tên sản phẩm tiếng Việt chuẩn ngắn gọn (ví dụ: Áo Sơ Mi Denim Nam Tay Dài / Nón Lưỡi Trai / Giày Sneaker...)",
+  "productName": "Tên sản phẩm tiếng Việt chuẩn ngắn gọn (ví dụ: Áo Blazer Nam / Áo Sơ Mi Nam / Nón Lưỡi Trai...)",
   "category": "Ngành hàng chuẩn (Thời Trang Nam | Thời Trang Nữ | Giày Dép Nam | Giày Dép Nữ | Thể Thao | Điện Thoại & Phụ Kiện | Thiết Bị Điện Tử | Nhà Cửa | Gia Dụng | Balo & Túi Ví)",
-  "keywords": ["danh sách 5-8 từ khóa tìm kiếm tiếng Việt phổ biến, gồm tên loại sản phẩm, từ đồng nghĩa, kiểu dáng, màu sắc"],
-  "colors": ["Màu chính 1", "Màu chính 2"]
+  "keywords": ["danh sách 5-8 từ khóa tìm kiếm tiếng Việt phổ biến trên sàn TMĐT"],
+  "colors": ["Màu chính tiếng Việt"]
 }`;
 
       const res = await fetch(`${this.ollamaUrl}/api/generate`, {
