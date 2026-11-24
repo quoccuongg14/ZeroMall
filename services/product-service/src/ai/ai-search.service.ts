@@ -504,7 +504,7 @@ export class AiSearchService {
     }
 
     const where: any = {
-      status: { not: 'hidden' },
+      status: 'active',
       stock: { gt: 0 },
     };
 
@@ -668,7 +668,7 @@ export class AiSearchService {
       const existingIds = new Set(scoredList.map(p => p.id));
       const fallbackProducts = await this.prisma.product.findMany({
         where: {
-          status: { not: 'hidden' },
+          status: 'active',
           stock: { gt: 0 },
           category: { contains: suggestedCategory, mode: 'insensitive' },
           id: { notIn: Array.from(existingIds) },

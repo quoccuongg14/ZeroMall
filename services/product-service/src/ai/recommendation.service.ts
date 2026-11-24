@@ -191,7 +191,7 @@ export class RecommendationService {
           const targetCategory = seedCategory || topCategories[0];
           const relatedItems = await this.prisma.product.findMany({
             where: {
-              status: { not: 'hidden' },
+              status: 'active',
               stock: { gt: 0 },
               id: { notIn: Array.from(usedProductIds) },
               category: targetCategory,
@@ -223,7 +223,7 @@ export class RecommendationService {
     // -------------------------------------------------------------------------
     const totalActive = await this.prisma.product.count({
       where: {
-        status: { not: 'hidden' },
+        status: 'active',
         stock: { gt: 0 },
       },
     });
@@ -233,7 +233,7 @@ export class RecommendationService {
 
     const exploreItems = await this.prisma.product.findMany({
       where: {
-        status: { not: 'hidden' },
+        status: 'active',
         stock: { gt: 0 },
         id: { notIn: Array.from(usedProductIds) },
       },

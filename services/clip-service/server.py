@@ -228,25 +228,46 @@ CANONICAL_CATEGORIES = {
         "domain": "DRESS"
     },
     "Thể Thao": {
-        "prompt": "sports football soccer jersey athletic sportswear kit wika runner",
+        "prompt": "sports football soccer jersey athletic sportswear kit wika runner bo quan ao the thao",
         "label": "Bộ quần áo thể thao / bóng đá",
         "suggestedTitle": "Bộ Quần Áo Bóng Đá Thể Thao Nam Nữ Thoáng Khí",
         "zero_category": "Thể Thao",
         "domain": "SPORTS"
     },
+    "Dụng Cụ Thể Thao / Tập Gym / Tạ": {
+        "prompt": "gym equipment dumbbells weights barbells resistance bands jump rope fitness workout tạ tay ta tap gym dung cu the thao tap the hinh day khang luc",
+        "label": "Dụng cụ tập gym / Tạ tay / Dây kháng lực",
+        "suggestedTitle": "Bộ Tạ Tay Tập Gym Rèn Luyện Thể Lực Đa Năng",
+        "zero_category": "Thể Thao",
+        "domain": "GYM_EQUIPMENT"
+    },
     "Giày thể thao / Sneaker": {
-        "prompt": "sneakers running shoes tennis shoes athletic shoes sport sneakers walking shoes giay the thao giay sneaker",
-        "label": "Giày thể thao / Sneaker",
+        "prompt": "white sneakers running shoes tennis shoes athletic shoes sport sneakers laced walking shoes giay the thao giay sneaker buoc day",
+        "label": "Giày thể thao / Sneaker buộc dây",
         "suggestedTitle": "Giày Sneaker Thể Thao Năng Động Chính Hãng",
         "zero_category": "Giày Dép Nam",
         "domain": "SNEAKERS"
     },
-    "Dép bánh mì / Dép quai ngang / Sandal": {
-        "prompt": "slides foam slides slippers flip flops pool slides sandals eva foam clogs dep banh mi dep quai ngang dep le",
-        "label": "Dép bánh mì / Dép quai ngang / Sandal",
+    "Dép bánh mì / Dép quai ngang": {
+        "prompt": "slides foam slides slippers flip flops pool slides eva foam clogs dep banh mi dep quai ngang dep le dep kep dep xo ngon dep duc",
+        "label": "Dép quai ngang / Dép bánh mì",
         "suggestedTitle": "Dép Quai Ngang EVA Êm Chân Phong Cách",
-        "zero_category": "Giày Dép Nữ",
-        "domain": "SLIDES_SANDALS"
+        "zero_category": "Giày Dép Nam",
+        "domain": "SLIDES"
+    },
+    "Sandal / Dép quai hậu / Xăng đan": {
+        "prompt": "sports sandals strap sandals trekking sandals outdoor sandals xang dan sandal nam quai du chien binh quai hau",
+        "label": "Sandal quai dù / Dép quai hậu / Xăng đan",
+        "suggestedTitle": "Sandal Quai Dù Nam Nữ Dã Ngoại Năng Động",
+        "zero_category": "Giày Dép Nam",
+        "domain": "SANDALS"
+    },
+    "Giày Tây / Giày Da Công Sở / Loafer": {
+        "prompt": "men leather dress shoes oxford derby loafer formal business shoes giay tay nam giay da cong so giay luoi nam",
+        "label": "Giày tây / Giày da công sở / Loafer",
+        "suggestedTitle": "Giày Tây Nam Da Bò Công Sở Sang Trọng",
+        "zero_category": "Giày Dép Nam",
+        "domain": "LEATHER_SHOES"
     },
     "Giày cao gót / Giày búp bê nữ": {
         "prompt": "women high heels stiletto pumps ballet flats dress shoes giay cao got giay bup be",
@@ -435,8 +456,26 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     pred_cat = cat_info.get("zero_category", "Thời Trang Nam")
 
     # Phân tích thực thể chính trong tiêu đề (Primary Entity Recognition)
-    has_footwear_title = any(k in cleaned_name for k in [
+    has_sneaker_title = any(k in cleaned_name for k in [
+        "sneaker", "giày thể thao", "giay the thao", "giày chạy bộ", "giay chay bo", "giày tập", "giày đi bộ", "giày buộc dây", "giày bóng đá", "giày đá bóng"
+    ])
+    has_slide_title = any(k in cleaned_name for k in [
+        "dép bánh mì", "dep banh mi", "dép quai ngang", "dep quai ngang", "dép lê", "dep le", "dép kẹp", "dep kep", "dép xỏ ngón", "dep xo ngon", "dép sục", "dep suc", "dép đúc", "dep duc", "dép eva", "dép trơn"
+    ]) or (any(k in cleaned_name for k in ["dép", "dep"]) and not any(k in cleaned_name for k in ["sandal", "xăng đan", "quai hậu", "quai du"]))
+    has_sandal_title = any(k in cleaned_name for k in [
+        "sandal", "xăng đan", "quai dù", "quai du", "chiến binh", "chien binh", "quai hậu", "quai hau", "dép quai hậu"
+    ])
+    has_leather_shoe_title = any(k in cleaned_name for k in [
+        "giày tây", "giay tay", "giày da", "giay da", "loafer", "giày lười da", "giay luoi da", "oxford", "derby", "giày công sở", "giay cong so"
+    ])
+    has_heel_title = any(k in cleaned_name for k in [
+        "cao gót", "cao got", "giày búp bê", "giay bup be", "guốc", "guoc", "stiletto", "kitten heels"
+    ])
+    has_footwear_title = has_sneaker_title or has_slide_title or has_sandal_title or has_leather_shoe_title or has_heel_title or any(k in cleaned_name for k in [
         "giày", "giay", "dép", "dep", "sneaker", "sandal", "xăng đan", "boots", "guốc", "cao gót", "slip-on", "suc"
+    ])
+    has_gym_equipment_title = any(k in cleaned_name for k in [
+        "tạ", "ta tay", "tạ tay", "tạ đơn", "ta don", "dây kháng lực", "day khang luc", "thảm yoga", "tham yoga", "con lăn", "con lan", "xà đơn", "xa don", "ghế tập", "ghe tap", "tập gym", "tap gym", "dụng cụ tập", "dung cu the thao", "bình lắc shaker"
     ])
     has_top_title = any(k in cleaned_name for k in [
         "áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan", "croptop"
@@ -453,12 +492,15 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     ])
 
     # 1. Đồng hồ & Dây đeo phụ kiện
-    has_watchstrap_title = any(k in cleaned_name for k in [
-        "dây đồng hồ", "day dong ho", "dây đeo đồng hồ", "dây da đồng hồ", "dây kim loại", "dây thép", "dây silicone", "dây thay thế", "watch strap", "watch band"
-    ])
+    is_explicit_strap_only = any(k in cleaned_name for k in [
+        "dây thay thế", "day thay the", "dây đeo thay thế", "dây đồng hồ thay thế", "chỉ bán dây", "không kèm đồng hồ", "phụ kiện dây đeo", "watch strap", "watch band"
+    ]) or (any(k in cleaned_name for k in ["dây da cho", "dây thép cho", "dây silicone cho"]) and not any(k in cleaned_name for k in ["mặt kính", "mặt số", "chống nước", "đính đá", "máy nhật", "máy pin"]))
+
     has_watch_title = any(k in cleaned_name for k in [
         "đồng hồ", "dong ho", "watch", "smartwatch", "apple watch"
-    ]) and not has_watchstrap_title
+    ]) and not is_explicit_strap_only
+
+    has_watchstrap_title = is_explicit_strap_only or (any(k in cleaned_name for k in ["dây đồng hồ", "dây đeo đồng hồ"]) and not has_watch_title)
 
     # 2. Phụ kiện thời trang nữ
     has_acc_title = any(k in cleaned_name for k in [
@@ -552,7 +594,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
         # Danh sách các nhóm Domain chi tiết
         TOPS_DOMAINS = ["TSHIRT", "CARDIGAN_KNIT", "OUTERWEAR", "SHIRT"]
-        FOOTWEAR_DOMAINS = ["SNEAKERS", "SLIDES_SANDALS", "HEELS"]
+        FOOTWEAR_DOMAINS = ["SNEAKERS", "SLIDES", "SANDALS", "LEATHER_SHOES", "HEELS", "SLIDES_SANDALS"]
 
         # 1. TOPS vs OTHER DOMAINS & Chi tiết nhóm TOPS
         if domain in TOPS_DOMAINS:
@@ -560,7 +602,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             if has_bottom_title and not has_top_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị áo/áo khoác thời trang, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
-            elif not has_top_title and not is_suit and (has_bag_title or has_watch_title or has_footwear_title or has_kitchen_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem"])):
+            elif not has_top_title and not is_suit and (has_bag_title or has_watch_title or has_footwear_title or has_kitchen_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or has_gym_equipment_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem", "tạ"])):
                 is_mismatch = True
                 reason = f"Ảnh là áo thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
@@ -577,32 +619,60 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                     is_mismatch = True
                     reason = f"Ảnh hiển thị áo cardigan / áo len dệt kim, không khớp với sản phẩm là áo thun / áo phông (\"{name}\")."
 
-        # 2. FOOTWEAR: Giày Sneaker vs Dép bánh mì / Sandal & vs Khác
+        # 2. FOOTWEAR: Bóc tách chuyên sâu Giày Sneaker vs Dép quai ngang vs Sandal vs Giày da công sở
         elif domain in FOOTWEAR_DOMAINS:
-            # 2.1 Sneaker thể thao vs Dép bánh mì / Sandal quai ngang
+            # 2.1 Sneaker thể thao buộc dây
             if domain == "SNEAKERS":
-                is_dep_sandal = any(k in cleaned_name for k in [
-                    "dép bánh mì", "dep banh mi", "dép", "dep", "dép quai ngang", "dép lê", "dép kẹp",
-                    "dép xỏ ngón", "dép sục", "sandal", "xăng đan", "quai ngang", "eva nguyên khối"
-                ]) and not any(k in cleaned_name for k in ["sneaker", "giày thể thao", "giay the thao"])
-                if is_dep_sandal:
+                if has_slide_title and not has_sneaker_title:
                     is_mismatch = True
-                    reason = f"Ảnh hiển thị giày thể thao / sneaker buộc dây, không khớp với sản phẩm là dép / dép bánh mì (\"{name}\")."
-
-            # 2.2 Dép / Sandal vs Giày Sneaker thể thao
-            elif domain == "SLIDES_SANDALS":
-                is_sneaker_shoes = any(k in cleaned_name for k in [
-                    "sneaker", "giày thể thao", "giay the thao", "giày chạy bộ", "giay chay bo",
-                    "giày bóng đá", "giày đá bóng", "giày tây", "boots", "giày da"
-                ]) and not any(k in cleaned_name for k in ["dép", "sandal", "xăng đan"])
-                if is_sneaker_shoes:
+                    reason = f"Ảnh hiển thị Giày thể thao / Sneaker buộc dây ({cat_info['label']}), không khớp với sản phẩm là Dép / Dép quai ngang (\"{name}\")."
+                elif has_leather_shoe_title and not has_sneaker_title:
                     is_mismatch = True
-                    reason = f"Ảnh hiển thị dép / dép bánh mì / quai ngang, không khớp với sản phẩm là giày thể thao / sneaker (\"{name}\")."
+                    reason = f"Ảnh hiển thị Giày thể thao / Sneaker ({cat_info['label']}), không khớp với sản phẩm là Giày tây / Giày da công sở (\"{name}\")."
+                elif has_sandal_title and not has_sneaker_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Giày sneaker buộc dây ({cat_info['label']}), không khớp với sản phẩm Sandal / Quai hậu (\"{name}\")."
+                elif has_heel_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Giày thể thao / Sneaker ({cat_info['label']}), không khớp với sản phẩm Giày cao gót / Búp bê (\"{name}\")."
 
-            # 2.3 Giày dép vs Các nhóm sản phẩm khác
+            # 2.2 Dép bánh mì / Dép quai ngang / Dép lê
+            elif domain in ["SLIDES", "SLIDES_SANDALS"]:
+                if has_sneaker_title and not has_slide_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Dép quai ngang / Dép bánh mì ({cat_info['label']}), không khớp với sản phẩm là Giày thể thao / Sneaker (\"{name}\")."
+                elif has_leather_shoe_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Dép quai ngang / Dép bánh mì ({cat_info['label']}), không khớp với sản phẩm là Giày da / Giày tây công sở (\"{name}\")."
+                elif has_sandal_title and not has_slide_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Dép quai ngang / Dép bánh mì ({cat_info['label']}), không khớp với sản phẩm là Sandal quai dù (\"{name}\")."
+
+            # 2.3 Sandal / Dép quai hậu / Xăng đan
+            elif domain == "SANDALS":
+                if has_leather_shoe_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Sandal quai dù / Quai hậu ({cat_info['label']}), không khớp với sản phẩm là Giày tây / Giày da công sở (\"{name}\")."
+                elif has_slide_title and not has_sandal_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Sandal quai dù / Quai hậu ({cat_info['label']}), không khớp với sản phẩm là Dép quai ngang / Dép lê (\"{name}\")."
+
+            # 2.4 Giày tây / Giày da công sở / Loafer
+            elif domain == "LEATHER_SHOES":
+                if has_slide_title and not has_leather_shoe_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Giày da / Giày tây công sở ({cat_info['label']}), không khớp với sản phẩm là Dép / Dép quai ngang (\"{name}\")."
+                elif has_sandal_title and not has_leather_shoe_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Giày da / Giày tây ({cat_info['label']}), không khớp với sản phẩm là Sandal / Xăng đan (\"{name}\")."
+                elif has_sneaker_title and not has_leather_shoe_title:
+                    is_mismatch = True
+                    reason = f"Ảnh hiển thị Giày da / Giày tây công sở ({cat_info['label']}), không khớp với sản phẩm là Giày thể thao / Sneaker (\"{name}\")."
+
+            # 2.5 Giày dép vs Các nhóm sản phẩm khác
             if not has_footwear_title:
-                disallowed_themes = ["nồi chiên", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem"]
-                if has_top_title or has_bottom_title or has_dress_title or has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or any(k in cleaned_name for k in disallowed_themes):
+                disallowed_themes = ["nồi chiên", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem", "tạ", "gym"]
+                if has_top_title or has_bottom_title or has_dress_title or has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or has_gym_equipment_title or any(k in cleaned_name for k in disallowed_themes):
                     is_mismatch = True
                     reason = f"Ảnh là giày dép ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
@@ -611,12 +681,12 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             if has_top_title and not has_bottom_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
-            elif not has_bottom_title and not is_suit and (has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem"])):
+            elif not has_bottom_title and not is_suit and (has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or has_gym_equipment_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem", "tạ"])):
                 is_mismatch = True
                 reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "DRESS":
-            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam", "balo", "cặp", "đồng hồ", "laptop", "máy tính"]):
+            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam", "balo", "cặp", "đồng hồ", "laptop", "máy tính", "tạ"]):
                 is_mismatch = True
                 reason = f"Ảnh là váy đầm thời trang nữ, không khớp với tên sản phẩm \"{name}\"."
 
@@ -627,9 +697,15 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 "laptop", "máy tính", "điện thoại", "tai nghe", "bàn phím", "nồi chiên", "bếp",
                 "balo", "túi", "ví", "cặp", "đồng hồ", "son", "mỹ phẩm"
             ]
-            if any(k in cleaned_name for k in disallowed_themes):
+            if has_footwear_title or any(k in cleaned_name for k in disallowed_themes):
                 is_mismatch = True
                 reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
+
+        # 2.6 DỤNG CỤ TẬP GYM / THỂ THAO (GYM_EQUIPMENT)
+        elif domain == "GYM_EQUIPMENT":
+            if not has_gym_equipment_title and (has_footwear_title or has_top_title or has_bottom_title or has_dress_title or has_bag_title or has_watch_title or has_beauty_title or has_kitchen_title or has_electronics_title or any(k in cleaned_name for k in ["sandal", "dép", "giày", "áo", "quần", "váy", "đầm", "balo", "ví", "đồng hồ", "son", "kem"])):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Dụng cụ tập gym / Tạ tay / Dây kháng lực ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
 
         # 3. BALO / TÚI XÁCH / VÍ (BAGS)
         elif domain == "BAGS":

@@ -44,7 +44,7 @@ export class ProductService {
     if (cached) return cached;
 
     const where: any = {
-      status: { not: 'hidden' },
+      status: 'active',
       stock: { gt: 0 },
     };
     if (category && category !== 'all') {
@@ -126,7 +126,7 @@ export class ProductService {
 
     const products = await this.prisma.product.findMany({
       where: {
-        status: { not: 'hidden' },
+        status: 'active',
         stock: { gt: 0 },
       },
       include: { categoryRef: true },
@@ -178,15 +178,16 @@ export class ProductService {
 
     const andConditions: any[] = [];
 
-    // Luôn loại trừ các sản phẩm đã xóa (Soft Delete) khỏi danh sách mua sắm và quản lý thông thường
+    // Luôn loại trừ các sản phẩm đã xóa (Soft Delete) hoặc bị khóa do vi phạm (violated) khỏi danh sách mua sắm
     andConditions.push({
-      status: { not: 'deleted' },
+      status: { notIn: ['deleted', 'violated'] },
+      isViolated: false,
     });
 
     if (inStockOnly === 'true' || (!shopId && inStockOnly !== 'false')) {
       andConditions.push({
         stock: { gt: 0 },
-        status: { notIn: ['hidden', 'deleted'] },
+        status: 'active',
       });
     }
 
@@ -272,8 +273,8 @@ export class ProductService {
     const product = await this.prisma.product.findUnique({
       where: { id },
     });
-    if (!product) {
-      throw new NotFoundException(`Sản phẩm với ID ${id} không tồn tại`);
+    if (!product || product.status === 'deleted') {
+      throw new NotFoundException(`Sản phẩm với ID ${id} không tồn tại hoặc đã ngừng kinh doanh`);
     }
 
     const reviews = await this.prisma.review.findMany({
