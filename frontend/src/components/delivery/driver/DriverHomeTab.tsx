@@ -14,6 +14,7 @@ export interface DriverHomeTabProps {
   onCheckOut?: () => void
   attendanceToday?: any
   onDrainQueue?: () => void
+  onViewHistory?: () => void
 }
 
 /**
@@ -34,6 +35,7 @@ export const DriverHomeTab: React.FC<DriverHomeTabProps> = ({
   onCheckOut,
   attendanceToday,
   onDrainQueue,
+  onViewHistory,
 }) => {
   // Định dạng tiền tệ VND
   const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
@@ -245,13 +247,17 @@ export const DriverHomeTab: React.FC<DriverHomeTabProps> = ({
       )}
 
       {/* 4. Tổng kết nhanh */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-2">
+      <div
+        onClick={onViewHistory}
+        className="bg-white border border-slate-200 hover:border-emerald-400 rounded-2xl p-4 shadow-xs space-y-2 cursor-pointer transition active:scale-98"
+      >
         <div className="flex items-center justify-between">
           <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
             <span>📊</span> Tổng kết ca làm việc
           </h4>
-          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md">
-            Hôm nay
+          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md flex items-center gap-1">
+            <span>Hôm nay</span>
+            {onViewHistory && <span>• 📜 Xem lịch sử</span>}
           </span>
         </div>
         <p className="text-xs text-slate-700 font-medium">

@@ -85,6 +85,7 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
 }) => {
   // ── Navigation state ──
   const [activeTab, setActiveTab] = useState<TabKey>('HOME')
+  const [ordersSubTab, setOrdersSubTab] = useState<'PICKUP' | 'DELIVERY' | 'HISTORY'>('PICKUP')
 
   // Hồ sơ tài xế tự phục hồi (Fallback trực tiếp từ API nếu props ban đầu chưa kịp nạp)
   const [localDriverProfile, setLocalDriverProfile] = useState<any>(driverProfile || null)
@@ -530,6 +531,13 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
       )
   )
 
+  // 5. Đơn giao thất bại bởi tài xế này
+  const failedTasks = shipments.filter(
+    (s) =>
+      s.status === 'DELIVERY_FAILED' &&
+      s.assignments?.some((a) => a.type === 'DELIVERY' && isMyAssignment(a))
+  )
+
   // Tổng tiền COD tài xế đang giữ
   const codInWallet = completedTasks.reduce((sum, s) => sum + (s.codAmount || 0), 0)
 
@@ -596,7 +604,7 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               pickupCount={pickupTasks.length + returnPickups.length}
               holdingCount={holdingTasks.length + holdingReturnTasks.length}
               deliveryCount={deliveryTasks.length}
-              completedCount={completedTasks.length}
+              completedCount={completedTasks.length + completedPickupTasks.length}
               codInWallet={codInWallet}
               onToggleOnline={toggleOnlineStatus}
               driverState={driverState}
@@ -604,6 +612,10 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               onCheckOut={handleCheckOut}
               attendanceToday={attendanceToday}
               onDrainQueue={handleDrainQueue}
+              onViewHistory={() => {
+                setActiveTab('ORDERS')
+                setOrdersSubTab('HISTORY')
+              }}
             />
           )}
 
@@ -614,6 +626,11 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               holdingReturnTasks={holdingReturnTasks}
               deliveryTasks={deliveryTasks}
               returnTasks={returnPickups}
+              completedPickupTasks={completedPickupTasks}
+              completedDeliveryTasks={completedTasks}
+              failedDeliveryTasks={failedTasks}
+              initialSubTab={ordersSubTab}
+              onSubTabChange={(tab) => setOrdersSubTab(tab)}
               onConfirmReturnPickup={handleDriverConfirmReturnPickup}
               onDeliverReturnToSeller={handleDriverDeliverReturnToSeller}
               onUpdateStatus={onUpdateStatus}
@@ -651,6 +668,10 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               pickupEarnings={pickupEarnings}
               deliveryEarnings={deliveryEarnings}
               onRefresh={onRefresh}
+              onViewHistory={() => {
+                setActiveTab('ORDERS')
+                setOrdersSubTab('HISTORY')
+              }}
             />
           )}
 

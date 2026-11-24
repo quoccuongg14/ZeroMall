@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { DriverPickupConfirmModal } from './DriverPickupConfirmModal'
 import { DriverDeliveryConfirmModal } from './DriverDeliveryConfirmModal'
 import { DriverReturnPickupCard } from './DriverReturnPickupCard'
@@ -25,6 +25,9 @@ export interface Shipment {
   status: string
   currentHub?: { name: string }
   package?: { weight: number; itemsSummary?: string }
+  deliveredAt?: string
+  pickedUpAt?: string
+  updatedAt?: string
   assignments?: Array<{
     id: string
     type: string
@@ -32,6 +35,8 @@ export interface Shipment {
     driverId?: string
     driver?: { id?: string; name?: string; phone?: string; vehicleNumber?: string }
     proofImage?: string
+    note?: string
+    completedAt?: string
   }>
 }
 
@@ -41,6 +46,11 @@ export interface DriverOrdersTabProps {
   holdingReturnTasks?: ReturnData[]
   deliveryTasks: Shipment[]
   returnTasks?: ReturnData[]
+  completedPickupTasks?: Shipment[]
+  completedDeliveryTasks?: Shipment[]
+  failedDeliveryTasks?: Shipment[]
+  initialSubTab?: 'PICKUP' | 'DELIVERY' | 'HISTORY'
+  onSubTabChange?: (tab: 'PICKUP' | 'DELIVERY' | 'HISTORY') => void
   onConfirmReturnPickup?: (ret: ReturnData) => Promise<void>
   onDeliverReturnToSeller?: (ret: ReturnData) => Promise<void>
   onUpdateStatus: (shipmentId: string, status: string, failureReason?: string, proofImage?: string) => Promise<void>
@@ -77,6 +87,11 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
   holdingReturnTasks = [],
   deliveryTasks,
   returnTasks = [],
+  completedPickupTasks = [],
+  completedDeliveryTasks = [],
+  failedDeliveryTasks = [],
+  initialSubTab,
+  onSubTabChange,
   onConfirmReturnPickup,
   onDeliverReturnToSeller,
   onUpdateStatus,
@@ -85,7 +100,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
   isOnline = true,
   onOpenCheckIn,
 }) => {
-  const [subTab, setSubTab] = useState<'PICKUP' | 'DELIVERY'>('PICKUP')
+  const [subTab, setSubTab] = useState<'PICKUP' | 'DELIVERY' | 'HISTORY'>(initialSubTab || 'PICKUP')
   const totalPending = pickupTasks.length + returnTasks.length
   const totalHolding = holdingTasks.length + holdingReturnTasks.length
   const [pickupFilter, setPickupFilter] = useState<'PENDING' | 'HOLDING' | 'RETURNS'>(
@@ -95,6 +110,23 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
   const [deliveryConfirmShipment, setDeliveryConfirmShipment] = useState<Shipment | null>(null)
   const [previewProofImage, setPreviewProofImage] = useState<string | null>(null)
   const [barcodeModalInfo, setBarcodeModalInfo] = useState<BarcodeModalInfo | null>(null)
+
+  // Sub-filters cho tab Lịch Sử & Thu Nhập
+  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'DELIVERY' | 'PICKUP' | 'FAILED'>('ALL')
+  const [historySearch, setHistorySearch] = useState<string>('')
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab)
+    }
+  }, [initialSubTab])
+
+  const handleSelectSubTab = (tab: 'PICKUP' | 'DELIVERY' | 'HISTORY') => {
+    setSubTab(tab)
+    if (onSubTabChange) onSubTabChange(tab)
+  }
+
+  const totalHistoryCount = completedPickupTasks.length + completedDeliveryTasks.length + failedDeliveryTasks.length
 
   // Nếu tài xế chưa vào ca (OFFLINE): Khóa toàn bộ danh sách đơn hàng theo chuẩn SPX
   if (!isOnline) {
@@ -126,12 +158,12 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
 
   return (
     <div className="w-full max-w-md mx-auto space-y-4 font-sans text-slate-800">
-      {/* 1. Sub-Tab Switcher */}
+      {/* 1. Sub-Tab Switcher (3 Tabs: Lấy Hàng • Giao Hàng • Lịch Sử) */}
       <div className="flex p-1 bg-slate-100 rounded-2xl gap-1 border border-slate-200/60 shadow-xs">
         <button
           type="button"
-          onClick={() => setSubTab('PICKUP')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
+          onClick={() => handleSelectSubTab('PICKUP')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
             subTab === 'PICKUP'
               ? 'bg-emerald-600 text-white shadow-xs'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
@@ -139,7 +171,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
         >
           <span>🏪 Lấy Hàng</span>
           <span
-            className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
               subTab === 'PICKUP' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}
           >
@@ -149,8 +181,8 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
 
         <button
           type="button"
-          onClick={() => setSubTab('DELIVERY')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
+          onClick={() => handleSelectSubTab('DELIVERY')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
             subTab === 'DELIVERY'
               ? 'bg-emerald-600 text-white shadow-xs'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
@@ -158,11 +190,30 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
         >
           <span>🛵 Giao Hàng</span>
           <span
-            className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
               subTab === 'DELIVERY' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}
           >
             {deliveryTasks.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSelectSubTab('HISTORY')}
+          className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
+            subTab === 'HISTORY'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+          }`}
+        >
+          <span>📜 Lịch Sử</span>
+          <span
+            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              subTab === 'HISTORY' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}
+          >
+            {totalHistoryCount}
           </span>
         </button>
       </div>
@@ -321,8 +372,8 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            🏪 Lấy Từ Shop
+                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            💰 +8.000đ
                           </span>
                           <span
                             className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
@@ -355,10 +406,15 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 text-[11px]">
-                          <span>📦</span>
-                          <span className="font-medium truncate flex-1">{packageSummary}</span>
-                          <span className="font-bold text-slate-700 shrink-0">({packageWeight} kg)</span>
+                        <div className="flex items-center justify-between gap-1.5 text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 text-[11px]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span>📦</span>
+                            <span className="font-medium truncate">{packageSummary}</span>
+                            <span className="font-bold text-slate-700 shrink-0">({packageWeight} kg)</span>
+                          </div>
+                          <span className="font-bold text-emerald-700 shrink-0 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">
+                            Thù lao: +8.000đ
+                          </span>
                         </div>
                       </div>
 
@@ -612,9 +668,14 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                             {shipment.trackingNumber}
                           </span>
                         </div>
-                        <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-teal-100 text-teal-800 border border-teal-200">
-                          🚚 Đang Giữ Trên Xe
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            💰 +8.000đ
+                          </span>
+                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-teal-100 text-teal-800 border border-teal-200">
+                            🚚 Đang Giữ Trên Xe
+                          </span>
+                        </div>
                       </div>
 
                       {/* Info */}
@@ -779,9 +840,14 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           {shipment.trackingNumber}
                         </span>
                       </div>
-                      <span className="px-2 py-0.5 bg-teal-100/80 text-teal-800 border border-teal-300 text-[10px] font-bold rounded-md flex items-center gap-1">
-                        <span>⏳</span> Chờ Shipper Nhận
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          💰 +8.000đ
+                        </span>
+                        <span className="px-2 py-0.5 bg-teal-100/80 text-teal-800 border border-teal-300 text-[10px] font-bold rounded-md flex items-center gap-1">
+                          <span>⏳</span> Chờ Shipper Nhận
+                        </span>
+                      </div>
                     </div>
 
                     <div className="text-xs space-y-1">
@@ -852,9 +918,14 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                             {shipment.trackingNumber}
                           </span>
                         </div>
-                        <span className="px-2 py-0.5 bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold rounded-md animate-pulse">
-                          Đang giao
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            💰 +8.000đ
+                          </span>
+                          <span className="px-2 py-0.5 bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold rounded-md animate-pulse">
+                            Đang giao
+                          </span>
+                        </div>
                       </div>
 
                       {/* Customer Information & Address */}
@@ -872,14 +943,22 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </p>
                         </div>
 
-                        {/* COD Amount Box */}
-                        <div className="p-2.5 bg-emerald-50 border border-emerald-200/60 rounded-xl text-xs font-bold text-emerald-800 flex justify-between items-center">
-                          <span className="flex items-center gap-1">
-                            <span>💵</span> Thu Tiền COD:
-                          </span>
-                          <span className="text-sm font-black text-emerald-700">
-                            {formatMoney(shipment.codAmount)}
-                          </span>
+                        {/* Earning & COD Box */}
+                        <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                          <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 flex justify-between items-center">
+                            <span className="flex items-center gap-1 text-[11px]">
+                              <span>💰</span> Thù lao:
+                            </span>
+                            <span className="font-black text-emerald-700 text-xs">+8.000đ</span>
+                          </div>
+                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 flex justify-between items-center">
+                            <span className="flex items-center gap-1 text-[11px]">
+                              <span>💵</span> Thu COD:
+                            </span>
+                            <span className="font-black text-amber-700 text-xs">
+                              {formatMoney(shipment.codAmount)}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -924,6 +1003,393 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                 })
               )}
             </div>
+          </div>
+        )
+      })()}
+
+      {/* 4. Sub-Tab Content: LỊCH SỬ ĐƠN & THÙ LAO (HISTORY) */}
+      {subTab === 'HISTORY' && (() => {
+        interface HistoryItem {
+          id: string
+          trackingNumber: string
+          type: 'DELIVERY' | 'PICKUP'
+          status: 'COMPLETED' | 'FAILED'
+          shipment: Shipment
+          earning: number
+          codAmount: number
+          completedAt?: string
+          proofImage?: string
+          failureReason?: string
+          name: string
+          phone: string
+          address: string
+          packageSummary: string
+          packageWeight: number
+        }
+
+        const historyItems: HistoryItem[] = []
+
+        // 1. Đơn giao thành công (Last-Mile: 8.000đ/đơn)
+        for (const s of completedDeliveryTasks) {
+          const assign = s.assignments?.find((a) => a.type === 'DELIVERY')
+          historyItems.push({
+            id: `del-${s.id}`,
+            trackingNumber: s.trackingNumber,
+            type: 'DELIVERY',
+            status: 'COMPLETED',
+            shipment: s,
+            earning: 8000,
+            codAmount: s.codAmount || 0,
+            completedAt: s.deliveredAt || assign?.completedAt || s.updatedAt,
+            proofImage: assign?.proofImage,
+            name: s.buyerName || 'Khách hàng',
+            phone: s.buyerPhone || '',
+            address: s.deliveryAddress,
+            packageSummary: s.package?.itemsSummary || 'Sản phẩm Shopee',
+            packageWeight: s.package?.weight || 0.5,
+          })
+        }
+
+        // 2. Đơn lấy thành công (First-Mile: 8.000đ/đơn)
+        for (const s of completedPickupTasks) {
+          const assign = s.assignments?.find((a) => a.type === 'PICKUP')
+          const addressParts = [
+            s.pickupAddress?.address,
+            s.pickupAddress?.ward,
+            s.pickupAddress?.district,
+            s.pickupAddress?.province,
+          ].filter(Boolean).map((x) => String(x).trim()).filter(Boolean)
+          const uniqueParts: string[] = []
+          for (const p of addressParts) {
+            if (!uniqueParts.some((u) => u.toLowerCase() === p.toLowerCase())) {
+              uniqueParts.push(p)
+            }
+          }
+          const shopAddress = uniqueParts.length > 0 ? uniqueParts.join(', ') : 'Kho Người Bán'
+
+          historyItems.push({
+            id: `pick-${s.id}`,
+            trackingNumber: s.trackingNumber,
+            type: 'PICKUP',
+            status: 'COMPLETED',
+            shipment: s,
+            earning: 8000,
+            codAmount: 0,
+            completedAt: s.pickedUpAt || assign?.completedAt || s.updatedAt,
+            proofImage: assign?.proofImage,
+            name: s.pickupAddress?.name || 'Kho Người Bán',
+            phone: s.pickupAddress?.phone || '',
+            address: shopAddress,
+            packageSummary: s.package?.itemsSummary || 'Sản phẩm lấy từ Shop',
+            packageWeight: s.package?.weight || 0.5,
+          })
+        }
+
+        // 3. Đơn giao thất bại (0đ thù lao)
+        for (const s of failedDeliveryTasks) {
+          const assign = s.assignments?.find((a) => a.type === 'DELIVERY')
+          historyItems.push({
+            id: `fail-${s.id}`,
+            trackingNumber: s.trackingNumber,
+            type: 'DELIVERY',
+            status: 'FAILED',
+            shipment: s,
+            earning: 0,
+            codAmount: s.codAmount || 0,
+            completedAt: s.updatedAt,
+            failureReason: assign?.note || 'Khách không nghe máy / Hẹn lại ngày giao',
+            name: s.buyerName || 'Khách hàng',
+            phone: s.buyerPhone || '',
+            address: s.deliveryAddress,
+            packageSummary: s.package?.itemsSummary || 'Sản phẩm Shopee',
+            packageWeight: s.package?.weight || 0.5,
+          })
+        }
+
+        // Sắp xếp mới nhất lên đầu
+        historyItems.sort((a, b) => {
+          const tA = a.completedAt ? new Date(a.completedAt).getTime() : 0
+          const tB = b.completedAt ? new Date(b.completedAt).getTime() : 0
+          return tB - tA
+        })
+
+        // Lọc theo filter
+        const filteredItems = historyItems.filter((item) => {
+          if (historyFilter === 'DELIVERY' && (item.type !== 'DELIVERY' || item.status !== 'COMPLETED')) return false
+          if (historyFilter === 'PICKUP' && (item.type !== 'PICKUP' || item.status !== 'COMPLETED')) return false
+          if (historyFilter === 'FAILED' && item.status !== 'FAILED') return false
+
+          if (historySearch.trim()) {
+            const term = historySearch.trim().toLowerCase()
+            return (
+              item.trackingNumber.toLowerCase().includes(term) ||
+              item.name.toLowerCase().includes(term) ||
+              item.address.toLowerCase().includes(term) ||
+              item.phone.toLowerCase().includes(term)
+            )
+          }
+          return true
+        })
+
+        const totalEarned = historyItems.reduce((sum, item) => sum + item.earning, 0)
+        const totalCodCollected = historyItems
+          .filter((i) => i.status === 'COMPLETED')
+          .reduce((sum, item) => sum + item.codAmount, 0)
+        const totalCompleted = historyItems.filter((i) => i.status === 'COMPLETED').length
+
+        return (
+          <div className="space-y-3 text-left">
+            {/* THỐNG KÊ TỔNG QUAN LỊCH SỬ THÙ LAO */}
+            <div className="p-4 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-sm border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <span>💰</span> Thù Lao & Lịch Sử Hoàn Thành
+                </span>
+                <span className="text-[10px] font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded-full">
+                  Tổng {historyItems.length} đơn ghi nhận
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                <div className="p-2.5 bg-white/5 rounded-xl border border-white/10">
+                  <span className="text-[10px] text-slate-400 block font-semibold">Đã Xong</span>
+                  <span className="text-base font-black text-white">{totalCompleted}</span>
+                  <span className="text-[9px] text-slate-400 block">đơn</span>
+                </div>
+                <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-300 block font-semibold">Tổng Thu Nhập</span>
+                  <span className="text-sm font-black text-emerald-400 font-mono">
+                    {formatMoney(totalEarned)}
+                  </span>
+                  <span className="text-[9px] text-emerald-300 block">8k/đơn</span>
+                </div>
+                <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                  <span className="text-[10px] text-amber-300 block font-semibold">COD Đã Thu</span>
+                  <span className="text-xs font-black text-amber-300 font-mono truncate block">
+                    {formatMoney(totalCodCollected)}
+                  </span>
+                  <span className="text-[9px] text-amber-300 block">Ví COD</span>
+                </div>
+              </div>
+            </div>
+
+            {/* BỘ LỌC & TÌM KIẾM */}
+            <div className="space-y-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Tìm mã vận đơn, tên khách, địa chỉ..."
+                  className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                />
+                {historySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Sub-filters */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl transition shrink-0 cursor-pointer ${
+                    historyFilter === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Tất Cả ({historyItems.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter('DELIVERY')}
+                  className={`px-3 py-1.5 rounded-xl transition shrink-0 cursor-pointer flex items-center gap-1 ${
+                    historyFilter === 'DELIVERY'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>🛵 Giao Xong</span>
+                  <span className="font-mono text-[10px]">({completedDeliveryTasks.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter('PICKUP')}
+                  className={`px-3 py-1.5 rounded-xl transition shrink-0 cursor-pointer flex items-center gap-1 ${
+                    historyFilter === 'PICKUP'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>🏪 Lấy Xong</span>
+                  <span className="font-mono text-[10px]">({completedPickupTasks.length})</span>
+                </button>
+                {failedDeliveryTasks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('FAILED')}
+                    className={`px-3 py-1.5 rounded-xl transition shrink-0 cursor-pointer flex items-center gap-1 ${
+                      historyFilter === 'FAILED'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-white text-rose-700 border border-rose-200 hover:bg-rose-50'
+                    }`}
+                  >
+                    <span>❌ Thất Bại</span>
+                    <span className="font-mono text-[10px]">({failedDeliveryTasks.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* DANH SÁCH ĐƠN HÀNG TRONG LỊCH SỬ */}
+            {filteredItems.length === 0 ? (
+              <div className="py-12 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-slate-400 space-y-2">
+                <span className="text-4xl block">📜</span>
+                <p className="text-xs font-bold text-slate-700">Chưa có đơn hàng nào trong lịch sử</p>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                  Khi bạn hoàn thành lấy hàng tại Shop hoặc giao hàng thành công tới người mua, các đơn hàng kèm thù lao chi tiết sẽ được lưu trữ tự động tại đây.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredItems.map((item) => {
+                  const isDelivery = item.type === 'DELIVERY'
+                  const isCompleted = item.status === 'COMPLETED'
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs hover:border-emerald-300 transition"
+                    >
+                      {/* Dòng 1: Header đơn hàng */}
+                      <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
+                              isCompleted
+                                ? isDelivery
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                  : 'bg-teal-50 text-teal-800 border-teal-300'
+                                : 'bg-rose-50 text-rose-800 border-rose-300'
+                            }`}
+                          >
+                            {isCompleted
+                              ? isDelivery
+                                ? '✓ GIAO THÀNH CÔNG'
+                                : '✓ LẤY TỪ SHOP'
+                              : '✕ GIAO THẤT BẠI'}
+                          </span>
+                          <span className="font-mono font-black text-slate-800 text-xs">
+                            {item.trackingNumber}
+                          </span>
+                        </div>
+
+                        {/* Thù lao thu nhập đơn */}
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-black border ${
+                              isCompleted
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                          >
+                            💰 {isCompleted ? '+8.000đ' : '0đ'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Dòng 2: Chi tiết người nhận / người gửi */}
+                      <div className="space-y-1.5 text-xs text-slate-700">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <p className="font-bold text-slate-900 text-sm">
+                              {isDelivery ? '👤 Khách: ' : '🏪 Shop: '}
+                              <span>{item.name}</span>
+                              {item.phone && (
+                                <span className="text-slate-500 font-normal ml-1">({item.phone})</span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                              📍 {item.address}
+                            </p>
+                          </div>
+
+                          {/* Thumbnail ảnh POD nếu có */}
+                          {item.proofImage && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewProofImage(item.proofImage || null)}
+                              className="shrink-0 relative group cursor-pointer"
+                              title="Bấm xem ảnh chụp bằng chứng giao nhận (POD/POP)"
+                            >
+                              <img
+                                src={item.proofImage}
+                                alt="POD Proof"
+                                className="w-12 h-12 object-cover rounded-xl border-2 border-emerald-500 shadow-xs"
+                              />
+                              <span className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center text-[10px] text-white opacity-0 group-hover:opacity-100 transition">
+                                🔍
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Kiện hàng & COD */}
+                        <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center text-[11px]">
+                          <span className="text-slate-600 truncate max-w-[180px]">
+                            📦 {item.packageSummary} ({item.packageWeight}kg)
+                          </span>
+                          <span className="font-bold">
+                            {isDelivery ? (
+                              item.codAmount > 0 ? (
+                                <span className="text-amber-700">
+                                  💵 COD: {formatMoney(item.codAmount)}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700">Đã thanh toán (0đ COD)</span>
+                              )
+                            ) : (
+                              <span className="text-slate-500">Đơn lấy hàng</span>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Lý do thất bại nếu có */}
+                        {item.failureReason && (
+                          <div className="p-2 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-700 font-medium">
+                            ⚠️ Lý do thất bại: {item.failureReason}
+                          </div>
+                        )}
+
+                        {/* Thời gian hoàn tất & nút liên hệ */}
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[10px] text-slate-400">
+                          <span>
+                            🕒 Hoàn tất: {item.completedAt ? new Date(item.completedAt).toLocaleString('vi-VN') : 'Trong ca'}
+                          </span>
+                          {item.proofImage && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewProofImage(item.proofImage || null)}
+                              className="text-emerald-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                            >
+                              <span>📷</span> Xem ảnh POD
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )
       })()}

@@ -19,6 +19,7 @@ export interface DriverWalletTabProps {
   pickupEarnings?: number
   deliveryEarnings?: number
   onRefresh: () => void
+  onViewHistory?: () => void
 }
 
 const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
@@ -33,6 +34,7 @@ export const DriverWalletTab: React.FC<DriverWalletTabProps> = ({
   pickupEarnings = 0,
   deliveryEarnings = 0,
   onRefresh,
+  onViewHistory,
 }) => {
   const [driverEarnings, setDriverEarnings] = useState<number>(initialDriverEarnings)
   const [showRemitModal, setShowRemitModal] = useState<boolean>(false)
@@ -124,8 +126,11 @@ export const DriverWalletTab: React.FC<DriverWalletTabProps> = ({
             <div className="mt-1.5 space-y-1 max-h-24 overflow-y-auto">
               {completedTasks.map((t) => (
                 <div key={t.id} className="flex justify-between items-center text-[10px] text-slate-300">
-                  <span className="truncate max-w-[200px]">{t.trackingNumber} ({t.buyerName})</span>
-                  <span className="font-mono text-amber-300 font-bold">{formatMoney(t.codAmount)}</span>
+                  <span className="truncate max-w-[170px]">{t.trackingNumber} ({t.buyerName})</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-emerald-400 font-bold bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-500/30">+8k công</span>
+                    <span className="font-mono text-amber-300 font-bold">{formatMoney(t.codAmount)}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -212,6 +217,18 @@ export const DriverWalletTab: React.FC<DriverWalletTabProps> = ({
             </div>
           </div>
         </div>
+
+        {/* NÚT XEM LỊCH SỬ ĐƠN & THÙ LAO */}
+        {onViewHistory && (
+          <button
+            type="button"
+            onClick={onViewHistory}
+            className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>📜</span>
+            <span>Xem Chi Tiết Lịch Sử & Thù Lao Từng Đơn</span>
+          </button>
+        )}
 
         {/* BẢNG THƯỞNG KPI NĂNG SUẤT NGÀY (SPX DAILY INCENTIVE LADDER) */}
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-3.5 rounded-2xl space-y-2.5">
