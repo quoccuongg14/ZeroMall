@@ -374,6 +374,12 @@ export class ProductService {
             `🚫 VI PHẠM AN TOÀN NGHIÊM TRỌNG: Hình ảnh sản phẩm bị phát hiện chứa vật phẩm cấm kinh doanh trên sàn (${audit.detectedVisual || audit.prohibitedLabel || 'Vũ khí / Hàng cấm'}). Hệ thống ZeroMall từ chối đăng tải!`
           );
         }
+        if (audit.issueType === 'IMAGE_MISMATCH') {
+          const reasonMsg = audit.imageFeedback || audit.recommendation || `Hình ảnh nhận diện là "${audit.detectedVisual || 'sản phẩm khác'}", không khớp với tên sản phẩm "${productName}".`;
+          throw new BadRequestException(
+            `🚫 TỪ CHỐI ĐĂNG TẢI - HÌNH ẢNH KHÔNG TRÙNG KHỚP: ${reasonMsg} Vui lòng chọn đúng hình ảnh thực tế của sản phẩm!`
+          );
+        }
         if (!audit.isMatched) {
           isViolated = true;
           violationReason = audit.imageFeedback || audit.titleFeedback || audit.recommendation || 'Không khớp ngành hàng hoặc hình ảnh sản phẩm';

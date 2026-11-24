@@ -244,20 +244,20 @@ print(f"[+] {len(CAT_KEYS)} category vectors ready! Starting server on port {POR
 
 COMPATIBLE_CATEGORIES = {
     "Thời Trang Nam": ["Thời Trang Nam", "Thời Trang Nữ", "Thể Thao"],
-    "Thời Trang Nữ": ["Thời Trang Nữ", "Thời Trang Nam", "Phụ Kiện Nữ", "Túi Ví Nữ", "Thể Thao"],
+    "Thời Trang Nữ": ["Thời Trang Nữ", "Thời Trang Nam", "Thể Thao"],
     "Thể Thao": ["Thể Thao", "Thời Trang Nam", "Thời Trang Nữ"],
     "Giày Dép Nam": ["Giày Dép Nam", "Giày Dép Nữ", "Thể Thao"],
-    "Giày Dép Nữ": ["Giày Dép Nữ", "Giày Dép Nam", "Thời Trang Nữ"],
-    "Đồng Hồ": ["Đồng Hồ", "Phụ Kiện Nữ"],
-    "Mẹ & Bé": ["Mẹ & Bé", "Thời Trang Nữ", "Nhà Cửa"],
+    "Giày Dép Nữ": ["Giày Dép Nữ", "Giày Dép Nam"],
+    "Đồng Hồ": ["Đồng Hồ"],
+    "Mẹ & Bé": ["Mẹ & Bé"],
     "Sắc Đẹp": ["Sắc Đẹp", "Sức Khỏe"],
     "Sức Khỏe": ["Sức Khỏe", "Sắc Đẹp"],
     "Nhà Cửa": ["Nhà Cửa", "Gia Dụng"],
     "Gia Dụng": ["Gia Dụng", "Nhà Cửa"],
-    "Phụ Kiện Nữ": ["Phụ Kiện Nữ", "Thời Trang Nữ", "Đồng Hồ"],
-    "Túi Ví Nữ": ["Túi Ví Nữ", "Thời Trang Nữ", "Phụ Kiện Nữ"],
-    "Điện Thoại & Phụ Kiện": ["Điện Thoại & Phụ Kiện", "Thiết Bị Điện Tử", "Máy Tính & Laptop"],
-    "Máy Tính & Laptop": ["Máy Tính & Laptop", "Thiết Bị Điện Tử", "Điện Thoại & Phụ Kiện"],
+    "Phụ Kiện Nữ": ["Phụ Kiện Nữ"],
+    "Túi Ví Nữ": ["Túi Ví Nữ"],
+    "Điện Thoại & Phụ Kiện": ["Điện Thoại & Phụ Kiện", "Thiết Bị Điện Tử"],
+    "Máy Tính & Laptop": ["Máy Tính & Laptop", "Thiết Bị Điện Tử"],
     "Thiết Bị Điện Tử": ["Thiết Bị Điện Tử", "Điện Thoại & Phụ Kiện", "Máy Tính & Laptop", "Máy Ảnh"],
     "Máy Ảnh": ["Máy Ảnh", "Thiết Bị Điện Tử"],
     "Sách & VPP": ["Sách & VPP"],
@@ -367,7 +367,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         "giày", "giay", "dép", "dep", "sneaker", "sandal", "xăng đan", "boots", "guốc", "cao gót", "slip-on", "suc"
     ])
     has_top_title = any(k in cleaned_name for k in [
-        "áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan"
+        "áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan", "croptop"
     ])
     has_bottom_title = any(k in cleaned_name for k in [
         "quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"
@@ -376,6 +376,15 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     has_kitchen_title = any(k in cleaned_name for k in [
         "kệ", "ke", "nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia vị", "đũa", "thớt", "dao", "bát", "đĩa", "hộp đựng", "bình giữ nhiệt", "gia dụng", "giá để"
     ])
+    has_bag_title = any(k in cleaned_name for k in [
+        "balo", "ba lô", "backpack", "túi", "tui", "ví", "vi", "bóp", "bop", "cặp", "cap", "clutch", "tote", "handbag", "purse", "crossbody", "vali"
+    ])
+    has_watch_title = any(k in cleaned_name for k in [
+        "đồng hồ", "dong ho", "watch", "smartwatch", "apple watch"
+    ])
+    has_acc_title = any(k in cleaned_name for k in [
+        "kẹp tóc", "khuyên tai", "bông tai", "vòng cổ", "dây chuyền", "nhẫn", "trang sức", "mắt kính", "kính mát", "phụ kiện"
+    ])
 
     if is_prohibited:
         is_mismatch = True
@@ -383,7 +392,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     elif best_cat == "Sơ đồ / Tài liệu":
         # Chỉ coi là sơ đồ / tài liệu khi độ tin cậy thực sự cao (>= 0.30)
         # VÀ tên sản phẩm không phải là sản phẩm gia dụng/vật lý rõ ràng
-        if max_cat_sim >= 0.30 and not (has_kitchen_title or has_footwear_title or has_top_title or has_bottom_title):
+        if max_cat_sim >= 0.30 and not (has_kitchen_title or has_footwear_title or has_top_title or has_bottom_title or has_bag_title):
             is_mismatch = True
             reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
 
@@ -397,14 +406,14 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         TOPS_DOMAINS = ["TSHIRT", "CARDIGAN_KNIT", "OUTERWEAR", "SHIRT"]
         FOOTWEAR_DOMAINS = ["SNEAKERS", "SLIDES_SANDALS", "HEELS"]
 
-        # 1. TOPS vs BOTTOMS & Chi tiết nhóm TOPS
+        # 1. TOPS vs BOTTOMS & BAGS & WATCH & Chi tiết nhóm TOPS
         if domain in TOPS_DOMAINS:
             is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
             # Nếu tiêu đề ĐÃ CÓ ÁO (has_top_title) thì dù có nhắc đến quần phối cùng cũng KHÔNG tính là lệch!
             if has_bottom_title and not has_top_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị áo/áo khoác thời trang, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
-            elif not has_top_title and not is_suit and any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+            elif not has_top_title and not is_suit and (has_bag_title or has_watch_title or has_footwear_title or has_kitchen_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ"])):
                 is_mismatch = True
                 reason = f"Ảnh là áo thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
@@ -443,11 +452,10 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                     is_mismatch = True
                     reason = f"Ảnh hiển thị dép / dép bánh mì / quai ngang, không khớp với sản phẩm là giày thể thao / sneaker (\"{name}\")."
 
-            # 2.3 Giày dép vs Quần áo / Gia dụng / Điện tử
-            # Nếu tiêu đề đã có từ khóa Giày Dép (has_footwear_title) thì KHÔNG BAO GIỜ báo lệch!
+            # 2.3 Giày dép vs Quần áo / Gia dụng / Điện tử / Balo / Đồng hồ
             if not has_footwear_title:
-                disallowed_themes = ["nồi chiên", "điện thoại", "laptop", "máy tính"]
-                if has_top_title or has_bottom_title or has_dress_title or any(k in cleaned_name for k in disallowed_themes):
+                disallowed_themes = ["nồi chiên", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ"]
+                if has_top_title or has_bottom_title or has_dress_title or has_bag_title or has_watch_title or any(k in cleaned_name for k in disallowed_themes):
                     is_mismatch = True
                     reason = f"Ảnh là giày dép ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
@@ -456,12 +464,12 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             if has_top_title and not has_bottom_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
-            elif not has_bottom_title and not is_suit and any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính"]):
+            elif not has_bottom_title and not is_suit and (has_bag_title or has_watch_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ"])):
                 is_mismatch = True
                 reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "DRESS":
-            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam"]):
+            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam", "balo", "cặp", "đồng hồ"]):
                 is_mismatch = True
                 reason = f"Ảnh là váy đầm thời trang nữ, không khớp với tên sản phẩm \"{name}\"."
 
@@ -469,11 +477,42 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             disallowed_themes = [
                 "siêu nhân", "gao", "công chúa", "bà ba", "áo dài", "đồ ngủ",
                 "pijama", "anime", "cosplay", "giày", "dép", "sneaker", "sandal",
-                "laptop", "máy tính", "điện thoại", "tai nghe", "bàn phím", "nồi chiên", "bếp"
+                "laptop", "máy tính", "điện thoại", "tai nghe", "bàn phím", "nồi chiên", "bếp",
+                "balo", "túi", "ví", "cặp", "đồng hồ"
             ]
             if any(k in cleaned_name for k in disallowed_themes):
                 is_mismatch = True
                 reason = f"Ảnh là trang phục thể thao/bóng đá thực tế, không khớp với tên sản phẩm \"{name}\"."
+
+        # 3. BALO / TÚI XÁCH / VÍ (BAGS)
+        elif domain == "BAGS":
+            disallowed_for_bags = [
+                "áo", "ao", "shirt", "quần", "quan", "pant", "jean", "váy", "đầm",
+                "giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "đồng hồ", "điện thoại", "laptop", "máy tính"
+            ]
+            if not has_bag_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_kitchen_title or has_watch_title or any(k in cleaned_name for k in disallowed_for_bags)):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Balo / Túi xách / Cặp ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
+
+        # 4. ĐỒNG HỒ ĐEO TAY (WATCH)
+        elif domain == "WATCH":
+            disallowed_for_watch = [
+                "áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "sneaker", "sandal",
+                "nồi chiên", "bếp", "balo", "túi", "ví", "cặp", "điện thoại", "laptop"
+            ]
+            if not has_watch_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_kitchen_title or any(k in cleaned_name for k in disallowed_for_watch)):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Đồng hồ ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 5. PHỤ KIỆN THỜI TRANG (ACCESSORIES)
+        elif domain == "ACCESSORIES":
+            disallowed_for_acc = [
+                "áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "sneaker", "sandal",
+                "nồi chiên", "bếp", "balo", "cặp", "đồng hồ"
+            ]
+            if not has_acc_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title or any(k in cleaned_name for k in disallowed_for_acc)):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Phụ kiện thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "KITCHEN":
             if not has_kitchen_title:
@@ -481,7 +520,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 reason = f"Ảnh là đồ gia dụng nhà bếp, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "ELECTRONICS":
-            if any(k in cleaned_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi chiên"]):
+            if any(k in cleaned_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi chiên", "balo", "ví", "cặp"]):
                 is_mismatch = True
                 reason = f"Ảnh là thiết bị công nghệ điện tử, không khớp với tên sản phẩm \"{name}\"."
 
@@ -495,8 +534,6 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 break
 
         # Kiểm tra xem tiêu đề sản phẩm có đang chứa từ khóa đại diện đúng cho ngành hàng hiện tại không
-        # Nếu tiêu đề ĐÃ rõ ràng là ngành hàng đó (ví dụ chứa "đồng hồ", "blazer", "yếm", "ăn dặm", "áo", "quần", "váy"),
-        # thì tuyệt đối không để kết quả zero-shot có điểm số thấp lấn át tiêu đề chuẩn!
         title_matches_current_cat = any(
             w in cleaned_name for w in [
                 "đồng hồ", "dong ho", "watch", "smartwatch",
@@ -524,8 +561,13 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         )
 
         if not is_compatible:
-            # Chỉ báo lệch ngành nếu tiêu đề không hề khớp ngành và độ tự tin thị giác cao
-            if not title_matches_current_cat and visual_confidence >= 24.5:
+            # Nếu domain nhận diện thị giác là các domain rõ ràng (BAGS, WATCH, SNEAKERS, SLIDES_SANDALS, ELECTRONICS, KITCHEN)
+            # mà ngành hàng được chọn hoàn toàn không tương thích -> Tuyệt đối KHÔNG cho phép bypass bằng title_matches_current_cat!
+            strict_domains = ["BAGS", "WATCH", "SNEAKERS", "SLIDES_SANDALS", "HEELS", "ELECTRONICS", "KITCHEN"]
+            if domain in strict_domains and visual_confidence >= 24.0:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
+            elif not title_matches_current_cat and visual_confidence >= 24.5:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
 
@@ -603,10 +645,15 @@ class ClipHandler(BaseHTTPRequestHandler):
                     "dimensions": len(rounded)
                 }).encode("utf-8"))
             except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                import traceback
+                traceback.print_exc()
+                try:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                except Exception:
+                    pass
 
         elif self.path in ["/audit", "/classify"]:
             try:
@@ -703,10 +750,15 @@ class ClipHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
 
             except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                import traceback
+                traceback.print_exc()
+                try:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                except Exception:
+                    pass
         else:
             self.send_response(404)
             self.end_headers()

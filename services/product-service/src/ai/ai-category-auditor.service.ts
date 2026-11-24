@@ -1218,7 +1218,7 @@ export class AiCategoryAuditorService {
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(activeUrl, {
         method: 'POST',
@@ -1266,7 +1266,7 @@ export class AiCategoryAuditorService {
     confidence?: number;
     source?: 'local-clip-engine';
   } | null> {
-    const cacheKey = `${imageUrl}__${rawName}`;
+    const cacheKey = `${imageUrl}__${rawName}__${category}`;
     if (this.visualPerceptionCache.has(cacheKey)) {
       return this.visualPerceptionCache.get(cacheKey) as any;
     }
@@ -1293,7 +1293,7 @@ export class AiCategoryAuditorService {
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(activeUrl, {
         method: 'POST',

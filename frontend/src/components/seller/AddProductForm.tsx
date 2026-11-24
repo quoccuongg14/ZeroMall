@@ -52,6 +52,8 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
   const [activeTab, setActiveTab] = useState<'basic' | 'sales' | 'shipping' | 'other'>('basic')
   const [categoryAudit, setCategoryAudit] = useState<AuditCategoryResult | null>(null)
   const isProhibitedItem = Boolean(categoryAudit?.isProhibited || categoryAudit?.issueType === 'PROHIBITED_ITEM')
+  const isImageMismatch = Boolean(categoryAudit && (!categoryAudit.isMatched && (categoryAudit.issueType === 'IMAGE_MISMATCH' || (categoryAudit as any).isMismatch)))
+  const isBlockedSubmit = isProhibitedItem || isImageMismatch
 
   // Parse Shop Shipping Settings
   const shopShippingConfig = React.useMemo(() => {
@@ -746,6 +748,16 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
       return
     }
 
+    if (currentAudit && (!currentAudit.isMatched || currentAudit.issueType === 'IMAGE_MISMATCH' || (currentAudit as any).isMismatch)) {
+      if (currentAudit.issueType === 'IMAGE_MISMATCH' || (currentAudit as any).isMismatch) {
+        const mismatchReason = currentAudit.imageFeedback || currentAudit.recommendation || `Hình ảnh nhận diện là "${currentAudit.detectedVisual || 'sản phẩm khác'}", không khớp với tên sản phẩm bạn nhập.`
+        alert(`🚫 TỪ CHỐI ĐĂNG TẢI - HÌNH ẢNH KHÔNG TRÙNG KHỚP:\n\n${mismatchReason}\n\nVui lòng tải đúng ảnh thực tế của sản phẩm hoặc sửa lại tiêu đề/ngành hàng trước khi đăng bán!`)
+        setActiveTab('basic')
+        setErrors(prev => ({ ...prev, images: mismatchReason }))
+        return
+      }
+    }
+
     const newErrors: Record<string, string> = {}
 
     if (images.length === 0) {
@@ -1121,6 +1133,14 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
             </div>
           </div>
         )}
+        {!isProhibitedItem && isImageMismatch && (
+          <div className="mx-6 mb-2 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 text-amber-800">
+            <span className="text-xl">⚠️</span>
+            <div className="text-xs">
+              <span className="font-bold">ẢNH KHÔNG TRÙNG KHỚP:</span> AI nhận diện ảnh là "{categoryAudit?.detectedVisual || 'sản phẩm khác'}", không khớp với tiêu đề "{productName}". Vui lòng tải đúng ảnh thực tế hoặc sửa lại tên sản phẩm để tiếp tục đăng bán!
+            </div>
+          </div>
+        )}
         <div className="p-4 bg-slate-50 border-t border-slate-200/60 flex justify-between items-center">
           <button
             type="button"
@@ -1133,26 +1153,28 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
           <div className="flex items-center gap-3">
             <button
               type="button"
-              disabled={isProhibitedItem}
+              disabled={isBlockedSubmit}
               onClick={(e) => handleSubmit(e, 'hidden')}
               className={`border border-slate-200 text-xs font-bold px-5 py-2.5 rounded-xl transition shadow-3xs ${
-                isProhibitedItem ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-60' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-800 cursor-pointer bg-white'
+                isBlockedSubmit ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-60' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-800 cursor-pointer bg-white'
               }`}
             >
               Lưu & Ẩn
             </button>
             <button
               type="button"
-              disabled={isProhibitedItem}
+              disabled={isBlockedSubmit}
               onClick={(e) => handleSubmit(e, 'active')}
               className={`text-xs font-bold px-6 py-2.5 rounded-xl shadow-md transition ${
                 isProhibitedItem
                   ? 'bg-red-500 cursor-not-allowed text-white opacity-85'
+                  : isImageMismatch
+                  ? 'bg-amber-600 cursor-not-allowed text-white opacity-85'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
               }`}
-              title={isProhibitedItem ? 'Sản phẩm vi phạm mặt hàng cấm' : ''}
+              title={isProhibitedItem ? 'Sản phẩm vi phạm mặt hàng cấm' : isImageMismatch ? 'Ảnh không khớp tên sản phẩm' : ''}
             >
-              {isProhibitedItem ? '🚫 Bị Chặn: Ảnh Chứa Hàng Cấm' : (initialData ? 'Cập nhật sản phẩm' : 'Lưu & Hiển thị')}
+              {isProhibitedItem ? '🚫 Bị Chặn: Ảnh Chứa Hàng Cấm' : isImageMismatch ? '⚠️ Bị Chặn: Ảnh Không Khớp Tên' : (initialData ? 'Cập nhật sản phẩm' : 'Lưu & Hiển thị')}
             </button>
           </div>
         </div>
