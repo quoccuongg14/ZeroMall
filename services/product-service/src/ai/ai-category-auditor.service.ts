@@ -10,6 +10,7 @@ export class AuditProductDto {
   category: string;
   image?: string;
   images?: string[];
+  imageUrl?: string;
   description?: string;
   isBatchScan?: boolean;
 }
@@ -151,6 +152,7 @@ export class AiCategoryAuditorService {
 
     const allImages: string[] = [];
     if (input.image) allImages.push(input.image);
+    if (input.imageUrl) allImages.push(input.imageUrl);
     if (Array.isArray(input.images)) {
       for (const img of input.images) {
         if (img && !allImages.includes(img)) allImages.push(img);

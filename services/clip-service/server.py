@@ -15,13 +15,169 @@ print(f"[+] Model loaded!")
 
 # Ngành hàng & vật thể chuẩn để phân loại hình ảnh (Zero-shot Multimodal Vision)
 CANONICAL_CATEGORIES = {
-    "Đồng Hồ": {
-        "prompt": "wrist watch analog watch digital watch luxury timepiece strap smartwatch chronometer dong ho đeo tay",
+    # 1. ĐỒNG HỒ & PHỤ KIỆN
+    "Đồng Hồ Đeo Tay": {
+        "prompt": "wrist watch analog watch digital watch luxury timepiece smartwatch chronometer dong ho đeo tay mat kinh dong ho",
         "label": "Đồng hồ đeo tay / Smartwatch",
         "suggestedTitle": "Đồng Hồ Thời Trang Nam Nữ Chính Hãng",
         "zero_category": "Đồng Hồ",
         "domain": "WATCH"
     },
+    "Dây Đeo / Phụ Kiện Đồng Hồ": {
+        "prompt": "watch strap watch band watch bracelet replacement strap leather strap silicone band day dong ho day đeo dong ho thay the",
+        "label": "Dây đeo / Phụ kiện đồng hồ",
+        "suggestedTitle": "Dây Đeo Đồng Hồ Thời Trang Cao Cấp",
+        "zero_category": "Đồng Hồ",
+        "domain": "WATCH_STRAP"
+    },
+
+    # 2. ĐIỆN THOẠI & PHỤ KIỆN (Bóc tách rõ Host Device vs Accessories)
+    "Điện Thoại Thông Minh": {
+        "prompt": "smartphone mobile phone with touchscreen front screen notch iphone samsung handset dien thoai di dong thong minh",
+        "label": "Điện thoại thông minh / Smartphone",
+        "suggestedTitle": "Điện Thoại Thông Minh Chính Hãng",
+        "zero_category": "Điện Thoại & Phụ Kiện",
+        "domain": "SMARTPHONE"
+    },
+    "Pin Sạc Dự Phòng / Củ Cáp Sạc": {
+        "prompt": "power bank portable charger battery pack with usb ports external battery pin sac du phong cuc sac cap sac adapter",
+        "label": "Pin sạc dự phòng / Củ cáp sạc",
+        "suggestedTitle": "Pin Sạc Dự Phòng Tiện Lợi Dung Lượng Chuẩn",
+        "zero_category": "Điện Thoại & Phụ Kiện",
+        "domain": "POWERBANK_CHARGER"
+    },
+    "Ốp Lưng / Kính Cường Lực": {
+        "prompt": "phone case protective silicone back cover tempered glass screen protector op lung dien thoai kinh cuong luc",
+        "label": "Ốp lưng / Kính cường lực điện thoại",
+        "suggestedTitle": "Ốp Lưng Điện Thoại Thời Trang Chống Sốc",
+        "zero_category": "Điện Thoại & Phụ Kiện",
+        "domain": "PHONE_CASE"
+    },
+
+    # 3. THIẾT BỊ ĐIỆN TỬ & ÂM THANH
+    "Tai Nghe / Loa Bluetooth": {
+        "prompt": "bluetooth headphones wireless earbuds airpods over-ear headset bluetooth speaker loa bluetooth tai nghe khong day",
+        "label": "Tai nghe / Loa bluetooth",
+        "suggestedTitle": "Tai Nghe Bluetooth Không Dây Âm Thanh Sống Động",
+        "zero_category": "Thiết Bị Điện Tử",
+        "domain": "AUDIO_DEVICE"
+    },
+
+    # 4. MÁY TÍNH & PHỤ KIỆN
+    "Máy Tính & Laptop": {
+        "prompt": "laptop computer notebook macbook open laptop screen keyboard may tinh xach tay laptop",
+        "label": "Máy tính xách tay / Laptop",
+        "suggestedTitle": "Laptop Máy Tính Cấu Hình Cao",
+        "zero_category": "Máy Tính & Laptop",
+        "domain": "LAPTOP"
+    },
+    "Chuột / Bàn Phím / Phụ Kiện Máy Tính": {
+        "prompt": "computer mouse mechanical keyboard mousepad computer monitor ban phim co chuot may tinh",
+        "label": "Bàn phím / Chuột / Linh kiện máy tính",
+        "suggestedTitle": "Bàn Phím Chuột Máy Tính Tiện Lợi",
+        "zero_category": "Máy Tính & Laptop",
+        "domain": "PC_PERIPHERALS"
+    },
+
+    # 5. MÁY ẢNH & PHỤ KIỆN
+    "Máy Ảnh / Ống Kính": {
+        "prompt": "camera photography lens digital camera dslr mirrorless gopro may anh ky thuat so",
+        "label": "Máy ảnh / Thiết bị quay phim",
+        "suggestedTitle": "Máy Ảnh Kỹ Thuật Số Chính Hãng",
+        "zero_category": "Máy Ảnh",
+        "domain": "CAMERA"
+    },
+    "Chân Máy / Phụ Kiện Máy Ảnh": {
+        "prompt": "camera tripod tripod stand gimbal camera mount selfie stick chan may anh tripod",
+        "label": "Chân máy ảnh / Tripod / Gimbal",
+        "suggestedTitle": "Chân Máy Ảnh Tripod Chống Rung Đa Năng",
+        "zero_category": "Máy Ảnh",
+        "domain": "CAMERA_ACCESSORIES"
+    },
+
+    # 6. SẮC ĐẸP (Phân biệt Hộp phấn tròn vs Mỹ phẩm chung)
+    "Hộp Phấn / Bảng Phấn Trang Điểm": {
+        "prompt": "face powder compact blush palette eyeshadow palette makeup compact cosmetic powder box bobbi brown hop phan phan phu phan ma",
+        "label": "Hộp phấn / Bảng phấn trang điểm",
+        "suggestedTitle": "Phấn Nền Trang Điểm Mịn Lì Tự Nhiên",
+        "zero_category": "Sắc Đẹp",
+        "domain": "BEAUTY_COMPACT"
+    },
+    "Sắc Đẹp": {
+        "prompt": "cosmetics skincare serum lipstick moisturizer facial cream beauty makeup perfume sua rua mat kem duong son moi",
+        "label": "Mỹ phẩm / Chăm sóc da / Sắc đẹp",
+        "suggestedTitle": "Mỹ Phẩm Chăm Sóc Sắc Đẹp Chính Hãng",
+        "zero_category": "Sắc Đẹp",
+        "domain": "BEAUTY"
+    },
+
+    # 7. SỨC KHỎE
+    "Sức Khỏe": {
+        "prompt": "health vitamins dietary supplements nutritional capsules medicine thuoc bo vien uong vitamin thuc pham chuc nang",
+        "label": "Thực phẩm chức năng / Vitamin sức khỏe",
+        "suggestedTitle": "Thực Phẩm Bổ Sung Chăm Sóc Sức Khỏe",
+        "zero_category": "Sức Khỏe",
+        "domain": "HEALTH"
+    },
+
+    # 8. NHÀ CỬA & GIA DỤNG
+    "Bình Nước / Ly Giữ Nhiệt": {
+        "prompt": "thermos water bottle tumbler stainless steel insulated cup binh giu nhiet ly giu nhiet binh nuoc",
+        "label": "Bình giữ nhiệt / Ly giữ nhiệt / Bình nước",
+        "suggestedTitle": "Bình Giữ Nhiệt Inox Cao Cấp Giữ Nhiệt Lâu",
+        "zero_category": "Nhà Cửa",
+        "domain": "THERMOS_BOTTLE"
+    },
+    "Nhà Cửa": {
+        "prompt": "bedsheet blanket pillow quilt home living organizer chan ga goi dem noi that tham",
+        "label": "Nhà cửa & Đời sống / Chăn ga gối",
+        "suggestedTitle": "Đồ Dùng Nhà Cửa & Đời Sống Tiện Lợi",
+        "zero_category": "Nhà Cửa",
+        "domain": "HOME"
+    },
+    "Gia Dụng": {
+        "prompt": "kitchen appliance air fryer cooker pot pan blender microwave ke de gia vi ke bep do gia dung nha bep",
+        "label": "Đồ gia dụng / Thiết bị nhà bếp",
+        "suggestedTitle": "Thiết Bị Gia Dụng Nhà Bếp Đa Năng Cao Cấp",
+        "zero_category": "Gia Dụng",
+        "domain": "KITCHEN"
+    },
+
+    # 9. PHỤ KIỆN & BALO TÚI XÁCH
+    "Phụ Kiện Nữ": {
+        "prompt": "hair clip earrings necklace jewelry sunglasses hair accessories phu kien nu kep toc vong co khuyen tai mat kinh",
+        "label": "Phụ kiện thời trang nữ / Kẹp tóc / Trang sức",
+        "suggestedTitle": "Phụ Kiện Thời Trang Nữ Xinh Xắn",
+        "zero_category": "Phụ Kiện Nữ",
+        "domain": "ACCESSORIES"
+    },
+    "Túi Ví Nữ": {
+        "prompt": "backpack handbag wallet purse bag clutch cap ba lo tui xach vi cam tay",
+        "label": "Balo / Túi xách / Ví",
+        "suggestedTitle": "Balo Túi Xách Thời Trang Tiện Lợi",
+        "zero_category": "Túi Ví Nữ",
+        "domain": "BAGS"
+    },
+
+    # 10. MẸ & BÉ
+    "Mẹ & Bé": {
+        "prompt": "baby supplies baby bib baby bottle infant clothing baby stroller pacifier do so sinh yem an dam em be me va be",
+        "label": "Đồ dùng Mẹ & Bé / Yếm ăn dặm",
+        "suggestedTitle": "Đồ Dùng Tiện Ích Mẹ & Bé An Toàn",
+        "zero_category": "Mẹ & Bé",
+        "domain": "MOM_BABY"
+    },
+
+    # 11. SÁCH & VPP
+    "Sách & VPP": {
+        "prompt": "books textbook notebook stationery pens paper document sach truyen giao trinh",
+        "label": "Sách & Văn phòng phẩm",
+        "suggestedTitle": "Sách & Văn Phòng Phẩm Học Tập",
+        "zero_category": "Sách & VPP",
+        "domain": "BOOKS"
+    },
+
+    # 12. THỜI TRANG & GIÀY DÉP
     "Áo Blazer / Áo Vest": {
         "prompt": "formal suit jacket blazer suit business gentleman tailored jacket ao vest nam ao blazer",
         "label": "Áo Blazer / Áo Vest",
@@ -98,90 +254,6 @@ CANONICAL_CATEGORIES = {
         "suggestedTitle": "Giày Cao Gót Nữ Thời Trang Quý Phái",
         "zero_category": "Giày Dép Nữ",
         "domain": "HEELS"
-    },
-    "Mẹ & Bé": {
-        "prompt": "baby supplies baby bib baby bottle infant clothing baby stroller pacifier do so sinh yem an dam em be me va be",
-        "label": "Đồ dùng Mẹ & Bé / Yếm ăn dặm",
-        "suggestedTitle": "Đồ Dùng Tiện Ích Mẹ & Bé An Toàn",
-        "zero_category": "Mẹ & Bé",
-        "domain": "MOM_BABY"
-    },
-    "Sắc Đẹp": {
-        "prompt": "cosmetics skincare serum lipstick moisturizer facial cream beauty makeup perfume sua rua mat kem duong son moi",
-        "label": "Mỹ phẩm / Chăm sóc da / Sắc đẹp",
-        "suggestedTitle": "Mỹ Phẩm Chăm Sóc Sắc Đẹp Chính Hãng",
-        "zero_category": "Sắc Đẹp",
-        "domain": "BEAUTY"
-    },
-    "Sức Khỏe": {
-        "prompt": "health vitamins dietary supplements nutritional capsules medicine thuoc bo vien uong vitamin thuc pham chuc nang",
-        "label": "Thực phẩm chức năng / Vitamin sức khỏe",
-        "suggestedTitle": "Thực Phẩm Bổ Sung Chăm Sóc Sức Khỏe",
-        "zero_category": "Sức Khỏe",
-        "domain": "HEALTH"
-    },
-    "Nhà Cửa": {
-        "prompt": "kitchen spice rack shelf organizer storage holder stainless steel bedsheet blanket pillow quilt home living organizer gia dung nha cua chan ga goi dem ke bep ke gia vi gia de dao thot",
-        "label": "Nhà cửa & Đời sống / Kệ đồ & Chăn ga",
-        "suggestedTitle": "Đồ Dùng Nhà Cửa & Đời Sống Tiện Lợi",
-        "zero_category": "Nhà Cửa",
-        "domain": "HOME"
-    },
-    "Phụ Kiện Nữ": {
-        "prompt": "hair clip earrings necklace jewelry sunglasses hair accessories phu kien nu kep toc vong co khuyen tai mat kinh",
-        "label": "Phụ kiện thời trang nữ / Kẹp tóc / Trang sức",
-        "suggestedTitle": "Phụ Kiện Thời Trang Nữ Xinh Xắn",
-        "zero_category": "Phụ Kiện Nữ",
-        "domain": "ACCESSORIES"
-    },
-    "Gia Dụng": {
-        "prompt": "kitchen appliance air fryer cooker pot pan blender microwave ke de gia vi ke bep do gia dung nha bep",
-        "label": "Đồ gia dụng / Thiết bị nhà bếp",
-        "suggestedTitle": "Thiết Bị Gia Dụng Nhà Bếp Đa Năng Cao Cấp",
-        "zero_category": "Gia Dụng",
-        "domain": "KITCHEN"
-    },
-    "Máy Ảnh": {
-        "prompt": "camera photography lens tripod digital camera gopro",
-        "label": "Máy ảnh / Thiết bị quay phim",
-        "suggestedTitle": "Máy Ảnh Kỹ Thuật Số Chính Hãng",
-        "zero_category": "Máy Ảnh",
-        "domain": "CAMERA"
-    },
-    "Điện Thoại & Phụ Kiện": {
-        "prompt": "smartphone mobile phone case charger headphones airpods",
-        "label": "Điện thoại & Phụ kiện",
-        "suggestedTitle": "Điện Thoại Thông Minh Phụ Kiện Cao Cấp",
-        "zero_category": "Điện Thoại & Phụ Kiện",
-        "domain": "ELECTRONICS"
-    },
-    "Thiết Bị Điện Tử": {
-        "prompt": "bluetooth speaker headphones mechanical keyboard power bank electronic gadget tai nghe loa bluetooth ban phim",
-        "label": "Thiết bị điện tử / Loa / Tai nghe",
-        "suggestedTitle": "Thiết Bị Điện Tử & Phụ Kiện Công Nghệ",
-        "zero_category": "Thiết Bị Điện Tử",
-        "domain": "ELECTRONICS"
-    },
-    "Máy Tính & Laptop": {
-        "prompt": "laptop computer pc keyboard monitor gaming mouse",
-        "label": "Máy tính & Laptop",
-        "suggestedTitle": "Laptop Máy Tính Cấu Hình Cao",
-        "zero_category": "Máy Tính & Laptop",
-        "domain": "ELECTRONICS"
-    },
-    "Túi Ví Nữ": {
-        "prompt": "backpack handbag wallet purse bag clutch",
-        "label": "Balo / Túi xách / Ví",
-        "suggestedTitle": "Balo Túi Xách Thời Trang Tiện Lợi",
-        "zero_category": "Túi Ví Nữ",
-        "domain": "BAGS"
-    },
-    "Sách & VPP": {
-        "prompt": "books textbook notebook stationery pens paper document",
-        "label": "Sách & Văn phòng phẩm",
-        "suggestedTitle": "Sách & Văn Phòng Phẩm Học Tập",
-        "zero_category": "Sách & VPP",
-        "domain": "BOOKS"
     },
     "Sơ đồ / Tài liệu": {
         "prompt": "software flowchart source code IDE terminal text screenshot technical diagram report whitepaper document",
@@ -374,37 +446,92 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     ])
     has_dress_title = any(k in cleaned_name for k in ["váy", "đầm", "vay", "dam", "chân váy", "chan vay"])
     has_kitchen_title = any(k in cleaned_name for k in [
-        "kệ", "ke", "nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia vị", "đũa", "thớt", "dao", "bát", "đĩa", "hộp đựng", "bình giữ nhiệt", "gia dụng", "giá để"
+        "kệ", "ke", "nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia vị", "đũa", "thớt", "dao", "bát", "đĩa", "hộp đựng", "gia dụng", "giá để"
     ])
     has_bag_title = any(k in cleaned_name for k in [
         "balo", "ba lô", "backpack", "túi", "tui", "ví", "vi", "bóp", "bop", "cặp", "cap", "clutch", "tote", "handbag", "purse", "crossbody", "vali"
     ])
+
+    # 1. Đồng hồ & Dây đeo phụ kiện
+    has_watchstrap_title = any(k in cleaned_name for k in [
+        "dây đồng hồ", "day dong ho", "dây đeo đồng hồ", "dây da đồng hồ", "dây kim loại", "dây thép", "dây silicone", "dây thay thế", "watch strap", "watch band"
+    ])
     has_watch_title = any(k in cleaned_name for k in [
         "đồng hồ", "dong ho", "watch", "smartwatch", "apple watch"
-    ])
+    ]) and not has_watchstrap_title
+
+    # 2. Phụ kiện thời trang nữ
     has_acc_title = any(k in cleaned_name for k in [
         "kẹp tóc", "khuyên tai", "bông tai", "vòng cổ", "dây chuyền", "nhẫn", "trang sức", "mắt kính", "kính mát", "phụ kiện"
     ])
+
+    # 3. Mỹ phẩm, sắc đẹp & hộp phấn (Geometric shape confusion prevention)
+    has_compact_title = any(k in cleaned_name for k in [
+        "hộp phấn", "hop phan", "phấn phủ", "phan phu", "phấn nền", "phan nen", "phấn má", "phan ma", "bảng phấn", "cushion", "phấn nước", "eyeshadow", "powder"
+    ])
     has_beauty_title = any(k in cleaned_name for k in [
         "son", "serum", "kem", "mỹ phẩm", "nước hoa", "sữa rửa mặt", "trang điểm", "mascara", "phấn", "toner", "kem chống nắng", "tẩy trang", "lotion", "sữa tắm", "dầu gội", "tẩy da chết", "mặt nạ", "lipstick"
-    ])
+    ]) or has_compact_title
+
+    # 4. Thực phẩm chức năng / Sức khỏe
     has_health_title = any(k in cleaned_name for k in [
         "vitamin", "viên uống", "thực phẩm chức năng", "thuốc", "collagen", "dầu cá", "omega", "canxi", "kẽm", "bổ não", "bổ gan", "men vi sinh", "whey", "protein"
     ])
-    has_electronics_title = any(k in cleaned_name for k in [
-        "điện thoại", "iphone", "samsung", "xiaomi", "oppo", "smartphone", "laptop", "máy tính", "pc", "tai nghe", "airpods", "chuột", "bàn phím", "loa", "bluetooth", "sạc", "cáp sạc", "pin dự phòng", "màn hình", "router", "wifi", "ipad", "tablet"
+
+    # 5. Điện thoại vs Pin sạc dự phòng vs Ốp lưng (Device vs Accessory anti bait-and-switch)
+    has_powerbank_charger_title = any(k in cleaned_name for k in [
+        "sạc dự phòng", "sac du phong", "pin dự phòng", "pin du phong", "power bank", "powerbank", "củ sạc", "cu sac", "cáp sạc", "cap sac", "dây sạc", "day sac", "bộ sạc", "dock sạc", "sạc nhanh", "adapter sạc"
     ])
-    has_camera_title = any(k in cleaned_name for k in [
-        "máy ảnh", "camera", "lens", "ống kính", "tripod", "gopro", "canon", "sony", "nikon", "fujifilm", "flycam", "gimbal"
+    has_phonecase_title = any(k in cleaned_name for k in [
+        "ốp lưng", "op lung", "kính cường lực", "kinh cuong luc", "bao da", "miếng dán màn hình", "ốp chống sốc", "ốp bảo vệ", "phone case"
     ])
-    has_books_title = any(k in cleaned_name for k in [
-        "sách", "truyện", "vở", "bút", "tập", "sổ", "tiểu thuyết", "giáo trình", "từ điển", "thước", "văn phòng phẩm"
+    has_smartphone_title = any(k in cleaned_name for k in [
+        "điện thoại", "dien thoai", "smartphone", "iphone", "samsung galaxy", "xiaomi redmi", "oppo reno", "vivo", "realme"
+    ]) and not has_powerbank_charger_title and not has_phonecase_title
+
+    # 6. Thiết bị âm thanh
+    has_audio_title = any(k in cleaned_name for k in [
+        "loa", "loa bluetooth", "loa không dây", "soundbar", "tai nghe", "headphone", "earphone", "airpods"
     ])
-    has_mom_baby_title = any(k in cleaned_name for k in [
-        "yếm", "ăn dặm", "bình sữa", "tã", "bỉm", "xe đẩy", "núm ti", "máy hút sữa", "sơ sinh", "địu", "ti giả"
+
+    # 7. Máy tính & Laptop vs Phụ kiện máy tính
+    has_pc_peripheral_title = any(k in cleaned_name for k in [
+        "chuột", "chuot", "bàn phím", "ban phim", "bàn di chuột", "lót chuột", "tản nhiệt", "hub", "cổng chuyển", "đế tản nhiệt"
+    ])
+    has_laptop_title = any(k in cleaned_name for k in [
+        "laptop", "máy tính xách tay", "macbook", "thinkpad", "asus zenbook"
+    ]) and not has_pc_peripheral_title and not any(k in cleaned_name for k in ["balo", "túi chống sốc", "tui chong soc"])
+
+    # 8. Máy ảnh vs Phụ kiện máy ảnh
+    has_camera_acc_title = any(k in cleaned_name for k in [
+        "tripod", "chân máy", "chan may", "gimbal", "gậy selfie", "ngàm", "mount", "cap lens", "kính lọc", "filter", "dây đeo máy ảnh"
+    ])
+    has_camera_device_title = any(k in cleaned_name for k in [
+        "máy ảnh", "may anh", "camera", "dslr", "mirrorless", "gopro", "flycam"
+    ]) and not has_camera_acc_title
+    has_camera_title = has_camera_device_title or has_camera_acc_title
+
+    # 9. Bình giữ nhiệt / Đồ dùng nhà cửa
+    has_thermos_title = any(k in cleaned_name for k in [
+        "bình giữ nhiệt", "binh giu nhiet", "ly giữ nhiệt", "ly giu nhiet", "bình nước", "binh nuoc", "ly inox", "tumbler", "thermos"
     ])
     has_home_title = any(k in cleaned_name for k in [
         "chăn", "ga", "gối", "nệm", "đệm", "màn", "rèm", "bàn", "ghế", "tủ", "kệ sách", "thảm", "đèn ngủ"
+    ]) or has_thermos_title
+
+    # 10. Sách & VPP
+    has_books_title = any(k in cleaned_name for k in [
+        "sách", "truyện", "vở", "bút", "tập", "sổ", "tiểu thuyết", "giáo trình", "từ điển", "thước", "văn phòng phẩm"
+    ])
+
+    # 11. Mẹ & Bé
+    has_mom_baby_title = any(k in cleaned_name for k in [
+        "yếm", "ăn dặm", "bình sữa", "tã", "bỉm", "xe đẩy", "núm ti", "máy hút sữa", "sơ sinh", "địu", "ti giả"
+    ])
+
+    # Tổng hợp các thiết bị điện tử chung
+    has_electronics_title = has_smartphone_title or has_powerbank_charger_title or has_phonecase_title or has_audio_title or has_laptop_title or has_pc_peripheral_title or any(k in cleaned_name for k in [
+        "máy tính", "pc", "màn hình", "router", "wifi", "ipad", "tablet", "phụ kiện công nghệ"
     ])
 
     if is_prohibited:
@@ -510,19 +637,30 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 "áo", "ao", "shirt", "quần", "quan", "pant", "jean", "váy", "đầm",
                 "giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "đồng hồ", "điện thoại", "laptop", "máy tính", "son", "kem"
             ]
-            if not has_bag_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_kitchen_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or any(k in cleaned_name for k in disallowed_for_bags)):
+            if not has_bag_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_kitchen_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_device_title or has_books_title or any(k in cleaned_name for k in disallowed_for_bags)):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Balo / Túi xách / Cặp ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
 
         # 4. ĐỒNG HỒ ĐEO TAY (WATCH)
         elif domain == "WATCH":
-            disallowed_for_watch = [
-                "áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "sneaker", "sandal",
-                "nồi chiên", "bếp", "balo", "túi", "ví", "cặp", "điện thoại", "laptop", "son", "kem"
-            ]
-            if not has_watch_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_kitchen_title or has_beauty_title or has_health_title or has_camera_title or has_books_title or any(k in cleaned_name for k in disallowed_for_watch)):
+            if has_watchstrap_title and not has_watch_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Đồng hồ nguyên chiếc ({cat_info['label']}), không khớp với sản phẩm Dây đeo / Phụ kiện đồng hồ (\"{name}\")."
+            elif has_beauty_title or has_compact_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Đồng hồ ({cat_info['label']}), không khớp với sản phẩm Mỹ phẩm / Sắc đẹp (\"{name}\")."
+            elif not has_watch_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_kitchen_title or has_health_title or has_camera_device_title or has_books_title or has_smartphone_title or has_powerbank_charger_title or any(k in cleaned_name for k in ["áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "nồi chiên", "bếp", "balo", "túi", "ví", "cặp", "điện thoại", "laptop", "son", "kem"])):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Đồng hồ ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 4.1 DÂY ĐEO / PHỤ KIỆN ĐỒNG HỒ (WATCH_STRAP)
+        elif domain == "WATCH_STRAP":
+            if has_watch_title and not has_watchstrap_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Dây đeo / Phụ kiện đồng hồ ({cat_info['label']}), không khớp với sản phẩm Đồng hồ đeo tay nguyên chiếc (\"{name}\")."
+            elif not has_watchstrap_title and not has_watch_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Dây đeo đồng hồ ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         # 5. PHỤ KIỆN THỜI TRANG (ACCESSORIES)
         elif domain == "ACCESSORIES":
@@ -534,13 +672,15 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Phụ kiện thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
-        # 6. MỸ PHẨM / CHĂM SÓC SẮC ĐẸP (BEAUTY)
-        elif domain == "BEAUTY":
-            disallowed_for_beauty = [
-                "áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "sneaker", "sandal",
-                "nồi chiên", "bếp", "balo", "cặp", "đồng hồ", "điện thoại", "laptop", "máy tính", "sách"
-            ]
-            if not has_beauty_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title or has_electronics_title or has_kitchen_title or has_camera_title or has_books_title or any(k in cleaned_name for k in disallowed_for_beauty)):
+        # 6. MỸ PHẨM / CHĂM SÓC SẮC ĐẸP (BEAUTY / BEAUTY_COMPACT)
+        elif domain in ["BEAUTY", "BEAUTY_COMPACT"]:
+            if has_watch_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Hộp phấn / Mỹ phẩm làm đẹp ({cat_info['label']}), không khớp với tên sản phẩm Đồng hồ (\"{name}\")."
+            elif has_smartphone_title or has_powerbank_charger_title or has_laptop_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Mỹ phẩm / Hộp phấn trang điểm ({cat_info['label']}), không khớp với sản phẩm Công nghệ / Điện tử (\"{name}\")."
+            elif not has_beauty_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_kitchen_title or has_camera_device_title or has_books_title or any(k in cleaned_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi", "balo", "cặp", "điện thoại", "laptop", "sách"])):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Mỹ phẩm / Chăm sóc sắc đẹp ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
 
@@ -554,15 +694,22 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Thực phẩm chức năng / Vitamin ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
 
-        # 8. MÁY ẢNH / THIẾT BỊ QUAY PHIM (CAMERA)
+        # 8. MÁY ẢNH & THIẾT BỊ QUAY PHIM (CAMERA / CAMERA_ACCESSORIES)
         elif domain == "CAMERA":
-            disallowed_for_camera = [
-                "áo", "ao", "shirt", "quần", "quan", "váy", "đầm", "giày", "dép", "sneaker", "sandal",
-                "nồi chiên", "bếp", "balo", "cặp", "son", "kem dưỡng", "mỹ phẩm"
-            ]
-            if not has_camera_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_beauty_title or has_kitchen_title or any(k in cleaned_name for k in disallowed_for_camera)):
+            if has_camera_acc_title and not has_camera_device_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Máy ảnh ({cat_info['label']}), không khớp với sản phẩm Chân máy / Phụ kiện máy ảnh (\"{name}\")."
+            elif not has_camera_device_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_beauty_title or has_kitchen_title):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Máy ảnh / Thiết bị quay phim ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
+
+        elif domain == "CAMERA_ACCESSORIES":
+            if has_camera_device_title and not has_camera_acc_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Phụ kiện máy ảnh / Chân máy ({cat_info['label']}), không khớp với sản phẩm Máy ảnh nguyên chiếc (\"{name}\")."
+            elif not has_camera_acc_title and not has_camera_device_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Phụ kiện máy ảnh ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         # 9. SÁCH & VĂN PHÒNG PHẨM (BOOKS)
         elif domain == "BOOKS":
@@ -577,11 +724,22 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         # 10. ĐỒ DÙNG MẸ & BÉ (MOM_BABY)
         elif domain == "MOM_BABY":
             disallowed_for_baby = ["điện thoại", "laptop", "máy tính", "đồng hồ", "giày cao gót", "giày tây", "rượu", "bia"]
-            if not has_mom_baby_title and (has_watch_title or has_electronics_title or has_camera_title or any(k in cleaned_name for k in disallowed_for_baby)):
+            if not has_mom_baby_title and (has_watch_title or has_electronics_title or has_camera_device_title or any(k in cleaned_name for k in disallowed_for_baby)):
                 is_mismatch = True
                 reason = f"Ảnh hiển thị Đồ dùng Mẹ & Bé ({cat_info['label']}), không khớp với tên sản phẩm bạn nhập là \"{name}\"."
 
-        # 11. NHÀ CỬA & ĐỜI SỐNG (HOME)
+        # 11. NHÀ CỬA & ĐỜI SỐNG (HOME / THERMOS_BOTTLE)
+        elif domain == "THERMOS_BOTTLE":
+            if has_audio_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Bình nước / Ly giữ nhiệt ({cat_info['label']}), không khớp với sản phẩm Loa / Thiết bị âm thanh (\"{name}\")."
+            elif has_watch_title or has_smartphone_title or has_powerbank_charger_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Bình giữ nhiệt ({cat_info['label']}), không khớp với sản phẩm Công nghệ / Đồng hồ (\"{name}\")."
+            elif not has_thermos_title and not has_kitchen_title and not has_home_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Bình nước / Ly giữ nhiệt ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
         elif domain == "HOME":
             if has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_beauty_title or has_health_title or has_electronics_title:
                 if not has_home_title and not has_kitchen_title:
@@ -590,11 +748,61 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
         # 12. GIA DỤNG NHÀ BẾP (KITCHEN)
         elif domain == "KITCHEN":
-            if not has_kitchen_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title):
+            if not has_kitchen_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_device_title or has_books_title):
                 is_mismatch = True
                 reason = f"Ảnh là đồ gia dụng nhà bếp ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
-        # 13. CÔNG NGHỆ & ĐIỆN TỬ (ELECTRONICS)
+        # 13. ĐIỆN THOẠI THÔNG MINH & ỐP LƯNG (SMARTPHONE / PHONE_CASE)
+        # Chống triệt để thủ đoạn dùng ảnh điện thoại/ốp lưng để bán pin sạc dự phòng hoặc đồ gia dụng/thời trang
+        elif domain in ["SMARTPHONE", "PHONE_CASE"]:
+            if has_powerbank_charger_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Điện thoại thông minh / Ốp lưng ({cat_info['label']}), không khớp với sản phẩm Pin sạc dự phòng / Củ cáp sạc (\"{name}\")."
+            elif has_watch_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Điện thoại thông minh / Phụ kiện ({cat_info['label']}), không khớp với sản phẩm Đồng hồ (\"{name}\")."
+            elif not has_smartphone_title and not has_phonecase_title and not has_electronics_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_beauty_title or has_health_title or has_kitchen_title or has_books_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Điện thoại / Phụ kiện điện thoại ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 14. PIN SẠC DỰ PHÒNG / CỦ CÁP SẠC (POWERBANK_CHARGER)
+        # Chống thủ đoạn ngược lại: dùng ảnh củ sạc/sạc dự phòng để rao bán điện thoại nguyên chiếc
+        elif domain == "POWERBANK_CHARGER":
+            if has_smartphone_title and not has_powerbank_charger_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Pin sạc dự phòng / Củ cáp sạc ({cat_info['label']}), không khớp với sản phẩm Điện thoại thông minh (\"{name}\")."
+            elif has_watch_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Pin sạc dự phòng / Củ sạc ({cat_info['label']}), không khớp với sản phẩm Đồng hồ (\"{name}\")."
+            elif not has_powerbank_charger_title and not has_electronics_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_beauty_title or has_kitchen_title or has_books_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Pin sạc dự phòng / Củ sạc ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 16. THIẾT BỊ ÂM THANH (AUDIO_DEVICE)
+        elif domain == "AUDIO_DEVICE":
+            if not has_audio_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_kitchen_title or has_books_title or has_smartphone_title or has_powerbank_charger_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Thiết bị âm thanh / Loa / Tai nghe ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 17. MÁY TÍNH & LAPTOP (LAPTOP)
+        elif domain == "LAPTOP":
+            if has_pc_peripheral_title and not has_laptop_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Laptop / Máy tính xách tay ({cat_info['label']}), không khớp với sản phẩm Chuột / Bàn phím / Phụ kiện (\"{name}\")."
+            elif not has_laptop_title and not has_electronics_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Laptop / Máy tính xách tay ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 18. CHUỘT / BÀN PHÍM / PHỤ KIỆN (PC_PERIPHERALS)
+        elif domain == "PC_PERIPHERALS":
+            if has_laptop_title and not has_pc_peripheral_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Chuột / Bàn phím / Linh kiện máy tính ({cat_info['label']}), không khớp với sản phẩm Laptop nguyên chiếc (\"{name}\")."
+            elif not has_pc_peripheral_title and not has_electronics_title:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Chuột / Bàn phím / Phụ kiện máy tính ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        # 19. CÔNG NGHỆ & ĐIỆN TỬ CHUNG (ELECTRONICS)
         elif domain == "ELECTRONICS":
             if not has_electronics_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_beauty_title or has_health_title or has_kitchen_title or has_books_title or any(k in cleaned_name for k in ["áo", "quần", "váy", "đầm", "giày", "dép", "nồi chiên", "balo", "ví", "cặp", "son", "kem"])):
                 is_mismatch = True
