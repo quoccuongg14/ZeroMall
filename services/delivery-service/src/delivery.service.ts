@@ -1912,4 +1912,124 @@ export class DeliveryService {
       where: { sellerId },
     });
   }
+
+  // 12. Tra cứu lịch sử các chuyến xe tải tuyến (Linehaul Trips History)
+  async getLinehaulTripHistory(hubId: string) {
+    const targetHub = await this.prisma.hub.findUnique({ where: { id: hubId } });
+    if (!targetHub) return { outbound: [], inbound: [], all: [] };
+
+    // Tìm tất cả tracking logs có thông tin xe tải / seal
+    const logs = await this.prisma.shipmentTracking.findMany({
+      where: {
+        OR: [
+          { description: { contains: 'Xe tải' } },
+          { description: { contains: 'Seal' } },
+        ],
+      },
+      include: {
+        shipment: {
+          include: {
+            package: true,
+            pickupAddress: true,
+            currentHub: true,
+          },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 500,
+    });
+
+    const hubs = await this.prisma.hub.findMany();
+    const hubMap = new Map(hubs.map((h) => [h.id, h]));
+
+    // Gom nhóm theo chuyến xe (Trip Manifest)
+    const tripMap = new Map<string, any>();
+
+    for (const log of logs) {
+      if (!log.shipment) continue;
+
+      const text = log.description || '';
+      const truckMatch = text.match(/\[([0-9A-Z\-\.]+)\]/) || text.match(/Xe tải\s+([0-9A-Z\-\.]+)/i);
+      const sealMatch = text.match(/Seal:\s*\[?([A-Z0-9\-]+)\]?/i);
+      const driverMatch = text.match(/Bác tài:\s*([^\(•]+)/i);
+      const phoneMatch = text.match(/SĐT:\s*([0-9\+\.]+)/i) || text.match(/\(([0-9\+\.\s]+)\)/);
+      const destMatch = text.match(/đến\s+(.*?)[\.|$]/i);
+
+      const truckNumber = truckMatch ? truckMatch[1] : 'Xe Tải Linehaul';
+      const sealNumber = sealMatch ? sealMatch[1] : 'CHƯA-SEAL';
+      const driver = driverMatch ? driverMatch[1].trim() : 'Đội xe Linehaul';
+      const driverPhone = phoneMatch ? phoneMatch[1].trim() : '';
+      const destText = destMatch ? destMatch[1].trim() : '';
+
+      // Xác định hub đích
+      let destHub = hubs.find((h) => 
+        (destText && h.name && destText.toLowerCase().includes(h.name.toLowerCase())) || 
+        (destText && h.code && destText.toLowerCase().includes(h.code.toLowerCase()))
+      );
+
+      const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+      const tripKey = `${truckNumber}_${sealNumber}_${logDate}`;
+
+      const originHub = log.hubId ? hubMap.get(log.hubId) : null;
+      const isOutbound = log.hubId === hubId || originHub?.id === hubId;
+      const isInbound = (destHub && destHub.id === hubId) || (!isOutbound && destText && destText.toLowerCase().includes(targetHub.name.toLowerCase()));
+
+      if (!isOutbound && !isInbound) continue;
+
+      if (!tripMap.has(tripKey)) {
+        const cleanSeal = sealNumber.replace(/[^A-Z0-9]/gi, '');
+        const cleanDate = logDate.replace(/-/g, '');
+        tripMap.set(tripKey, {
+          tripId: `MNF-${cleanSeal.slice(-6) || 'TRUCK'}-${cleanDate}`,
+          tripKey,
+          tripType: isOutbound ? 'OUTBOUND' : 'INBOUND',
+          truckNumber,
+          sealNumber,
+          truckDriver: driver,
+          truckDriverPhone: driverPhone,
+          originHubId: originHub?.id || targetHub.id,
+          originHubName: originHub?.name || targetHub.name,
+          originHubCode: originHub?.code || targetHub.code,
+          destinationHubId: destHub?.id || null,
+          destinationHubName: destHub?.name || destText || 'Bưu cục phát',
+          destinationHubCode: destHub?.code || 'DEST',
+          status: log.shipment.status === 'IN_TRANSIT' ? 'IN_TRANSIT' : 'ARRIVED',
+          departedAt: log.timestamp,
+          shipments: [],
+          totalParcels: 0,
+          totalWeight: 0,
+        });
+      }
+
+      const trip = tripMap.get(tripKey)!;
+      if (!trip.shipments.some((s: any) => s.id === log.shipment.id)) {
+        trip.shipments.push({
+          id: log.shipment.id,
+          trackingNumber: log.shipment.trackingNumber,
+          orderId: log.shipment.orderId,
+          buyerName: log.shipment.buyerName,
+          buyerPhone: log.shipment.buyerPhone,
+          deliveryAddress: log.shipment.deliveryAddress,
+          status: log.shipment.status,
+          codAmount: log.shipment.codAmount,
+          weight: log.shipment.package?.weight || 0.5,
+          dimensions: log.shipment.package 
+            ? `${log.shipment.package.length}x${log.shipment.package.width}x${log.shipment.package.height} cm` 
+            : '15x10x10 cm',
+        });
+        trip.totalParcels += 1;
+        trip.totalWeight = Number((trip.totalWeight + (log.shipment.package?.weight || 0.5)).toFixed(2));
+      }
+    }
+
+    const allTrips = Array.from(tripMap.values()).sort(
+      (a, b) => new Date(b.departedAt).getTime() - new Date(a.departedAt).getTime()
+    );
+
+    return {
+      outbound: allTrips.filter((t) => t.tripType === 'OUTBOUND'),
+      inbound: allTrips.filter((t) => t.tripType === 'INBOUND'),
+      all: allTrips,
+    };
+  }
 }

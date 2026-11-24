@@ -29,6 +29,7 @@ import { SocDashboard } from './hub/SocDashboard'
 import { HubCreateEditModal } from './HubCreateEditModal'
 import { DriverCreateModal } from './hub/DriverCreateModal'
 import { HubDriversManageModal } from './hub/HubDriversManageModal'
+import { SocTruckTripHistoryModal } from './hub/SocTruckTripHistoryModal'
 
 export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   currentUser,
@@ -55,6 +56,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
     driverEmail: string
     driverUserId: string
   } | null>(null)
+  const [isSocTripHistoryOpen, setIsSocTripHistoryOpen] = useState(false)
   const currentHub = useMemo(() => {
     if (assignedHub) return assignedHub
     if (assignedHubId) {
@@ -791,6 +793,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
             setIsAddHubModalOpen(true)
           }}
           onDeleteChildHub={handleDeleteChildHub}
+          onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
         />
       ) : stationTab === 'HUB_CASHIER' ? (
         <HubCashierDesk
@@ -834,6 +837,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
                 handleBatchLoadRouteToTruck={handleBatchLoadRouteToTruck}
                 handleOpenSealModal={handleOpenSealModal}
                 handleUnloadEntireDockTruck={handleUnloadEntireDockTruck}
+                onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
               />
             )}
 
@@ -843,6 +847,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
                 linehaulTrips={linehaulTrips}
                 inTransitTotalCount={inTransitList.length}
                 onOpenReconciliation={(trip) => setReconcilingTrip(trip)}
+                onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
               />
             )}
 
@@ -1113,6 +1118,15 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL LỊCH SỬ CHUYẾN XE TẢI TUYẾN LINEHAUL (XUẤT BẾN & CẬP BẾN) */}
+      {currentHub && (
+        <SocTruckTripHistoryModal
+          isOpen={isSocTripHistoryOpen}
+          onClose={() => setIsSocTripHistoryOpen(false)}
+          currentHub={currentHub}
+        />
       )}
     </div>
   )

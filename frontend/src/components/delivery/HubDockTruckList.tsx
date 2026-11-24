@@ -10,6 +10,7 @@ interface HubDockTruckListProps {
   handleBatchLoadRouteToTruck: (truck: DockTruck) => void
   handleOpenSealModal: (truck: DockTruck) => void
   handleUnloadEntireDockTruck: (truck: DockTruck) => void
+  onOpenTripHistory?: () => void
 }
 
 export const HubDockTruckList: React.FC<HubDockTruckListProps> = ({
@@ -21,6 +22,7 @@ export const HubDockTruckList: React.FC<HubDockTruckListProps> = ({
   handleBatchLoadRouteToTruck,
   handleOpenSealModal,
   handleUnloadEntireDockTruck,
+  onOpenTripHistory,
 }) => {
   if (dockTrucks.length === 0) return null
 
@@ -43,6 +45,17 @@ export const HubDockTruckList: React.FC<HubDockTruckListProps> = ({
             </p>
           </div>
         </div>
+
+        {onOpenTripHistory && (
+          <button
+            type="button"
+            onClick={onOpenTripHistory}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-white border border-sky-500/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+          >
+            <span>📜</span>
+            <span>Lịch Sử Chuyến Xe Đã Xuất Bến</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">

@@ -5,12 +5,14 @@ interface HubLinehaulTripsBannerProps {
   linehaulTrips: LinehaulTrip[]
   inTransitTotalCount: number
   onOpenReconciliation: (trip: LinehaulTrip) => void
+  onOpenTripHistory?: () => void
 }
 
 export const HubLinehaulTripsBanner: React.FC<HubLinehaulTripsBannerProps> = ({
   linehaulTrips,
   inTransitTotalCount,
   onOpenReconciliation,
+  onOpenTripHistory,
 }) => {
   return (
     <div className="p-5 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white border-b border-indigo-900/60 space-y-3">
@@ -29,8 +31,20 @@ export const HubLinehaulTripsBanner: React.FC<HubLinehaulTripsBannerProps> = ({
           </div>
         </div>
 
-        <div className="text-[11px] text-indigo-300 font-mono">
-          Tổng cộng: <b>{inTransitTotalCount} kiện</b> đang trên đường đến
+        <div className="flex items-center gap-3">
+          <div className="text-[11px] text-indigo-300 font-mono">
+            Tổng cộng: <b>{inTransitTotalCount} kiện</b> đang trên đường đến
+          </div>
+          {onOpenTripHistory && (
+            <button
+              type="button"
+              onClick={onOpenTripHistory}
+              className="px-3 py-1.5 bg-indigo-800/80 hover:bg-indigo-700 text-indigo-200 hover:text-white border border-indigo-400/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <span>📜</span>
+              <span>Lịch Sử Xe Vào Hàng</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -105,6 +105,12 @@ export class DeliveryController {
     return this.deliveryService.deleteHub(id);
   }
 
+  // 6.1 Lịch sử các chuyến xe tải tuyến Linehaul (Xuất bến / Cập bến)
+  @Get('hubs/:id/linehaul-trips/history')
+  async getLinehaulTripHistory(@Param('id') id: string) {
+    return this.deliveryService.getLinehaulTripHistory(id);
+  }
+
   // 7. Danh sách Drivers & Trạng thái hoạt động
   @Get('drivers')
   async getDrivers(@Query('hubId') hubId?: string) {

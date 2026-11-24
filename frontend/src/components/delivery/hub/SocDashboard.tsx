@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import type { Hub, Shipment, LinehaulTrip, DockTruck } from './types'
+import { SocTruckTripHistoryModal } from './SocTruckTripHistoryModal'
 
 interface SocDashboardProps {
   currentHub: Hub
@@ -14,6 +15,7 @@ interface SocDashboardProps {
   onAddTruckDriver?: () => void
   onEditChildHub?: (hub: Hub) => void
   onDeleteChildHub?: (hub: Hub) => void
+  onOpenTripHistory?: () => void
 }
 
 export const SocDashboard: React.FC<SocDashboardProps> = ({
@@ -29,8 +31,10 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
   onAddTruckDriver,
   onEditChildHub,
   onDeleteChildHub,
+  onOpenTripHistory,
 }) => {
   const [viewingChildHub, setViewingChildHub] = useState<Hub | null>(null)
+  const [isTripHistoryOpen, setIsTripHistoryOpen] = useState(false)
   // Danh sách các Bưu Cục Con (Hub Phát) trực thuộc SOC này
   const childHubs = useMemo(() => {
     return hubs.filter(
@@ -112,6 +116,12 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            onClick={() => onOpenTripHistory ? onOpenTripHistory() : setIsTripHistoryOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>📜</span> Lịch Sử Xe Tải Ra/Vào
+          </button>
           {onAddChildHub && (
             <button
               onClick={onAddChildHub}
@@ -410,9 +420,18 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
                 Vị trí đỗ xe tải bốc xếp và niêm phong Seal chì trung chuyển
               </p>
             </div>
-            <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-xl">
-              {dockTrucks.length} Cửa Dock
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenTripHistory ? onOpenTripHistory() : setIsTripHistoryOpen(true)}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-xl transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>📜</span> Lịch sử chuyến xe
+              </button>
+              <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-xl">
+                {dockTrucks.length} Cửa Dock
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -678,6 +697,13 @@ export const SocDashboard: React.FC<SocDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL LỊCH SỬ CHUYẾN XE TẢI RA HÀNG & VÀO HÀNG */}
+      <SocTruckTripHistoryModal
+        isOpen={isTripHistoryOpen}
+        onClose={() => setIsTripHistoryOpen(false)}
+        currentHub={currentHub}
+      />
     </div>
   )
 }
