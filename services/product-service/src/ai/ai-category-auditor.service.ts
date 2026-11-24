@@ -243,6 +243,52 @@ export class AiCategoryAuditorService {
     const inferredCategoryFromTitle = this.inferCategoryFromTitle(lowerName);
     const effectiveSuggestedCat = inferredCategoryFromTitle || visualCheck?.suggestedCategory;
 
+    // 2.0 Kiểm tra chéo giữa ngành nhận diện từ Ảnh và ngành nhận diện từ Tiêu đề
+    if (
+      visualCheck?.suggestedCategory &&
+      inferredCategoryFromTitle &&
+      !this.isCategoryCompatible(visualCheck.suggestedCategory, inferredCategoryFromTitle)
+    ) {
+      return {
+        isMatched: false,
+        isProhibited: false,
+        issueType: 'IMAGE_MISMATCH',
+        confidence: visualCheck.confidence || 95,
+        currentCategory: currentCat,
+        suggestedTitle: visualCheck.suggestedTitle,
+        detectedVisual: visualCheck.detectedVisual,
+        suggestedCategory: currentCat,
+        titleFeedback: `Tiêu đề thuộc ngành "${inferredCategoryFromTitle}".`,
+        imageFeedback: `Hình ảnh hiển thị là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không khớp với tên sản phẩm bạn nhập là "${rawName}".`,
+        actionRequired: 'REPLACE_IMAGE',
+        recommendation: `Hình ảnh nhận diện là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không khớp với tiêu đề sản phẩm "${rawName}". Vui lòng chọn đúng hình ảnh thực tế của sản phẩm!`,
+        source: visualCheck.source || 'local-clip-engine',
+      };
+    }
+
+    // 2.0.1 Kiểm tra chéo giữa ngành nhận diện từ Ảnh và ngành hàng người bán chọn
+    if (
+      visualCheck?.suggestedCategory &&
+      currentCat &&
+      !this.isCategoryCompatible(currentCat, visualCheck.suggestedCategory)
+    ) {
+      return {
+        isMatched: false,
+        isProhibited: false,
+        issueType: 'IMAGE_MISMATCH',
+        confidence: visualCheck.confidence || 94,
+        currentCategory: currentCat,
+        suggestedTitle: visualCheck.suggestedTitle,
+        detectedVisual: visualCheck.detectedVisual,
+        suggestedCategory: visualCheck.suggestedCategory,
+        titleFeedback: `Tiêu đề sản phẩm là "${rawName}".`,
+        imageFeedback: `Hình ảnh nhận diện là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không tương thích với ngành "${currentCat}" bạn chọn.`,
+        actionRequired: 'REPLACE_IMAGE',
+        recommendation: `Hình ảnh nhận diện là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không tương thích với ngành "${currentCat}". Vui lòng đổi ảnh hoặc chọn lại đúng ngành hàng!`,
+        source: visualCheck.source || 'local-clip-engine',
+      };
+    }
+
     // 2.1 Trường hợp đặc biệt: Merchandise / Fanmeeting / Esports
     if (/hle|gumayusi|t1|faker|chovy|fanmeeting|áo đấu|esports/i.test(lowerName)) {
       const esportsCat = 'Thời Trang Nam';
@@ -908,12 +954,16 @@ export class AiCategoryAuditorService {
       'Gia Dụng': ['Nhà Cửa'],
       'Nhà Cửa': ['Gia Dụng'],
       'Thời Trang Nam': ['Thời Trang Nữ', 'Thể Thao'],
-      'Thời Trang Nữ': ['Thời Trang Nam', 'Phụ Kiện Nữ', 'Túi Ví Nữ', 'Thể Thao'],
+      'Thời Trang Nữ': ['Thời Trang Nam', 'Thể Thao'],
       'Thể Thao': ['Thời Trang Nam', 'Thời Trang Nữ'],
-      'Giày Dép Nam': ['Giày Dép Nữ'],
+      'Giày Dép Nam': ['Giày Dép Nữ', 'Thể Thao'],
       'Giày Dép Nữ': ['Giày Dép Nam'],
-      'Túi Ví Nữ': ['Thời Trang Nam', 'Thời Trang Nữ', 'Phụ Kiện Nữ'],
+      'Túi Ví Nữ': ['Phụ Kiện Nữ'],
+      'Phụ Kiện Nữ': ['Túi Ví Nữ'],
+      'Sắc Đẹp': ['Sức Khỏe'],
+      'Sức Khỏe': ['Sắc Đẹp'],
       'Điện Thoại & Phụ Kiện': ['Thiết Bị Điện Tử'],
+      'Máy Tính & Laptop': ['Thiết Bị Điện Tử'],
       'Thiết Bị Điện Tử': ['Điện Thoại & Phụ Kiện', 'Máy Tính & Laptop', 'Máy Ảnh'],
       'Máy Ảnh': ['Thiết Bị Điện Tử'],
     };
