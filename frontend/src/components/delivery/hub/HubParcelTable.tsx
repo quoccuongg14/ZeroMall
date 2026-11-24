@@ -32,6 +32,7 @@ interface HubParcelTableProps {
   onOpenReconciliation: (trip: LinehaulTrip) => void
   onHandoverToSoc?: (shipmentIds: string[]) => Promise<void>
   onTransferToChildHub?: (shipment: Shipment, childHub: Hub) => Promise<void>
+  onOpenTripHistory?: () => void
   onUpdateStatus: (
     shipmentId: string,
     status: string,
@@ -95,6 +96,7 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
   onOpenReconciliation,
   onHandoverToSoc,
   onTransferToChildHub,
+  onOpenTripHistory,
   onUpdateStatus,
 }) => {
   const isSoc = currentHub?.type === 'SORTING_CENTER'
@@ -144,6 +146,17 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                 >
                   <span>📤</span>
                   <span>Bàn Giao Về {parentSoc?.name || 'SOC'} ({selectedShipmentIds.size} kiện)</span>
+                </button>
+              )}
+              {onOpenTripHistory && (
+                <button
+                  type="button"
+                  onClick={onOpenTripHistory}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-lg text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5 border border-amber-400/30"
+                  title="Xem lịch sử các chuyến xe đã bàn giao về SOC"
+                >
+                  <span>📜</span>
+                  <span>Lịch Sử Xe Xuất Về SOC</span>
                 </button>
               )}
             </div>

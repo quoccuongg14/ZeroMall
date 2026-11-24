@@ -60,6 +60,8 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
   const [selectedTripForDetail, setSelectedTripForDetail] = useState<LinehaulHistoryTrip | null>(null)
   const [printingTrip, setPrintingTrip] = useState<LinehaulHistoryTrip | null>(null)
 
+  const isSoc = currentHub?.type === 'SORTING_CENTER'
+
   // 1. Tải dữ liệu lịch sử các chuyến xe từ Backend API thực tế
   const fetchTripHistory = useCallback(async () => {
     if (!currentHub?.id) return
@@ -131,7 +133,7 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-                  Hệ Thống Quản Lý Vận Tải Tuyến (SPX Linehaul TMS)
+                  {isSoc ? 'Hệ Thống Quản Lý Vận Tải Tuyến (SPX Linehaul TMS)' : 'Quản Lý Xe Tuyến Trung Chuyển Bưu Cục (HUD TMS)'}
                 </span>
                 <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -139,10 +141,12 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                 </span>
               </div>
               <h2 className="text-lg font-black text-white mt-1">
-                Lịch Sử Xe Tải Ra Hàng & Vào Hàng (Manifest Archive)
+                {isSoc ? 'Lịch Sử Xe Tải Ra Hàng & Vào Hàng (Manifest Archive)' : 'Lịch Sử Xe Tải & Trung Chuyển Tuyến (HUD ↔ SOC)'}
               </h2>
               <p className="text-xs text-slate-300">
-                Tra cứu hồ sơ chuyến xe, niêm phong Seal chì, chi tiết kiện hàng trong thùng xe và in bảng kê bàn giao
+                {isSoc 
+                  ? 'Tra cứu hồ sơ chuyến xe, niêm phong Seal chì, chi tiết kiện hàng trong thùng xe và in bảng kê bàn giao'
+                  : 'Tra cứu các chuyến xe bàn giao về SOC, xe nhận từ SOC cập bến bưu cục và in biên bản giao nhận'}
               </p>
             </div>
           </div>
@@ -191,7 +195,7 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <span>📤 Xe Ra Hàng (Xuất Bến)</span>
+              <span>{isSoc ? '📤 Xe Ra Hàng (Xuất Bến)' : '📤 Xe Bàn Giao Về SOC'}</span>
               <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-[10px] font-mono">
                 {tripsData.outbound.length}
               </span>
@@ -204,7 +208,7 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <span>📥 Xe Vào Hàng (Cập Bến)</span>
+              <span>{isSoc ? '📥 Xe Vào Hàng (Cập Bến)' : '📥 Xe Nhận Từ SOC'}</span>
               <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-[10px] font-mono">
                 {tripsData.inbound.length}
               </span>
@@ -265,7 +269,15 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                             : 'bg-emerald-50 text-emerald-800 border-emerald-300'
                         }`}
                       >
-                        <span>{isOutbound ? '📤 XE RA HÀNG' : '📥 XE VÀO HÀNG'}</span>
+                        <span>
+                          {isOutbound
+                            ? isSoc
+                              ? '📤 XE RA HÀNG'
+                              : '📤 XE BÀN GIAO SOC'
+                            : isSoc
+                            ? '📥 XE VÀO HÀNG'
+                            : '📥 XE NHẬN TỪ SOC'}
+                        </span>
                       </span>
 
                       <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">

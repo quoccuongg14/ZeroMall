@@ -1918,12 +1918,15 @@ export class DeliveryService {
     const targetHub = await this.prisma.hub.findUnique({ where: { id: hubId } });
     if (!targetHub) return { outbound: [], inbound: [], all: [] };
 
-    // Tìm tất cả tracking logs có thông tin xe tải / seal
+    // Tìm tất cả tracking logs có thông tin xe tải / seal / trung chuyển
     const logs = await this.prisma.shipmentTracking.findMany({
       where: {
         OR: [
           { description: { contains: 'Xe tải' } },
           { description: { contains: 'Seal' } },
+          { description: { contains: 'trung chuyển' } },
+          { description: { contains: 'bàn giao' } },
+          { description: { contains: 'Linehaul' } },
         ],
       },
       include: {
@@ -1953,13 +1956,22 @@ export class DeliveryService {
       const sealMatch = text.match(/Seal:\s*\[?([A-Z0-9\-]+)\]?/i);
       const driverMatch = text.match(/Bác tài:\s*([^\(•]+)/i);
       const phoneMatch = text.match(/SĐT:\s*([0-9\+\.]+)/i) || text.match(/\(([0-9\+\.\s]+)\)/);
-      const destMatch = text.match(/đến\s+(.*?)[\.|$]/i);
+      const destMatch = text.match(/đến\s+(.*?)[\.|$]/i) || text.match(/về\s+\[?(.*?)\]?\s+để/i);
 
-      const truckNumber = truckMatch ? truckMatch[1] : 'Xe Tải Linehaul';
+      const truckNumber = truckMatch ? truckMatch[1] : (text.toLowerCase().includes('trung chuyển') ? 'Xe Trung Chuyển ZMX' : 'Xe Tải Linehaul');
       const sealNumber = sealMatch ? sealMatch[1] : 'CHƯA-SEAL';
-      const driver = driverMatch ? driverMatch[1].trim() : 'Đội xe Linehaul';
+      const driver = driverMatch ? driverMatch[1].trim() : (text.toLowerCase().includes('trung chuyển') ? 'Đội xe trung chuyển ZMX' : 'Đội xe Linehaul');
       const driverPhone = phoneMatch ? phoneMatch[1].trim() : '';
       const destText = destMatch ? destMatch[1].trim() : '';
+
+      // Phân tích mã Seal chì: Thường có chuẩn SEAL-ORIGIN-DEST-XXXX (ví dụ: SEAL-HUB692-BT01-4742)
+      const sealParts = sealNumber.split('-');
+      let sealOriginCode = '';
+      let sealDestCode = '';
+      if (sealParts.length >= 4 && sealParts[0].toUpperCase() === 'SEAL') {
+        sealOriginCode = sealParts[1].toUpperCase();
+        sealDestCode = sealParts[2].toUpperCase();
+      }
 
       // Xác định hub đích
       let destHub = hubs.find((h) => 
@@ -1967,12 +1979,32 @@ export class DeliveryService {
         (destText && h.code && destText.toLowerCase().includes(h.code.toLowerCase()))
       );
 
+      // Nếu destHub chưa tìm được hoặc chỉ là chung chung, tìm bằng sealDestCode
+      if ((!destHub || destText.toLowerCase().includes('bưu cục phát')) && sealDestCode) {
+        const matchBySeal = hubs.find((h) => h.code && h.code.toUpperCase() === sealDestCode);
+        if (matchBySeal) destHub = matchBySeal;
+      }
+
+      // Nếu vẫn chưa tìm được và đơn hàng có địa chỉ giao hàng khớp với hub đích quận/huyện
+      if (!destHub && log.shipment?.deliveryAddress) {
+        const addr = log.shipment.deliveryAddress.toLowerCase();
+        destHub = hubs.find((h) => {
+          if (h.type === 'SORTING_CENTER') return false;
+          const dist = (h.district || '').toLowerCase().replace(/^(quận|huyện|thành phố|tp\.?)\s+/i, '').trim();
+          return dist && dist.length >= 3 && addr.includes(dist);
+        });
+      }
+
       const logDate = new Date(log.timestamp).toISOString().split('T')[0];
       const tripKey = `${truckNumber}_${sealNumber}_${logDate}`;
 
-      const originHub = log.hubId ? hubMap.get(log.hubId) : null;
-      const isOutbound = log.hubId === hubId || originHub?.id === hubId;
-      const isInbound = (destHub && destHub.id === hubId) || (!isOutbound && destText && destText.toLowerCase().includes(targetHub.name.toLowerCase()));
+      let originHub = log.hubId ? hubMap.get(log.hubId) : null;
+      if (!originHub && sealOriginCode) {
+        originHub = hubs.find((h) => h.code && h.code.toUpperCase() === sealOriginCode) || null;
+      }
+
+      const isOutbound = log.hubId === hubId || originHub?.id === hubId || (text.includes(targetHub.name) && (text.includes('xuất kho') || text.includes('bàn giao')));
+      const isInbound = (destHub && destHub.id === hubId) || (!isOutbound && destText && (destText.toLowerCase().includes(targetHub.name.toLowerCase()) || (targetHub.district && destText.toLowerCase().includes(targetHub.district.toLowerCase()))));
 
       if (!isOutbound && !isInbound) continue;
 

@@ -403,8 +403,24 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
       hubs.find((h) => h.type === 'SORTING_CENTER')
 
     const socName = targetSoc?.name || 'Trung Tâm Phân Loại (SOC)'
-    const confirmMsg = `Xác nhận xuất kho bàn giao ${shipmentIds.length} kiện hàng từ [${currentHub?.name || 'Bưu cục'}] về [${socName}] để phân loại tự động?`
-    if (!window.confirm(confirmMsg)) return
+    const defaultTruck = currentHub?.province?.includes('Hà Nội') ? '29C-778.89' : '51C-668.99'
+    const defaultSeal = `SEAL-${currentHub?.code || 'HUD'}-${targetSoc?.code || 'SOC'}-${Math.floor(1000 + Math.random() * 9000)}`
+
+    const inputTruck = window.prompt(
+      `Xác nhận xuất kho bàn giao ${shipmentIds.length} kiện từ [${currentHub?.name || 'Bưu cục'}] về [${socName}].\n\nNhập biển số xe tải bàn giao:`,
+      defaultTruck
+    )
+    if (inputTruck === null) return
+    const finalTruck = inputTruck.trim() || defaultTruck
+
+    const inputSeal = window.prompt(
+      `Nhập mã số Niêm phong Seal chì xe tải:`,
+      defaultSeal
+    )
+    if (inputSeal === null) return
+    const finalSeal = inputSeal.trim().toUpperCase() || defaultSeal
+
+    const driverName = 'Đội xe trung chuyển ZMX'
 
     try {
       for (const sId of shipmentIds) {
@@ -412,11 +428,12 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           sId,
           'IN_TRANSIT',
           undefined,
-          targetSoc?.id,
-          `Bưu cục [${currentHub?.name || 'HUD'}] đã xuất kho bàn giao kiện hàng cho xe trung chuyển về [${socName}] để phân loại tự động.`,
+          currentHub?.id, // Đơn vị xuất bến là currentHub (HUD)
+          `Bưu kiện đã được xếp lên Xe tải Linehaul [${finalTruck}] • Niêm phong Seal: [${finalSeal}] • Bác tài: ${driverName}. Xe xuất bến từ ${currentHub?.name} về [${socName}] để phân loại tự động.`,
           {
-            truckNumber: 'Xe trung chuyển nội bộ',
-            truckDriver: 'Đội xe trung chuyển ZMX',
+            truckNumber: finalTruck,
+            truckDriver: driverName,
+            sealNumber: finalSeal,
             targetHubId: targetSoc?.id,
           }
         )
@@ -424,7 +441,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
       setSelectedShipmentIds(new Set())
       setScanMessage({
         type: 'success',
-        text: `📤 Đã xuất kho bàn giao thành công ${shipmentIds.length} kiện về [${socName}]!`,
+        text: `📤 Đã xuất kho bàn giao thành công ${shipmentIds.length} kiện lên Xe [${finalTruck}] (Seal: ${finalSeal}) về [${socName}]!`,
       })
       onRefresh()
     } catch (err: any) {
@@ -728,6 +745,13 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
             >
               <span>⚡</span> Đóng Xe Tải Tuyến Mới
             </button>
+            <button
+              onClick={() => setIsSocTripHistoryOpen(true)}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer border border-amber-400/30"
+              title="Tra cứu lịch sử các chuyến xe tải tuyến Linehaul của SOC"
+            >
+              <span>📜</span> Lịch Sử Xe Tải
+            </button>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
@@ -746,6 +770,13 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <span>➕</span> Tuyển Shipper Mới
+            </button>
+            <button
+              onClick={() => setIsSocTripHistoryOpen(true)}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer border border-amber-400/30"
+              title="Tra cứu lịch sử xe tải ra hàng và vào hàng của bưu cục"
+            >
+              <span>📜</span> Lịch Sử Xe Tải
             </button>
           </div>
         )}
@@ -907,6 +938,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               onOpenReconciliation={(trip) => setReconcilingTrip(trip)}
               onHandoverToSoc={handleHandoverToSoc}
               onTransferToChildHub={handleTransferToChildHub}
+              onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
               onUpdateStatus={onUpdateStatus}
             />
           </div>
