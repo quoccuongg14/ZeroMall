@@ -34,8 +34,48 @@ export class ProductService {
    * Xóa đồng bộ các khóa cache sản phẩm, danh mục và feed trang chủ trên Redis
    */
   private async invalidateProductCaches(productIds: string[] = []) {
-    await this.invalidateProductCaches(productIds);
+    for (const id of productIds) {
+      await this.redis.del(`product:detail:${id}`);
+    }
+    await this.redis.delByPattern('products:*');
+    await this.redis.delByPattern('categories:*');
     await this.redis.delByPattern('feed:*');
+  }
+
+  /**
+   * Ngăn tình trạng cùng 1 Shop dùng lại ảnh hoặc quá nhiều Shop nhân bản cùng 1 ảnh trên sàn
+   */
+  private async validateImageReuseLimit(shopId: string, imageUrl?: string | null, excludeProductId?: string) {
+    const raw = (imageUrl || '').trim();
+    if (!raw || raw.includes('placehold.co')) return;
+
+    const baseImg = raw.split('?')[0];
+    const where: any = {
+      status: 'active',
+      isViolated: false,
+      image: baseImg.length > 25 ? { startsWith: baseImg } : raw,
+    };
+    if (excludeProductId) {
+      where.id = { not: excludeProductId };
+    }
+
+    const existing = await this.prisma.product.findMany({
+      where,
+      select: { id: true, shopId: true },
+      take: 10,
+    });
+
+    if (existing.some((p) => p.shopId === shopId)) {
+      throw new BadRequestException(
+        'Cửa hàng của bạn đã có sản phẩm đang hiển thị sử dụng hình ảnh này. Vui lòng dùng ảnh riêng cho từng sản phẩm!'
+      );
+    }
+
+    if (existing.length >= 3) {
+      throw new BadRequestException(
+        'Hình ảnh này đã đạt giới hạn tối đa 3 sản phẩm hiển thị trùng ảnh trên sàn. Vui lòng sử dụng hình ảnh khác!'
+      );
+    }
   }
 
   /**
@@ -321,6 +361,10 @@ export class ProductService {
       throw new BadRequestException(`Mô tả sản phẩm chứa từ ngữ bị cấm không được phép kinh doanh: "${prohibitedWordDesc}". Vui lòng sửa lại mô tả sản phẩm!`);
     }
 
+    if (dto.status !== 'hidden') {
+      await this.validateImageReuseLimit(String(dto.shopId), dto.image ? String(dto.image) : null);
+    }
+
     const imagesStr = typeof dto.images === 'string' ? dto.images : (dto.images ? JSON.stringify(dto.images) : '[]');
     const isHasVariations = Boolean(dto.hasVariations);
     const variationGroupsStr = isHasVariations && dto.variationGroups && dto.variationGroups !== '[]' && dto.variationGroups !== 'null'
@@ -563,8 +607,12 @@ export class ProductService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
-    await this.findOne(id); // Ensure product exists
+    const currentProduct = await this.findOne(id); // Ensure product exists
     const updateData: any = {};
+
+    if (dto.image !== undefined && dto.image) {
+      await this.validateImageReuseLimit(currentProduct.shopId, String(dto.image), id);
+    }
 
     if (dto.name !== undefined) {
       const nameStr = String(dto.name);
@@ -656,7 +704,6 @@ export class ProductService {
     if (dto.preOrderDays !== undefined) updateData.preOrderDays = dto.preOrderDays != null ? String(dto.preOrderDays) : '7';
     if (dto.costPrice !== undefined) updateData.costPrice = dto.costPrice != null ? Number(dto.costPrice) : null;
 
-    const currentProduct = await this.findOne(id);
     const updatedProduct = await this.prisma.product.update({
       where: { id },
       data: updateData,
