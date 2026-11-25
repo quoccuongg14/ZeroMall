@@ -78,6 +78,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (tab === 'login') {
+        if (data.user?.role && data.user.role !== 'BUYER') {
+          const isSellerAccount = data.user.role === 'SHOP_OWNER' || data.user.role === 'SHOP_STAFF'
+          throw new Error(
+            isSellerAccount
+              ? 'Tài khoản này là tài khoản Cửa Hàng (Kênh Người Bán), không thể dùng để đăng nhập trên Sàn TMĐT. Vui lòng đăng nhập bằng tài khoản Khách Hàng (Người Mua) khác!'
+              : 'Tài khoản quản trị / vận hành nội bộ không thể đăng nhập ở đây. Vui lòng sử dụng tài khoản Khách Hàng (Người Mua)!'
+          )
+        }
         onAuthSuccess(data.user, data.accessToken)
         resetForm()
         onClose()

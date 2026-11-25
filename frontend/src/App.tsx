@@ -59,26 +59,57 @@ function DeliveryPortalWrapper() {
   return <DeliveryPortal onBackToHome={() => { window.location.href = getBuyerHomeUrl(); }} />
 }
 
-function SellerPortalWrapper({ user, token, handleAuthSuccess, handleLogout }: { user: any, token: any, handleAuthSuccess: any, handleLogout: any }) {
-  const handleBackToMarket = () => {
-    const buyerUrl = getBuyerHomeUrl();
-    const effectiveToken = token || localStorage.getItem('zm_token') || '';
-    if (user && effectiveToken) {
-      const ssoUser = encodeURIComponent(JSON.stringify(user));
-      const ssoToken = encodeURIComponent(effectiveToken);
-      const sep = buyerUrl.includes('?') ? '&' : '?';
-      window.location.href = `${buyerUrl}${sep}sso_user=${ssoUser}&sso_token=${ssoToken}`;
-    } else {
-      window.location.href = buyerUrl;
+function SellerPortalWrapper({ user: globalUser }: { user?: any, token?: any, handleAuthSuccess?: any, handleLogout?: any }) {
+  // Tách biệt hoàn toàn phiên đăng nhập của Seller App (zm_seller_user / zm_seller_token)
+  // khỏi phiên của Trang Sàn TMĐT (zm_user / zm_token).
+  // Vẫn giữ tương thích nếu Admin dùng tính năng Impersonate (Ghost Login) từ Admin Portal.
+  const isImpersonatedGlobal = !!globalUser?.isImpersonated;
+
+  const [sellerUser, setSellerUser] = useState<any>(() => {
+    if (isImpersonatedGlobal) return globalUser;
+    try {
+      const raw = localStorage.getItem('zm_seller_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
     }
+  });
+
+  const [sellerToken, setSellerToken] = useState<string | null>(() => {
+    if (isImpersonatedGlobal) return localStorage.getItem('zm_token');
+    return localStorage.getItem('zm_seller_token');
+  });
+
+  const handleSellerAuthSuccess = (userData: any, userToken: string) => {
+    setSellerUser(userData);
+    setSellerToken(userToken);
+    localStorage.setItem('zm_seller_user', JSON.stringify(userData));
+    localStorage.setItem('zm_seller_token', userToken);
+  };
+
+  const handleSellerLogout = () => {
+    setSellerUser(null);
+    setSellerToken(null);
+    localStorage.removeItem('zm_seller_user');
+    localStorage.removeItem('zm_seller_token');
+    if (isImpersonatedGlobal) {
+      localStorage.removeItem('zm_user');
+      localStorage.removeItem('zm_token');
+    }
+    window.location.href = window.location.hostname.startsWith('seller.') ? '/' : '/seller';
+  };
+
+  const handleBackToMarket = () => {
+    // Không truyền SSO của Seller sang Sàn TMĐT vì là 2 app độc lập
+    window.location.href = getBuyerHomeUrl();
   };
 
   return (
     <SellerPortal
-      user={user}
-      token={token}
-      onAuthSuccess={handleAuthSuccess}
-      onLogout={handleLogout}
+      user={sellerUser}
+      token={sellerToken}
+      onAuthSuccess={handleSellerAuthSuccess}
+      onLogout={handleSellerLogout}
       onBackToHome={handleBackToMarket}
     />
   )
@@ -589,10 +620,21 @@ function App() {
     try {
       const savedUser = localStorage.getItem('zm_user');
       const savedToken = localStorage.getItem('zm_token');
-      return {
-        user: savedUser ? JSON.parse(savedUser) : null,
-        token: savedToken || null,
-      };
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if ((parsed?.role === 'SHOP_OWNER' || parsed?.role === 'SHOP_STAFF') && !parsed?.isImpersonated) {
+          // Di chuyển phiên Seller cũ sang storage riêng của Seller App để tách biệt 2 app
+          if (!localStorage.getItem('zm_seller_user') && savedToken) {
+            localStorage.setItem('zm_seller_user', savedUser);
+            localStorage.setItem('zm_seller_token', savedToken);
+          }
+          localStorage.removeItem('zm_user');
+          localStorage.removeItem('zm_token');
+          return { user: null, token: null };
+        }
+        return { user: parsed, token: savedToken || null };
+      }
+      return { user: null, token: null };
     } catch {
       return { user: null, token: null };
     }
@@ -959,7 +1001,7 @@ function App() {
               element={
                 <BuyerContainer
                   cart={cart}
-                  user={user}
+                  user={user && (user.role === 'SHOP_OWNER' || user.role === 'SHOP_STAFF') ? null : user}
                   dbProducts={dbProducts}
                   handleSearch={() => {}} // Tạm thời search xử lý rỗng hoặc truyền handleSearch
                   handleRemoveCartItem={handleRemoveCartItem}
