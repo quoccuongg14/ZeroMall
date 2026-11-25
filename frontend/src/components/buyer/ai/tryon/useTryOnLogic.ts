@@ -220,6 +220,13 @@ export const useTryOnLogic = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
 
+  const isValidTryOnProduct = (p: any): boolean => {
+    if (!p || !p.id) return false
+    if (p.status === 'hidden' || p.status === 'deleted' || p.status === 'violated') return false
+    if (p.isViolated === true) return false
+    return true
+  }
+
   // Hàm tải và lọc các món thời trang trong giỏ hàng thực tế
   const loadCartFashionItems = (): CartFashionItem[] => {
     try {
@@ -239,7 +246,7 @@ export const useTryOnLogic = ({
       if (Array.isArray(rawCartItems)) {
         const fashionList: CartFashionItem[] = []
         rawCartItems.forEach((item) => {
-          if (!item.product) return
+          if (!isValidTryOnProduct(item.product)) return
           const slot = detectItemSlot(item.product)
           if (slot !== null) {
             const rawPrice = item.product.price || item.product.flashPrice || 0
@@ -262,6 +269,8 @@ export const useTryOnLogic = ({
                 sold: item.product.sold || 0,
                 stock: item.product.stock || 99,
                 total: item.product.total || 100,
+                status: (item.product as any).status || 'active',
+                isViolated: Boolean((item.product as any).isViolated),
               } as unknown as Product,
               variant: item.selectedVariant,
               quantity: item.quantity
@@ -297,7 +306,7 @@ export const useTryOnLogic = ({
         if (res.ok) {
           const raw = await res.json()
           const prods: Product[] = Array.isArray(raw) ? raw : (raw.products || [])
-          const validFashion = prods.filter(p => detectItemSlot(p) !== null)
+          const validFashion = prods.filter(p => isValidTryOnProduct(p) && detectItemSlot(p) !== null)
           setSearchResults(validFashion)
         }
       } catch (err) {
@@ -435,14 +444,36 @@ export const useTryOnLogic = ({
         
         const uniqueMap = new Map<string, Product>()
         rawCombined.forEach(p => {
-          if (p && p.id && !uniqueMap.has(p.id) && detectItemSlot(p) !== null) {
+          if (isValidTryOnProduct(p) && !uniqueMap.has(p.id) && detectItemSlot(p) !== null) {
             uniqueMap.set(p.id, p)
           }
         })
         const combined = Array.from(uniqueMap.values())
         let effectivePants = combined.length > 0 ? combined : []
 
-        if (product) {
+        // Đối chiếu các món trong giỏ hàng với DB thực tế để loại bỏ ngay sản phẩm vừa bị CSKH khóa
+        let verifiedCartItems = cartItems
+        if (cartItems.length > 0) {
+          try {
+            const checkRes = await fetch(`${API_BASE_URL}/products/check-active`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids: cartItems.map((c) => c.product.id) }),
+            })
+            if (checkRes.ok) {
+              const checkData = await checkRes.json()
+              if (Array.isArray(checkData?.activeIds)) {
+                const activeSet = new Set<string>(checkData.activeIds)
+                verifiedCartItems = cartItems.filter((c) => activeSet.has(c.product.id))
+                setCartFashionItems(verifiedCartItems)
+              }
+            }
+          } catch {
+            // Giữ danh sách hiện có nếu kiểm tra mạng tạm thời gián đoạn
+          }
+        }
+
+        if (product && isValidTryOnProduct(product)) {
           const filtered = effectivePants.filter(p => p.id !== product.id)
           effectivePants = [product, ...filtered]
           setAvailablePants(effectivePants)
@@ -458,8 +489,8 @@ export const useTryOnLogic = ({
           }
         } else {
           setAvailablePants(effectivePants)
-          if (cartItems.length > 0) {
-            const first = cartItems[0].product
+          if (verifiedCartItems.length > 0) {
+            const first = verifiedCartItems[0].product
             const { outfit, activeSlot } = buildOutfitFromSingleProduct(first)
             setSelectedOutfit(outfit)
             setActiveOutfitSlot(activeSlot)

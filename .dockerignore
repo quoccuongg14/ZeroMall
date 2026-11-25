@@ -3,6 +3,8 @@ dist
 .git
 .gitignore
 *.md
+*.tsbuildinfo
+**/*.tsbuildinfo
 **/node_modules
 **/dist
 **/src/generated

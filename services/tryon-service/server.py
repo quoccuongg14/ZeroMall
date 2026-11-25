@@ -1884,7 +1884,7 @@ class AiStylistEngine:
     def fetch_real_zero_products(cls):
         """Truy vấn CSDL thực tế thời trang của ZeroMall qua Kong Gateway hoặc Product Service"""
         now = time.time()
-        if cls._CACHED_FASHION_PRODUCTS and (now - cls._LAST_CACHE_TIME < 300):
+        if cls._CACHED_FASHION_PRODUCTS and (now - cls._LAST_CACHE_TIME < 60):
             return cls._CACHED_FASHION_PRODUCTS
 
         base_urls = [
@@ -1905,7 +1905,11 @@ class AiStylistEngine:
                         with urllib.request.urlopen(req, timeout=3) as resp:
                             data = json.loads(resp.read().decode())
                             prods = data if isinstance(data, list) else (data.get("products") or [])
-                            combined.extend(prods)
+                            active_prods = [
+                                p for p in prods
+                                if p.get("status") not in ("hidden", "deleted", "violated") and not p.get("isViolated")
+                            ]
+                            combined.extend(active_prods)
                     except Exception:
                         pass
                 if len(combined) >= 20:

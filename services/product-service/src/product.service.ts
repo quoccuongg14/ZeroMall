@@ -31,6 +31,14 @@ export class ProductService {
   }
 
   /**
+   * Xóa đồng bộ các khóa cache sản phẩm, danh mục và feed trang chủ trên Redis
+   */
+  private async invalidateProductCaches(productIds: string[] = []) {
+    await this.invalidateProductCaches(productIds);
+    await this.redis.delByPattern('feed:*');
+  }
+
+  /**
    * Feed phân trang cho trang chủ — mỗi page 30 sản phẩm (kiểu Shopee infinite scroll)
    * Guest: tối đa 2 pages (60 SP) → chặn "Đăng nhập để xem thêm"
    * Logged-in: không giới hạn page
@@ -45,6 +53,7 @@ export class ProductService {
 
     const where: any = {
       status: 'active',
+      isViolated: false,
       stock: { gt: 0 },
     };
     if (category && category !== 'all') {
@@ -127,6 +136,7 @@ export class ProductService {
     const products = await this.prisma.product.findMany({
       where: {
         status: 'active',
+        isViolated: false,
         stock: { gt: 0 },
       },
       include: { categoryRef: true },
@@ -748,9 +758,7 @@ export class ProductService {
       },
     });
 
-    await this.redis.del(`product:detail:${id}`);
-    await this.redis.delByPattern('products:*');
-    await this.redis.delByPattern('categories:*');
+    await this.invalidateProductCaches([id]);
 
     // Tự động gửi thông báo đến Shop khi bị tạm ẩn
     if (newStatus === 'hidden' && product.shopId) {
@@ -790,11 +798,7 @@ export class ProductService {
       },
     });
 
-    for (const id of productIds) {
-      await this.redis.del(`product:detail:${id}`);
-    }
-    await this.redis.delByPattern('products:*');
-    await this.redis.delByPattern('categories:*');
+    await this.invalidateProductCaches(productIds);
 
     // Tự động bắn thông báo vi phạm đến từng Shop
     if (status === 'hidden') {
@@ -837,9 +841,7 @@ export class ProductService {
       },
     });
 
-    await this.redis.del(`product:detail:${id}`);
-    await this.redis.delByPattern('products:*');
-    await this.redis.delByPattern('categories:*');
+    await this.invalidateProductCaches([id]);
 
     return deleted;
   }
@@ -1152,14 +1154,276 @@ export class ProductService {
   }
 
   async updateProductViolation(id: string, isViolated: boolean, reason?: string) {
-    return this.prisma.product.update({
+    const updated = await this.prisma.product.update({
       where: { id },
       data: {
         isViolated,
         violationReason: reason || null,
-        reportsCount: isViolated ? 1 : 0
-      }
+        reportsCount: isViolated ? 1 : 0,
+      },
     });
+    await this.invalidateProductCaches([id]);
+    return updated;
+  }
+
+  /**
+   * Kiểm tra danh sách ID sản phẩm còn đang hoạt động (active & không vi phạm) trong DB thực tế
+   */
+  async checkActiveProductIds(ids: string[]) {
+    const cleanIds = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id.trim()) : [];
+    if (cleanIds.length === 0) return { activeIds: [] };
+
+    const activeRows = await this.prisma.product.findMany({
+      where: {
+        id: { in: cleanIds },
+        status: 'active',
+        isViolated: false,
+      },
+      select: { id: true },
+    });
+    return { activeIds: activeRows.map((r) => r.id) };
+  }
+
+  /**
+   * Khóa đồng loạt tất cả sản phẩm trên toàn sàn dùng chung URL hình ảnh vi phạm
+   */
+  async bulkHideByImage(imageUrl: string, reason?: string) {
+    const trimmedUrl = (imageUrl || '').trim();
+    if (!trimmedUrl) {
+      return { count: 0, updatedIds: [] };
+    }
+
+    const baseUrl = trimmedUrl.split('?')[0];
+    const imageMatchCondition = baseUrl.length > 25 && baseUrl !== trimmedUrl
+      ? { OR: [{ image: trimmedUrl }, { image: { startsWith: baseUrl } }] }
+      : { image: trimmedUrl };
+
+    const matchingProducts = await this.prisma.product.findMany({
+      where: {
+        status: { not: 'deleted' },
+        ...imageMatchCondition,
+      },
+      select: { id: true, name: true, shopId: true },
+    });
+
+    if (matchingProducts.length === 0) {
+      return { count: 0, updatedIds: [] };
+    }
+
+    const updatedIds = matchingProducts.map((p) => p.id);
+    const hideReason = reason || 'Ảnh hiển thị sai lệch hoặc không khớp với sản phẩm thực tế';
+
+    const updated = await this.prisma.product.updateMany({
+      where: { id: { in: updatedIds } },
+      data: {
+        status: 'hidden',
+        isViolated: true,
+        violationReason: hideReason,
+      },
+    });
+
+    await this.invalidateProductCaches(updatedIds);
+
+    try {
+      const notifServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
+      for (const p of matchingProducts) {
+        if (p.shopId) {
+          fetch(`${notifServiceUrl}/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: p.shopId,
+              title: '🚫 Sản phẩm bị tạm ẩn do vi phạm hình ảnh',
+              content: `Sản phẩm "${p.name}" (Mã: ${p.id}) đã bị CSKH tạm ẩn khỏi sàn do: ${hideReason}. Vui lòng cập nhật lại hình ảnh đúng sản phẩm.`,
+              type: 'SYSTEM',
+              metadata: { action: 'EDIT_PRODUCT', productId: p.id, shopId: p.shopId },
+            }),
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {}
+
+    return { count: updated.count, updatedIds };
+  }
+
+  /**
+   * Danh sách kiểm duyệt CSKH có tìm kiếm & phân trang server-side trên toàn bộ sản phẩm sàn
+   */
+  async findModerationList(params: {
+    subTab?: string;
+    policyType?: string;
+    search?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const safePage = Math.max(1, params.page || 1);
+    const safeLimit = Math.min(Math.max(1, params.limit || 50), 100);
+    const skip = (safePage - 1) * safeLimit;
+
+    const baseWhere: any = { status: { not: 'deleted' } };
+    if (params.category && params.category !== 'ALL') {
+      const cat = params.category.trim();
+      baseWhere.OR = [
+        { category: { contains: cat, mode: 'insensitive' } },
+        { categoryRef: { name: { contains: cat, mode: 'insensitive' } } },
+        { categoryRef: { slug: { equals: cat, mode: 'insensitive' } } },
+      ];
+    }
+    if (params.search && params.search.trim()) {
+      const q = params.search.trim();
+      baseWhere.AND = [
+        {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { id: { contains: q, mode: 'insensitive' } },
+            { sku: { contains: q, mode: 'insensitive' } },
+            { shopId: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    const imageMismatchReasons = [
+      { violationReason: { startsWith: 'Ảnh hiển thị', mode: 'insensitive' } },
+      { violationReason: { startsWith: 'Ảnh là', mode: 'insensitive' } },
+      { violationReason: { contains: 'không tương thích với ngành hàng', mode: 'insensitive' } },
+      { violationReason: { contains: 'quy định hình ảnh hoặc ngành hàng', mode: 'insensitive' } },
+      { violationReason: { contains: 'không khớp với sản phẩm', mode: 'insensitive' } },
+    ];
+
+    const policyViolationCond: any = {
+      OR: [
+        { reportsCount: { gt: 0 } },
+        {
+          AND: [
+            { isViolated: true },
+            { NOT: { OR: imageMismatchReasons } },
+          ],
+        },
+      ],
+    };
+
+    const subTab = (params.subTab || 'VIOLATIONS').toUpperCase();
+    let tabWhere: any = { ...baseWhere };
+
+    if (subTab === 'ACTIVE') {
+      tabWhere = {
+        AND: [
+          baseWhere,
+          { status: 'active' },
+          { NOT: policyViolationCond },
+        ],
+      };
+    } else if (subTab === 'DELISTED') {
+      tabWhere = {
+        AND: [
+          baseWhere,
+          { OR: [{ status: 'hidden' }, policyViolationCond] },
+        ],
+      };
+    } else if (subTab === 'VIOLATIONS') {
+      const extraPolicyFilters: any[] = [baseWhere, policyViolationCond];
+      if (params.policyType === 'BUYER_REPORT') {
+        extraPolicyFilters.push({ reportsCount: { gt: 0 } });
+      } else if (params.policyType === 'COUNTERFEIT') {
+        extraPolicyFilters.push({
+          OR: [
+            { violationReason: { contains: 'hàng giả', mode: 'insensitive' } },
+            { violationReason: { contains: 'nhái', mode: 'insensitive' } },
+            { violationReason: { contains: 'sở hữu trí tuệ', mode: 'insensitive' } },
+            { violationReason: { contains: 'bản quyền', mode: 'insensitive' } },
+          ],
+        });
+      } else if (params.policyType === 'PROHIBITED') {
+        extraPolicyFilters.push({
+          OR: [
+            { violationReason: { contains: 'từ cấm', mode: 'insensitive' } },
+            { violationReason: { contains: 'nguy hiểm', mode: 'insensitive' } },
+            { violationReason: { contains: 'cấm', mode: 'insensitive' } },
+            { violationReason: { contains: 'y tế', mode: 'insensitive' } },
+            { violationReason: { contains: 'quảng cáo', mode: 'insensitive' } },
+          ],
+        });
+      }
+      tabWhere = { AND: extraPolicyFilters };
+    }
+
+    const [products, total, countAll, countActive, countViolations, countDelisted, countBuyerReports, countCounterfeit, countProhibited] = await Promise.all([
+      this.prisma.product.findMany({
+        where: tabWhere,
+        include: { categoryRef: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: safeLimit,
+      }),
+      this.prisma.product.count({ where: tabWhere }),
+      this.prisma.product.count({ where: baseWhere }),
+      this.prisma.product.count({
+        where: { AND: [baseWhere, { status: 'active' }, { NOT: policyViolationCond }] },
+      }),
+      this.prisma.product.count({
+        where: { AND: [baseWhere, policyViolationCond] },
+      }),
+      this.prisma.product.count({
+        where: { AND: [baseWhere, { OR: [{ status: 'hidden' }, policyViolationCond] }] },
+      }),
+      this.prisma.product.count({
+        where: { AND: [baseWhere, policyViolationCond, { reportsCount: { gt: 0 } }] },
+      }),
+      this.prisma.product.count({
+        where: {
+          AND: [
+            baseWhere,
+            policyViolationCond,
+            {
+              OR: [
+                { violationReason: { contains: 'hàng giả', mode: 'insensitive' } },
+                { violationReason: { contains: 'nhái', mode: 'insensitive' } },
+                { violationReason: { contains: 'sở hữu trí tuệ', mode: 'insensitive' } },
+                { violationReason: { contains: 'bản quyền', mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+      }),
+      this.prisma.product.count({
+        where: {
+          AND: [
+            baseWhere,
+            policyViolationCond,
+            {
+              OR: [
+                { violationReason: { contains: 'từ cấm', mode: 'insensitive' } },
+                { violationReason: { contains: 'nguy hiểm', mode: 'insensitive' } },
+                { violationReason: { contains: 'cấm', mode: 'insensitive' } },
+                { violationReason: { contains: 'y tế', mode: 'insensitive' } },
+                { violationReason: { contains: 'quảng cáo', mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    return {
+      products,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+      },
+      counts: {
+        all: countAll,
+        active: countActive,
+        violations: countViolations,
+        delisted: countDelisted,
+        buyerReports: countBuyerReports,
+        counterfeit: countCounterfeit,
+        prohibited: countProhibited,
+      },
+    };
   }
 
   async getFlashSales() {

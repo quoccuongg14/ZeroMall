@@ -138,6 +138,35 @@ export class ProductController {
     return this.productService.updateProductViolation(id, isViolated, reason);
   }
 
+  @Get('moderation/list')
+  async getModerationList(
+    @Query('subTab') subTab?: string,
+    @Query('policyType') policyType?: string,
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.productService.findModerationList({
+      subTab,
+      policyType,
+      search,
+      category,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
+  }
+
+  @Post('check-active')
+  async checkActiveProductIds(@Body('ids') ids: string[]) {
+    return this.productService.checkActiveProductIds(ids);
+  }
+
+  @Put('bulk-hide-by-image')
+  async bulkHideByImage(@Body() body: { imageUrl: string; reason?: string }) {
+    return this.productService.bulkHideByImage(body.imageUrl, body.reason);
+  }
+
   @Get('flash-sales')
   async getFlashSales() {
     return this.productService.getFlashSales();

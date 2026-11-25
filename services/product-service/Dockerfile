@@ -15,9 +15,10 @@ RUN npm ci -w services/product-service --prefer-offline || npm ci -w services/pr
 COPY services/product-service ./services/product-service/
 
 WORKDIR /app/services/product-service
+RUN rm -rf dist *.tsbuildinfo
 RUN npx prisma generate
 RUN npm run build
-RUN cp -r src/generated dist/src/generated || true
+RUN cp -r src/generated dist/generated && mkdir -p dist/src && cp -r src/generated dist/src/generated || true
 
 FROM node:22-alpine
 

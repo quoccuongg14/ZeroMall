@@ -11,7 +11,20 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   const [activeSubTab, setActiveSubTab] = useState<'VIOLATIONS' | 'DELISTED' | 'ACTIVE' | 'ALL'>('VIOLATIONS')
   const [policyTypeFilter, setPolicyTypeFilter] = useState<'ALL' | 'BUYER_REPORT' | 'PROHIBITED' | 'COUNTERFEIT'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [counts, setCounts] = useState({
+    all: 0,
+    active: 0,
+    violations: 0,
+    delisted: 0,
+    buyerReports: 0,
+    counterfeit: 0,
+    prohibited: 0,
+  })
   const [categories, setCategories] = useState<any[]>([])
   const [shopsMap, setShopsMap] = useState<Record<string, string>>({})
 
@@ -21,6 +34,12 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   const [deleteNote, setDeleteNote] = useState('')
   const [penaltyPoints, setPenaltyPoints] = useState<number>(3)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Lock / Hide Modal (hỗ trợ khóa toàn bộ sản phẩm dùng chung ảnh sai trên sàn)
+  const [lockModalProduct, setLockModalProduct] = useState<any | null>(null)
+  const [lockReason, setLockReason] = useState('Ảnh hiển thị sai lệch hoặc không khớp với sản phẩm thực tế')
+  const [lockSameImageAcrossShops, setLockSameImageAcrossShops] = useState(true)
+  const [isLocking, setIsLocking] = useState(false)
 
   // Preview Modal
   const [previewProduct, setPreviewProduct] = useState<any | null>(null)
@@ -61,18 +80,12 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
     return 'OTHER'
   }
 
-  const fetchAllProducts = async () => {
-    setLoading(true)
+  const fetchMetadata = async () => {
     try {
-      const [resProd, resCat, resShops] = await Promise.all([
-        fetch(`${API_BASE_URL}/products?limit=150&inStockOnly=false`),
+      const [resCat, resShops] = await Promise.all([
         fetch(`${API_BASE_URL}/products/categories`),
         fetch(`${API_BASE_URL}/auth/shops`),
       ])
-      if (resProd.ok) {
-        const prodData = await resProd.json()
-        setProducts(prodData)
-      }
       if (resCat.ok) {
         setCategories(await resCat.json())
       }
@@ -83,6 +96,37 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
         setShopsMap(map)
       }
     } catch (e) {
+      console.error('Error fetching metadata for CS moderation:', e)
+    }
+  }
+
+  const fetchAllProducts = async (pageToFetch = currentPage) => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        subTab: activeSubTab,
+        policyType: policyTypeFilter,
+        category: categoryFilter,
+        page: String(pageToFetch),
+        limit: '50',
+      })
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim())
+      }
+
+      const resProd = await fetch(`${API_BASE_URL}/products/moderation/list?${params.toString()}`)
+      if (resProd.ok) {
+        const data = await resProd.json()
+        setProducts(Array.isArray(data.products) ? data.products : [])
+        if (data.pagination) {
+          setTotalPages(Math.max(1, data.pagination.totalPages || 1))
+          setTotalItems(data.pagination.total || 0)
+        }
+        if (data.counts) {
+          setCounts(data.counts)
+        }
+      }
+    } catch (e) {
       console.error('Error fetching products for CS moderation:', e)
     } finally {
       setLoading(false)
@@ -90,54 +134,35 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
   }
 
   useEffect(() => {
-    fetchAllProducts()
+    fetchMetadata()
   }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1)
+      setDebouncedSearch(searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    fetchAllProducts(currentPage)
+  }, [activeSubTab, policyTypeFilter, categoryFilter, debouncedSearch, currentPage])
 
   const formatMoney = (val: any) => {
     const num = parseFloat(val) || 0
     return num.toLocaleString('vi-VN') + 'đ'
   }
 
-  // Filter products
-  const filteredProducts = products.filter((p) => {
-    const isPolViolated = isPolicyViolation(p)
-    if (activeSubTab === 'ACTIVE' && (isPolViolated || p.status === 'hidden')) return false
-    if (activeSubTab === 'VIOLATIONS') {
-      if (!isPolViolated) return false
-      if (policyTypeFilter !== 'ALL') {
-        const pType = getPolicyViolationType(p)
-        if (pType !== policyTypeFilter) return false
-      }
-    }
-    if (activeSubTab === 'DELISTED' && p.status !== 'hidden' && !isPolViolated) return false
-
-    if (categoryFilter !== 'ALL') {
-      const catMatch = p.category === categoryFilter || p.categoryId === categoryFilter || p.categoryRef?.slug === categoryFilter
-      if (!catMatch) return false
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      const nameMatch = (p.name || '').toLowerCase().includes(q)
-      const idMatch = (p.id || '').toLowerCase().includes(q)
-      const shopName = (shopsMap[p.shopId] || '').toLowerCase()
-      const shopMatch = shopName.includes(q) || (p.shopId || '').toLowerCase().includes(q)
-      if (!nameMatch && !idMatch && !shopMatch) return false
-    }
-
-    return true
-  })
-
-  const countAll = products.length
-  const countActive = products.filter(p => !isPolicyViolation(p) && p.status !== 'hidden').length
-  const countViolations = products.filter(p => isPolicyViolation(p)).length
-  const countDelisted = products.filter(p => p.status === 'hidden' || isPolicyViolation(p)).length
-
-  // Sub-counts for Policy Types
-  const policyViolatedProducts = products.filter(p => isPolicyViolation(p))
-  const countBuyerReports = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'BUYER_REPORT').length
-  const countProhibited = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'PROHIBITED').length
-  const countCounterfeit = policyViolatedProducts.filter(p => getPolicyViolationType(p) === 'COUNTERFEIT').length
+  // Server đã lọc & phân trang sẵn
+  const filteredProducts = products
+  const countAll = counts.all
+  const countActive = counts.active
+  const countViolations = counts.violations
+  const countDelisted = counts.delisted
+  const countBuyerReports = counts.buyerReports
+  const countProhibited = counts.prohibited
+  const countCounterfeit = counts.counterfeit
 
   // Xử lý Xóa Vi Phạm Sản Phẩm & Phạt Sao Quả Tạ
   const handleConfirmDeleteViolation = async () => {
@@ -154,7 +179,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
         alert(`✅ CSKH đã gỡ bỏ sản phẩm vi phạm "${deleteModalProduct.name}" và áp dụng chế tài Sao Quả Tạ thành công!`)
         setDeleteModalProduct(null)
         setDeleteNote('')
-        fetchAllProducts()
+        fetchAllProducts(currentPage)
       } else {
         alert('Lỗi: Không thể xóa sản phẩm. Vui lòng thử lại.')
       }
@@ -167,26 +192,74 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
 
   // Xử lý Tạm Khóa / Mở Khóa Sản Phẩm
   const handleToggleProductStatus = async (product: any) => {
-    const nextStatus = product.status === 'hidden' ? 'active' : 'hidden'
-    const confirmText = nextStatus === 'hidden' 
-      ? `CSKH xác nhận TẠM KHÓA / ẨN sản phẩm "${product.name}" khỏi sàn?` 
-      : `CSKH xác nhận MỞ KHÓA HIỂN THỊ lại sản phẩm "${product.name}" trên sàn?`
+    if (product.status !== 'hidden') {
+      setLockModalProduct(product)
+      setLockReason('Ảnh hiển thị sai lệch hoặc không khớp với sản phẩm thực tế')
+      setLockSameImageAcrossShops(Boolean(product.image))
+      return
+    }
 
-    if (!window.confirm(confirmText)) return
+    if (!window.confirm(`CSKH xác nhận MỞ KHÓA HIỂN THỊ lại sản phẩm "${product.name}" trên sàn?`)) return
 
     try {
       const res = await fetch(`${API_BASE_URL}/products/${product.id}/toggle-status`, {
         method: 'PUT',
       })
       if (res.ok) {
-        await triggerAuditLog(`[CSKH MODERATION] Đổi trạng thái sản phẩm "${product.name}" (ID: ${product.id}) sang ${nextStatus}`)
-        alert(`✅ Đã ${nextStatus === 'hidden' ? 'tạm khóa' : 'mở khóa hiển thị'} sản phẩm thành công!`)
-        fetchAllProducts()
+        await triggerAuditLog(`[CSKH MODERATION] Mở khóa sản phẩm "${product.name}" (ID: ${product.id})`)
+        alert(`✅ Đã mở khóa hiển thị sản phẩm thành công!`)
+        fetchAllProducts(currentPage)
       } else {
         alert('Không thể cập nhật trạng thái sản phẩm.')
       }
     } catch (e: any) {
       alert('Lỗi: ' + e.message)
+    }
+  }
+
+  const handleConfirmLockProduct = async () => {
+    if (!lockModalProduct) return
+    setIsLocking(true)
+    try {
+      if (lockSameImageAcrossShops && lockModalProduct.image) {
+        const res = await fetch(`${API_BASE_URL}/products/bulk-hide-by-image`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: lockModalProduct.image,
+            reason: lockReason.trim() || 'Ảnh hiển thị sai lệch hoặc không khớp với sản phẩm thực tế',
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          await triggerAuditLog(`[CSKH MODERATION] Khóa đồng loạt ${data.count || 1} sản phẩm dùng chung ảnh sai với "${lockModalProduct.name}"`)
+          alert(`✅ Đã tạm khóa thành công ${data.count || 1} sản phẩm dùng chung ảnh vi phạm trên toàn sàn!`)
+          setLockModalProduct(null)
+          fetchAllProducts(currentPage)
+        } else {
+          alert('Không thể khóa hàng loạt theo ảnh. Vui lòng thử lại.')
+        }
+      } else {
+        const res = await fetch(`${API_BASE_URL}/products/${lockModalProduct.id}/toggle-status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reason: lockReason.trim() || 'CSKH tạm ẩn do vi phạm quy định hình ảnh hoặc ngành hàng',
+          }),
+        })
+        if (res.ok) {
+          await triggerAuditLog(`[CSKH MODERATION] Tạm khóa sản phẩm "${lockModalProduct.name}" (ID: ${lockModalProduct.id})`)
+          alert(`✅ Đã tạm khóa sản phẩm thành công!`)
+          setLockModalProduct(null)
+          fetchAllProducts(currentPage)
+        } else {
+          alert('Không thể cập nhật trạng thái sản phẩm.')
+        }
+      }
+    } catch (e: any) {
+      alert('Lỗi: ' + e.message)
+    } finally {
+      setIsLocking(false)
     }
   }
 
@@ -202,7 +275,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
       if (res.ok) {
         await triggerAuditLog(`[CSKH MODERATION] Bỏ qua cảnh báo vi phạm cho sản phẩm "${product.name}" (ID: ${product.id})`)
         alert(`✅ Đã xóa cảnh báo vi phạm cho sản phẩm "${product.name}"!`)
-        fetchAllProducts()
+        fetchAllProducts(currentPage)
       }
     } catch (e: any) {
       alert('Lỗi: ' + e.message)
@@ -227,7 +300,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
         await triggerAuditLog(`[CSKH INVENTORY OVERRIDE] Điều chỉnh kho/bán cho sản phẩm "${stockEditProduct.name}" (ID: ${stockEditProduct.id}) -> Tồn kho: ${editStockValue}, Đã bán: ${editSalesValue}`)
         alert(`✅ Đã điều chỉnh Tồn kho & Lượt bán thành công!`)
         setStockEditProduct(null)
-        fetchAllProducts()
+        fetchAllProducts(currentPage)
       } else {
         alert('Lỗi: Không thể cập nhật Tồn kho/Lượt bán.')
       }
@@ -256,7 +329,7 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
           </div>
 
           <button
-            onClick={fetchAllProducts}
+            onClick={() => fetchAllProducts(currentPage)}
             className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
           >
             <span>🔄</span> Tải Lại Dữ Liệu
@@ -273,7 +346,10 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveSubTab(tab.id as any)}
+              onClick={() => {
+                setCurrentPage(1)
+                setActiveSubTab(tab.id as any)
+              }}
               className={`pb-3 px-3 transition cursor-pointer relative flex items-center gap-1.5 whitespace-nowrap ${
                 activeSubTab === tab.id
                   ? 'border-b-2 border-rose-600 text-rose-600 font-black'
@@ -306,7 +382,10 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
           <div className="sm:col-span-4">
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              onChange={(e) => {
+                setCurrentPage(1)
+                setCategoryFilter(e.target.value)
+              }}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-rose-500 focus:outline-hidden cursor-pointer"
             >
               <option value="ALL">Tất cả ngành hàng</option>
@@ -330,7 +409,10 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
               <button
                 key={pType.id}
                 type="button"
-                onClick={() => setPolicyTypeFilter(pType.id as any)}
+                onClick={() => {
+                  setCurrentPage(1)
+                  setPolicyTypeFilter(pType.id as any)
+                }}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   policyTypeFilter === pType.id
                     ? 'bg-rose-50 text-rose-700 border border-rose-300 shadow-3xs'
@@ -534,7 +616,114 @@ export const CsProductModerationSubTab: React.FC<CsProductModerationSubTabProps>
             </table>
           </div>
         )}
+
+        {/* Server-side Pagination Bar */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/70 text-xs">
+            <span className="text-slate-500 font-medium">
+              Hiển thị <strong>{filteredProducts.length}</strong> / <strong>{totalItems}</strong> sản phẩm (Trang {currentPage}/{totalPages})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              >
+                ← Trang trước
+              </button>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-bold text-slate-700 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              >
+                Trang sau →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* MODAL: TẠM KHÓA SẢN PHẨM (CÓ TÙY CHỌN KHÓA HÀNG LOẠT THEO ẢNH) */}
+      {lockModalProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-hidden text-left border border-slate-100">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔒</span>
+                <h3 className="font-black text-slate-900 text-base">Tạm Khóa / Ẩn Sản Phẩm Vi Phạm</h3>
+              </div>
+              <button
+                onClick={() => setLockModalProduct(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl flex gap-3 items-center border border-slate-200/60">
+              <img
+                src={lockModalProduct.image || 'https://placehold.co/100x100?text=No+Image'}
+                alt={lockModalProduct.name}
+                className="w-14 h-14 object-cover rounded-xl border border-slate-200 shrink-0"
+              />
+              <div className="space-y-0.5 min-w-0">
+                <p className="font-bold text-slate-900 text-xs line-clamp-1">{lockModalProduct.name}</p>
+                <p className="text-[10px] text-slate-500 font-medium">Shop: <strong>{shopsMap[lockModalProduct.shopId] || lockModalProduct.shopId}</strong></p>
+                <p className="text-[10px] text-[#ee4d2d] font-bold">Giá: {formatMoney(lockModalProduct.price)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-800">Lý do tạm ẩn gửi đến Shop:</label>
+                <input
+                  type="text"
+                  value={lockReason}
+                  onChange={(e) => setLockReason(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              {lockModalProduct.image && (
+                <label className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={lockSameImageAcrossShops}
+                    onChange={(e) => setLockSameImageAcrossShops(e.target.checked)}
+                    className="mt-0.5 accent-amber-600 cursor-pointer"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-amber-950 block">
+                      Khóa đồng thời TẤT CẢ sản phẩm trên toàn sàn dùng chung ảnh này
+                    </span>
+                    <span className="text-[11px] text-amber-800 block leading-snug">
+                      Ngăn các shop khác đang nhân bản cùng hình ảnh sai tiếp tục hiển thị ở tìm kiếm và Phòng Thử Đồ AI.
+                    </span>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setLockModalProduct(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                onClick={handleConfirmLockProduct}
+                disabled={isLocking}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isLocking ? 'Đang khóa...' : lockSameImageAcrossShops ? '🔒 Khóa Tất Cả Cùng Ảnh' : '🔒 Khóa Sản Phẩm Này'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: GỠ BỎ VI PHẠM & ÁP DỤNG ĐIỂM PHẠT SAO QUẢ TẠ */}
       {deleteModalProduct && (
