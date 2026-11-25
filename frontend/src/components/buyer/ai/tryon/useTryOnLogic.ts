@@ -12,6 +12,7 @@ import type {
   VirtualTryOnModalProps,
 } from './types'
 import { detectItemSlot, getBodyPhysiqueInfo, formatDisplayPrice } from './tryonUtils'
+import { addOutfitBundleToCart } from '../../../../utils/cartBundleHelper'
 
 export const useTryOnLogic = ({
   isOpen,
@@ -710,10 +711,17 @@ export const useTryOnLogic = ({
       return
     }
     if (onAddToCart) {
-      items.forEach(item => {
-        onAddToCart(item, 1, `Size ${fitResult?.recommended_size || 'L'}`)
-      })
-      triggerToast(`🛒 Đã thêm trọn bộ ${items.length} món phối đồ vào giỏ hàng!`)
+      const variant = `Size ${fitResult?.recommended_size || 'L'}`
+      const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart)
+      if (addedCount === 0) {
+        triggerToast('⚠️ Các món trong bộ phối hiện đã hết hàng!')
+        return
+      }
+      if (skippedCount > 0) {
+        triggerToast(`🛒 Đã thêm ${addedCount} món vào giỏ (${skippedCount} món hết hàng) & chọn sẵn trong giỏ!`)
+      } else {
+        triggerToast(`🛒 Đã thêm trọn bộ ${addedCount} món phối đồ & chọn sẵn trong giỏ hàng!`)
+      }
       setTimeout(() => {
         loadCartFashionItems()
       }, 350)
@@ -816,14 +824,18 @@ export const useTryOnLogic = ({
       triggerToast('Chức năng thêm giỏ hàng chưa sẵn sàng!')
       return
     }
-    let addedCount = 0
-    bundle.items.forEach((it) => {
-      if (it.product) {
-        onAddToCart(it.product, 1, `Size ${fitResult?.recommended_size || 'L'}`)
-        addedCount++
-      }
-    })
-    triggerToast(`🎉 Đã thêm trọn bộ ${addedCount} món (Tiết kiệm ${formatDisplayPrice(bundle.savings)}) vào giỏ hàng thành công!`)
+    const items = bundle.items.map((it) => it.product).filter(Boolean)
+    const variant = `Size ${fitResult?.recommended_size || 'L'}`
+    const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart)
+    if (addedCount === 0) {
+      triggerToast('⚠️ Các món trong set này hiện đã hết hàng!')
+      return
+    }
+    if (skippedCount > 0) {
+      triggerToast(`🎉 Đã thêm ${addedCount} món vào giỏ (${skippedCount} món hết hàng) & chọn sẵn trong giỏ!`)
+    } else {
+      triggerToast(`🎉 Đã thêm trọn bộ ${addedCount} món (Tiết kiệm ${formatDisplayPrice(bundle.savings)}) & chọn sẵn trong giỏ!`)
+    }
     setTimeout(() => {
       loadCartFashionItems()
     }, 350)

@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { formatCurrencyVND } from '../../../utils/formatters'
+import { addOutfitBundleToCart } from '../../../utils/cartBundleHelper'
 import type { Product } from '../FlashSale'
 
 export interface OutfitItem {
@@ -43,6 +45,7 @@ export const ProductOutfitModal: React.FC<ProductOutfitModalProps> = ({
   onAddToCart,
   onOpenTryOnModal
 }) => {
+  const navigate = useNavigate()
   const [toastMsg, setToastMsg] = useState<string>('')
   const [visibleCount, setVisibleCount] = useState<number>(5)
 
@@ -50,22 +53,37 @@ export const ProductOutfitModal: React.FC<ProductOutfitModalProps> = ({
 
   const showToast = (msg: string) => {
     setToastMsg(msg)
-    setTimeout(() => setToastMsg(''), 3000)
+    setTimeout(() => setToastMsg(''), 3500)
   }
 
-  const handleAddBundleToCart = (bundle: ScoredOutfitBundle) => {
+  const handleAddBundleToCart = (bundle: ScoredOutfitBundle, goToCart = false) => {
     if (!onAddToCart) {
       showToast('Chức năng thêm vào giỏ hàng chưa sẵn sàng!')
       return
     }
-    let count = 0
-    bundle.items.forEach((it) => {
-      if (it.product) {
-        onAddToCart(it.product, 1, 'Size Tiêu Chuẩn')
-        count++
-      }
-    })
-    showToast(`🎉 Đã thêm trọn bộ ${count} món (Tiết kiệm ${formatCurrencyVND(bundle.savings)}) vào giỏ hàng!`)
+    const items = bundle.items.map((it) => it.product).filter(Boolean)
+    const { addedCount, skippedCount } = addOutfitBundleToCart(
+      items,
+      'Size Tiêu Chuẩn',
+      onAddToCart
+    )
+
+    if (addedCount === 0) {
+      showToast('⚠️ Các sản phẩm trong set này hiện đã hết hàng!')
+      return
+    }
+
+    if (goToCart) {
+      onClose()
+      navigate('/cart')
+      return
+    }
+
+    if (skippedCount > 0) {
+      showToast(`🎉 Đã thêm ${addedCount} món vào giỏ (${skippedCount} món hết hàng). Đã tự chọn sẵn bộ này trong giỏ hàng!`)
+    } else {
+      showToast(`🎉 Đã thêm trọn bộ ${addedCount} món (Tiết kiệm ${formatCurrencyVND(bundle.savings)}) & chọn sẵn trong giỏ hàng!`)
+    }
   }
 
   return (
@@ -264,11 +282,19 @@ export const ProductOutfitModal: React.FC<ProductOutfitModalProps> = ({
                         )}
                         <button
                           type="button"
-                          onClick={() => handleAddBundleToCart(bundle)}
+                          onClick={() => handleAddBundleToCart(bundle, false)}
                           className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-[0.98]"
                         >
                           <span>🛒</span>
                           Thêm Cả Set Vào Giỏ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAddBundleToCart(bundle, true)}
+                          className="w-full py-2 px-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer active:scale-[0.98]"
+                        >
+                          <span>⚡</span>
+                          Mua Cả Bộ Ngay ➔
                         </button>
                       </div>
                     </div>

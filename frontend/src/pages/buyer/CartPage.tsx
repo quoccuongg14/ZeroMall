@@ -156,6 +156,23 @@ export const CartPage: React.FC<CartPageProps> = ({
     return saved ? JSON.parse(saved) : []
   })
 
+  // Listen for bundle selection updates from Outfit / TryOn flows
+  useEffect(() => {
+    const handleSelectedKeysUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<string[]>
+      if (Array.isArray(customEvent.detail)) {
+        setSelectedKeys(customEvent.detail)
+      } else {
+        try {
+          const saved = localStorage.getItem('zm_selected_keys')
+          if (saved) setSelectedKeys(JSON.parse(saved))
+        } catch {}
+      }
+    }
+    window.addEventListener('zm_selected_keys_updated', handleSelectedKeysUpdated)
+    return () => window.removeEventListener('zm_selected_keys_updated', handleSelectedKeysUpdated)
+  }, [])
+
   // Persist selected keys to localStorage
   useEffect(() => {
     localStorage.setItem('zm_selected_keys', JSON.stringify(selectedKeys))

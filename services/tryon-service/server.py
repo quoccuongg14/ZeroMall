@@ -1945,55 +1945,58 @@ class AiStylistEngine:
         except Exception:
             all_prods = []
 
-        # Lọc kho hàng thời trang thực tế sạch
+        # Lọc kho hàng thời trang thực tế sạch, đang bán và còn tồn kho
+        def _is_in_stock_and_active(p: dict) -> bool:
+            if not p or not p.get("id"):
+                return False
+            if p.get("isViolated") is True:
+                return False
+            st = str(p.get("status") or "active").lower()
+            if st in ("hidden", "deleted", "inactive", "banned"):
+                return False
+            stock = p.get("stock")
+            if stock is not None:
+                try:
+                    return float(stock) > 0
+                except Exception:
+                    return False
+            total = p.get("total")
+            sold = p.get("sold", 0)
+            if total is not None:
+                try:
+                    return (float(total) - float(sold or 0)) > 0
+                except Exception:
+                    return False
+            return True
+
         fashion_prods = [
             p for p in all_prods
-            if p.get("category") not in AiStylistEngine.EXCLUDED_CATEGORIES
+            if p.get("category") not in AiStylistEngine.EXCLUDED_CATEGORIES and _is_in_stock_and_active(p)
         ]
         if not fashion_prods:
-            fashion_prods = all_prods
+            fashion_prods = [p for p in all_prods if _is_in_stock_and_active(p)]
 
         gender_prods = AiStylistEngine.filter_gender(fashion_prods, gender)
         if not gender_prods:
             gender_prods = fashion_prods
 
         target_role = AiStylistEngine.classify_item(target_product)
+        target_id = target_product.get("id")
 
-        tops = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_product.get("id")]
-        bottoms = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_product.get("id")]
-        shoes = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_product.get("id")]
-        accs = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_product.get("id")]
+        tops = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_id]
+        bottoms = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_id]
+        shoes = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_id]
+        accs = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_id]
 
-        # Danh mục fallback an toàn từ kho nếu thiếu
-        fallback_top = {
-            "id": "ao-so-mi-trang-slimfit-01",
-            "name": "Áo Sơ Mi Trắng Oxford Dài Tay Chống Nhăn Cao Cấp",
-            "price": 220000,
-            "image": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&q=80"
-        }
-        fallback_bottom = {
-            "id": "quan-jean-denim-regular-fit-01",
-            "name": "Quần Jean Nam Ống Suông Form Regular Tôn Dáng",
-            "price": 350000,
-            "image": "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&q=80"
-        }
-        fallback_shoe = {
-            "id": "giay-sneaker-trang-da-mem-01",
-            "name": "Giày Sneaker Thể Thao Trắng Da Mềm Đế Độn 4cm",
-            "price": 450000,
-            "image": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80"
-        }
-        fallback_acc = {
-            "id": "non-kaki-tron-han-quoc-01",
-            "name": "Nón Lưỡi Trai Kaki Trơn Phong Cách Hàn Quốc",
-            "price": 85000,
-            "image": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&q=80"
-        }
-
-        if not tops: tops = [fallback_top]
-        if not bottoms: bottoms = [fallback_bottom]
-        if not shoes: shoes = [fallback_shoe]
-        if not accs: accs = [fallback_acc]
+        # Nếu thiếu nhóm theo giới tính, bổ sung từ toàn bộ kho thời trang thực tế (không dùng dữ liệu tĩnh giả)
+        if not tops:
+            tops = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_id]
+        if not bottoms:
+            bottoms = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_id]
+        if not shoes:
+            shoes = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_id]
+        if not accs:
+            accs = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_id]
 
         # ---------------------------------------------------------------
         # MÔ PHỎNG 100 SET PHỐI ĐỒ ĐỘC NHẤT (100 Outfit Combinations)
@@ -2008,25 +2011,30 @@ class AiStylistEngine:
         while len(simulated_pool) < target_limit and attempts < max_attempts:
             attempts += 1
             if target_role == "top":
-                b = random.choice(bottoms)
-                s = random.choice(shoes)
-                a = random.choice(accs) if random.random() > 0.3 else None
-                outfit_items = [target_product, b, s] + ([a] if a else [])
+                b = random.choice(bottoms) if bottoms else None
+                s = random.choice(shoes) if shoes else None
+                a = random.choice(accs) if accs else None
+                outfit_items = [it for it in [target_product, b, s, a] if it]
             elif target_role == "bottom":
-                t = random.choice(tops)
-                s = random.choice(shoes)
-                a = random.choice(accs) if random.random() > 0.3 else None
-                outfit_items = [target_product, t, s] + ([a] if a else [])
+                t = random.choice(tops) if tops else None
+                s = random.choice(shoes) if shoes else None
+                a = random.choice(accs) if accs else None
+                outfit_items = [it for it in [target_product, t, s, a] if it]
             elif target_role == "shoes":
-                t = random.choice(tops)
-                b = random.choice(bottoms)
-                a = random.choice(accs) if random.random() > 0.3 else None
-                outfit_items = [target_product, t, b] + ([a] if a else [])
+                t = random.choice(tops) if tops else None
+                b = random.choice(bottoms) if bottoms else None
+                a = random.choice(accs) if accs else None
+                outfit_items = [it for it in [target_product, t, b, a] if it]
             else:
-                t = random.choice(tops)
-                b = random.choice(bottoms)
-                s = random.choice(shoes)
-                outfit_items = [target_product, t, b, s]
+                t = random.choice(tops) if tops else None
+                b = random.choice(bottoms) if bottoms else None
+                s = random.choice(shoes) if shoes else None
+                outfit_items = [it for it in [target_product, t, b, s] if it]
+
+            # Đảm bảo không trùng ID sản phẩm trong cùng 1 set
+            item_ids = [str(it.get("id", "")) for it in outfit_items]
+            if len(item_ids) != len(set(item_ids)):
+                continue
 
             sig = "-".join(sorted(str(it.get("id", "")) for it in outfit_items))
             if sig in used_signatures:

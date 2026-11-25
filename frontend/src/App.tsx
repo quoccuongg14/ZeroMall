@@ -807,13 +807,14 @@ function App() {
 
       if (existingIdx > -1) {
         const updated = [...prev]
-        const currentQty = updated[existingIdx].quantity
+        const existingItem = updated[existingIdx]
+        const currentQty = existingItem.quantity
         if (currentQty + quantity > stockVal) {
           showToast(`⚠️ Kho chỉ còn ${stockVal} sản phẩm có sẵn!`)
-          updated[existingIdx].quantity = stockVal
+          updated[existingIdx] = { ...existingItem, quantity: stockVal }
           return updated
         }
-        updated[existingIdx].quantity += quantity
+        updated[existingIdx] = { ...existingItem, quantity: currentQty + quantity }
         return updated
       } else {
         const finalQty = Math.min(quantity, stockVal)

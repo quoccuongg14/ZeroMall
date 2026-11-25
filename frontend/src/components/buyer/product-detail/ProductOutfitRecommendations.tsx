@@ -38,7 +38,7 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
         const weight = Number(localStorage.getItem('zeromall_tryon_user_weight')) || 68
         const gender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
 
-        const cacheKey = `zm_outfits_${product.id}_${gender}_${height}_${weight}`
+        const cacheKey = `zm_outfits_v2_${product.id}_${gender}_${height}_${weight}`
         const cached = sessionStorage.getItem(cacheKey)
         if (cached) {
           try {
@@ -56,11 +56,8 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             product: {
-              id: product.id,
-              name: product.name,
+              ...product,
               price: product.price || product.flashPrice,
-              category: product.category,
-              image: product.image
             },
             height_cm: height,
             weight_kg: weight,
