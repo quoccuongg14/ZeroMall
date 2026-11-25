@@ -1,4 +1,6 @@
 import { formatCurrencyVND } from '../../../../utils/formatters'
+import type { AccessoryZone, OutfitSlots } from './types'
+import type { Product } from '../../FlashSale'
 
 export const formatDisplayPrice = formatCurrencyVND
 
@@ -253,18 +255,94 @@ export const isProductMatchingGender = (p: any, targetGender: 'male' | 'female' 
 // Nhãn badge hiển thị chuẩn xác từng món đồ
 export const getSlotBadgeText = (p: any) => {
   const slot = detectItemSlot(p)
-  if (slot === 'top') return '👔 Áo'
+  if (slot === 'top') return isOuterwearProduct(p) ? '🧥 Áo Khoác' : '👔 Áo'
   if (slot === 'bottom') return '👖 Quần/Váy'
   if (slot === 'shoes') return '👟 Giày/Dép'
   if (slot === 'accessory') {
-    const n = (p.name || '').toLowerCase()
-    if (n.includes('mũ') || n.includes('nón')) return '🧢 Mũ/Nón'
-    if (n.includes('kính')) return '🕶️ Kính'
-    if (n.includes('túi') || n.includes('ví') || n.includes('balo')) return '👜 Túi/Ví'
-    if (n.includes('khăn')) return '🧣 Khăn'
-    if (n.includes('kẹp tóc') || n.includes('cột tóc') || n.includes('băng đô') || n.includes('cài tóc')) return '🎀 Kẹp Tóc'
-    if (n.includes('dây chuyền') || n.includes('vòng cổ') || n.includes('vòng tay') || n.includes('lắc') || n.includes('nhẫn') || n.includes('khuyên tai') || n.includes('hoa tai') || n.includes('bông tai')) return '💍 Trang Sức'
-    return '✨ Phụ Kiện'
+    const zone = detectAccessoryZone(p)
+    return getAccessoryZoneLabel(zone)
   }
   return 'Thời trang'
+}
+
+// Kiểm tra sản phẩm có phải là Áo khoác ngoài (Layer 2) hay không
+export const isOuterwearProduct = (p: any): boolean => {
+  if (!p) return false
+  const name = ' ' + (p.name || '').toLowerCase().trim() + ' '
+  return [
+    'khoác', 'khoac', 'jacket', 'bomber', 'blazer', 'cardigan',
+    'măng tô', 'mang to', 'áo gió', 'ao gio', 'gile', 'vest', 'trench', 'hoodie zip', 'khoá kéo', 'khóa kéo'
+  ].some(k => name.includes(k))
+}
+
+// Phân loại vùng giải phẫu cho phụ kiện để cho phép đeo nhiều phụ kiện khác vùng cùng lúc
+export const detectAccessoryZone = (p: any): AccessoryZone => {
+  if (!p) return 'other'
+  const n = ' ' + (p.name || '').toLowerCase().trim() + ' '
+  if (/(?:^|[^\p{L}])(?:mũ|nón|cap|beanie|snapback|bucket|beret)(?:[^\p{L}]|$)/ui.test(n) || n.includes('kẹp tóc') || n.includes('băng đô') || n.includes('cài tóc')) {
+    return 'hat'
+  }
+  if (n.includes('kính') || n.includes('kinh ') || n.includes('gọng')) {
+    return 'eyewear'
+  }
+  if (n.includes('dây chuyền') || n.includes('vòng cổ') || n.includes('kiềng') || n.includes('mặt dây') || n.includes('khăn') || n.includes('cà vạt') || n.includes('nơ cổ')) {
+    return 'necklace'
+  }
+  if (n.includes('thắt lưng') || n.includes('dây nịt') || n.includes('belt')) {
+    return 'belt'
+  }
+  if (n.includes('đồng hồ') || n.includes('vòng tay') || n.includes('lắc tay') || n.includes('nhẫn')) {
+    return 'wrist'
+  }
+  if (n.includes('khuyên tai') || n.includes('hoa tai') || n.includes('bông tai')) {
+    return 'earring'
+  }
+  if (n.includes('túi') || n.includes('ví') || n.includes('balo') || n.includes('ba lô') || n.includes('clutch') || n.includes('tote')) {
+    return 'bag'
+  }
+  return 'other'
+}
+
+export const getAccessoryZoneLabel = (zone: AccessoryZone): string => {
+  switch (zone) {
+    case 'hat': return '🧢 Mũ/Nón'
+    case 'eyewear': return '🕶️ Kính'
+    case 'necklace': return '📿 Dây Chuyền'
+    case 'belt': return '🎗️ Dây Nịt'
+    case 'wrist': return '⌚ Đồng Hồ/Vòng'
+    case 'earring': return '✨ Khuyên Tai'
+    case 'bag': return '👜 Túi/Ví'
+    default: return '✨ Phụ Kiện'
+  }
+}
+
+// Gom phẳng tất cả sản phẩm đang mặc trong OutfitSlots (gồm cả 2 lớp áo + nhiều phụ kiện)
+export const flattenOutfitItems = (outfit?: Partial<OutfitSlots> | null): Product[] => {
+  if (!outfit) return []
+  const result: Product[] = []
+  const seenIds = new Set<string>()
+  const pushUnique = (item?: Product | null) => {
+    if (!item) return
+    const key = item.id || item.name
+    if (key && seenIds.has(key)) return
+    if (key) seenIds.add(key)
+    result.push(item)
+  }
+
+  pushUnique(outfit.top)
+  pushUnique(outfit.outer_top)
+  pushUnique(outfit.bottom)
+  pushUnique(outfit.shoes)
+  if (Array.isArray(outfit.accessories)) {
+    for (const acc of outfit.accessories) {
+      pushUnique(acc)
+    }
+  }
+  pushUnique(outfit.accessory)
+  return result
+}
+
+export const isProductInOutfit = (outfit?: Partial<OutfitSlots> | null, productId?: string): boolean => {
+  if (!outfit || !productId) return false
+  return flattenOutfitItems(outfit).some(it => it.id === productId)
 }

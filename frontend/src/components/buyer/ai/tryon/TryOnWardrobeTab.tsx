@@ -1,7 +1,7 @@
 import React from 'react'
 import type { Product } from '../../FlashSale'
 import type { CartFashionItem, OutfitSlots } from './types'
-import { detectItemSlot, getSlotBadgeText, isProductMatchingGender } from './tryonUtils'
+import { detectItemSlot, getSlotBadgeText, isProductMatchingGender, isProductInOutfit } from './tryonUtils'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 interface TryOnWardrobeTabProps {
@@ -191,7 +191,7 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
               return slot === categoryFilter
             })
             .map((item) => {
-              const isEquipped = Object.values(selectedOutfit).some(it => it?.id === item.id)
+              const isEquipped = isProductInOutfit(selectedOutfit, item.id)
               return (
                 <div
                   key={item.id}

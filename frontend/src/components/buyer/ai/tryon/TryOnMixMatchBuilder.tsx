@@ -1,13 +1,13 @@
 import React from 'react'
 import type { Product } from '../../FlashSale'
-import type { OutfitSlots, ScoredOutfitBundle, TryonEngineMode } from './types'
+import type { OutfitSlots, OutfitSlotKey, ScoredOutfitBundle, TryonEngineMode } from './types'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 interface TryOnMixMatchBuilderProps {
   selectedOutfit: OutfitSlots
-  activeOutfitSlot: 'top' | 'bottom' | 'shoes' | 'accessory'
-  onSelectSlot: (slot: 'top' | 'bottom' | 'shoes' | 'accessory') => void
-  onRemoveSlot: (slot: 'top' | 'bottom' | 'shoes' | 'accessory', e: React.MouseEvent) => void
+  activeOutfitSlot: OutfitSlotKey
+  onSelectSlot: (slot: OutfitSlotKey) => void
+  onRemoveSlot: (slot: OutfitSlotKey, e: React.MouseEvent, itemId?: string) => void
   onApplyPreset: (type: 'streetwear' | 'office' | 'sport') => void
   isLoadingAi: boolean
   tryonEngineMode?: TryonEngineMode
@@ -39,61 +39,124 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
   weight,
   onOpen100SetsModal,
 }) => {
+  const accessoriesList = selectedOutfit.accessories || (selectedOutfit.accessory ? [selectedOutfit.accessory] : [])
+  const isTwoPass = outfitItems.length >= 5
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 shadow-2xs space-y-3.5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-[#ee4d2d]"></span>
           <h3 className="text-sm font-bold text-slate-900 tracking-tight">
             Bảng Phối Đồ (Mix & Match)
           </h3>
         </div>
-        <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full">
-          {outfitItems.length}/4 Món Đã Chọn
-        </span>
+        <div className="flex items-center gap-1.5">
+          {outfitItems.length > 0 && (
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                isTwoPass
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}
+              title={
+                isTwoPass
+                  ? 'Từ 5 món trở lên, AI tự động chạy 2 chặng để mặc đồ chính rồi đeo thêm toàn bộ phụ kiện'
+                  : 'Từ 4 món trở xuống, AI chỉ chạy đúng 1 lượt duy nhất cho nhanh và tiết kiệm'
+              }
+            >
+              {isTwoPass ? '✨ Tự động 2 Chặng AI' : '⚡ 1 Lượt AI Tiết Kiệm'}
+            </span>
+          )}
+          <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full">
+            {outfitItems.length} Món Đã Chọn
+          </span>
+        </div>
       </div>
 
       <p className="text-xs text-slate-500">
-        Bấm vào từng ô để chọn áo, quần, giày hoặc nón. Sau đó bấm <strong>Ướm Thử</strong> để AI mặc đồ lên người bạn.
+        Hỗ trợ mặc <strong>2 lớp áo</strong> (Áo trong + Áo khoác ngoài) &amp; đeo <strong>nhiều phụ kiện</strong> (Mũ, Kính, Dây chuyền, Nịt...) cùng lúc.
       </p>
 
-      {/* 4 NGĂN PHỐI ĐỒ: Áo, Quần, Giày, Mũ */}
-      <div className="grid grid-cols-4 gap-2.5">
-        {/* Ô 1: ÁO */}
+      {/* 4 NGĂN PHỐI ĐỒ: Áo (2 lớp), Quần, Giày, Phụ Kiện (Đa món) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        {/* Ô 1: ÁO (Lớp 1: Áo trong + Lớp 2: Áo khoác ngoài) */}
         <div
-          onClick={() => onSelectSlot('top')}
-          className={`relative p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
-            activeOutfitSlot === 'top'
+          className={`relative p-2.5 rounded-xl border transition-all flex flex-col justify-between text-center ${
+            activeOutfitSlot === 'top' || activeOutfitSlot === 'outer_top'
               ? 'border-[#ee4d2d] bg-orange-50/30 ring-2 ring-[#ee4d2d]/20 shadow-2xs'
               : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase text-slate-500 mb-1">👔 Áo</span>
-          {selectedOutfit.top ? (
-            <div className="w-full space-y-1">
-              <div className="relative w-12 h-12 mx-auto">
+          <div
+            onClick={() => onSelectSlot('top')}
+            className="cursor-pointer flex flex-col items-center"
+          >
+            <span className="text-[10px] font-bold uppercase text-slate-500 mb-1">👔 Áo (Lớp 1)</span>
+            {selectedOutfit.top ? (
+              <div className="w-full space-y-1">
+                <div className="relative w-11 h-11 mx-auto">
+                  <img
+                    src={selectedOutfit.top.image || 'https://placehold.co/60x60'}
+                    alt={selectedOutfit.top.name}
+                    className="w-full h-full object-cover rounded-lg border border-slate-200 bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => onRemoveSlot('top', e)}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-bold shadow-xs hover:bg-rose-600 cursor-pointer"
+                    title="Gỡ áo trong"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[90px] mx-auto">{selectedOutfit.top.name}</p>
+              </div>
+            ) : (
+              <div className="h-11 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
+                <span className="text-base">+</span>
+                <span className="text-[10px] font-medium">Chọn Áo Trong</span>
+              </div>
+            )}
+          </div>
+
+          {/* Ngăn Layer 2: Áo khoác ngoài */}
+          <div className="mt-2 pt-1.5 border-t border-slate-200/80">
+            {selectedOutfit.outer_top ? (
+              <div
+                onClick={() => onSelectSlot('outer_top')}
+                className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-indigo-200 cursor-pointer hover:border-indigo-400 transition"
+                title={`Áo khoác ngoài: ${selectedOutfit.outer_top.name}`}
+              >
                 <img
-                  src={selectedOutfit.top.image || 'https://placehold.co/60x60'}
-                  alt={selectedOutfit.top.name}
-                  className="w-full h-full object-cover rounded-lg border border-slate-200 bg-white"
+                  src={selectedOutfit.outer_top.image || 'https://placehold.co/40x40'}
+                  alt={selectedOutfit.outer_top.name}
+                  className="w-6 h-6 object-cover rounded shrink-0 border border-slate-100"
                 />
+                <span className="text-[9px] font-bold text-indigo-800 truncate flex-1 text-left">
+                  🧥 {selectedOutfit.outer_top.name}
+                </span>
                 <button
                   type="button"
-                  onClick={(e) => onRemoveSlot('top', e)}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-bold shadow-xs hover:bg-rose-600 cursor-pointer"
-                  title="Gỡ áo"
+                  onClick={(e) => onRemoveSlot('outer_top', e)}
+                  className="w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[8px] font-bold shrink-0 hover:bg-rose-600 cursor-pointer"
+                  title="Gỡ áo khoác"
                 >
                   ✕
                 </button>
               </div>
-              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px]">{selectedOutfit.top.name}</p>
-            </div>
-          ) : (
-            <div className="h-12 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
-              <span className="text-base">+</span>
-              <span className="text-[10px] font-medium">Chọn Áo</span>
-            </div>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectSlot('outer_top')}
+                className="w-full py-1 px-1.5 rounded-lg bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 text-[10px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                title="Mặc thêm áo khoác, blazer hoặc cardigan phủ ngoài áo trong"
+              >
+                <span>🧥</span>
+                <span>+ Áo Khoác</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Ô 2: QUẦN / VÁY */}
@@ -170,39 +233,55 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
           )}
         </div>
 
-        {/* Ô 4: MŨ / PHỤ KIỆN */}
+        {/* Ô 4: PHỤ KIỆN ĐA MÓN (Mũ, Kính, Dây chuyền, Dây nịt, Túi...) */}
         <div
           onClick={() => onSelectSlot('accessory')}
-          className={`relative p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col items-center text-center ${
+          className={`relative p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between text-center ${
             activeOutfitSlot === 'accessory'
               ? 'border-[#ee4d2d] bg-orange-50/30 ring-2 ring-[#ee4d2d]/20 shadow-2xs'
               : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase text-slate-500 mb-1">🧢 Phụ Kiện</span>
-          {selectedOutfit.accessory ? (
-            <div className="w-full space-y-1">
-              <div className="relative w-12 h-12 mx-auto">
-                <img
-                  src={selectedOutfit.accessory.image || 'https://placehold.co/60x60'}
-                  alt={selectedOutfit.accessory.name}
-                  className="w-full h-full object-cover rounded-lg border border-slate-200 bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => onRemoveSlot('accessory', e)}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-bold shadow-xs hover:bg-rose-600 cursor-pointer"
-                  title="Gỡ phụ kiện"
-                >
-                  ✕
-                </button>
+          <span className="text-[10px] font-bold uppercase text-slate-500 mb-1">
+            🧢 Phụ Kiện {accessoriesList.length > 0 ? `(${accessoriesList.length})` : ''}
+          </span>
+
+          {accessoriesList.length > 0 ? (
+            <div className="w-full space-y-1.5 flex-1 flex flex-col justify-between">
+              <div className="flex flex-wrap items-center justify-center gap-1.5 max-h-[76px] overflow-y-auto py-0.5">
+                {accessoriesList.map((acc) => (
+                  <div key={acc.id} className="relative w-9 h-9 shrink-0" title={acc.name}>
+                    <img
+                      src={acc.image || 'https://placehold.co/48x48'}
+                      alt={acc.name}
+                      className="w-full h-full object-cover rounded-lg border border-slate-200 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => onRemoveSlot('accessory', e, acc.id)}
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[8px] font-bold shadow-xs hover:bg-rose-600 cursor-pointer"
+                      title={`Gỡ ${acc.name}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px]">{selectedOutfit.accessory.name}</p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectSlot('accessory')
+                }}
+                className="w-full py-1 px-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 text-[10px] font-bold transition cursor-pointer"
+              >
+                + Thêm phụ kiện
+              </button>
             </div>
           ) : (
-            <div className="h-12 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
+            <div className="h-14 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
               <span className="text-base">+</span>
-              <span className="text-[10px] font-medium">Chọn Nón</span>
+              <span className="text-[10px] font-medium">Chọn nhiều PK</span>
             </div>
           )}
         </div>

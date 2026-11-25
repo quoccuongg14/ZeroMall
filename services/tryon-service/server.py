@@ -977,37 +977,163 @@ class TryOnSynthesizer:
         return garment_url
 
     @classmethod
+    @classmethod
+    def _describe_tagged_item(cls, role_key: str, item: dict) -> str:
+        name = item.get("name", "item")
+        if role_key == "inner_top":
+            return f"inner base layer shirt/top '{name}' worn underneath"
+        if role_key == "top":
+            return f"top garment '{name}' worn on upper torso"
+        if role_key == "outer_top":
+            return f"outer jacket/coat/layer '{name}' worn open over the inner shirt so both inner shirt and outer jacket are clearly visible"
+        if role_key == "bottom":
+            return f"bottom trousers/skirt '{name}' worn on legs and waist"
+        if role_key == "shoes":
+            return f"footwear/shoes '{name}' worn on feet"
+
+        item_lower = name.lower()
+        if any(k in item_lower for k in ["kính", "kinh", "gọng", "glasses", "sunglasses"]):
+            return f"eyewear/glasses '{name}' worn on eyes/face"
+        if any(k in item_lower for k in ["mũ", "nón", "mu ", "non ", "cap", "hat", "beanie"]):
+            return f"headwear/hat '{name}' worn on head"
+        if any(k in item_lower for k in ["dây chuyền", "vòng cổ", "kiềng", "necklace", "choker", "khăn"]):
+            return f"necklace/neckwear '{name}' worn around neck"
+        if any(k in item_lower for k in ["dây nịt", "thắt lưng", "belt", "day nit", "that lung"]):
+            return f"waist belt '{name}' worn around the trouser waist"
+        if any(k in item_lower for k in ["túi", "ví", "balo", "ba lô", "bag", "tote", "clutch"]):
+            return f"bag '{name}' carried in hand or over shoulder"
+        if any(k in item_lower for k in ["đồng hồ", "vòng tay", "lắc tay", "watch", "bracelet"]):
+            return f"wrist watch/bracelet '{name}' worn on wrist"
+        return f"fashion accessory '{name}'"
+
+    @classmethod
+    def _run_mage_outfit_pass(
+        cls,
+        mage_client,
+        person_input: str,
+        tagged_items: list,
+        morph_info: dict,
+        gender: str,
+        height_cm: float,
+        weight_kg: float,
+        is_addon_pass: bool = False,
+    ):
+        """Gọi Mage Mango 3 Turbo cho một chặng tối đa 4 món (Pass 1 hoặc Pass 2)."""
+        outfit_prompts = []
+        additional_imgs = []
+        for role_key, item in tagged_items[:4]:
+            if item and item.get("name"):
+                outfit_prompts.append(cls._describe_tagged_item(role_key, item))
+                g_b64 = cls._prepare_garment_input(item.get("image", ""))
+                if g_b64:
+                    additional_imgs.append(g_b64)
+
+        if not additional_imgs:
+            return None
+
+        is_male = gender.lower() == "male"
+        gender_label = "Asian man" if is_male else "Asian woman"
+        gender_pronoun = "his" if is_male else "her"
+        identity_term = "male face and identity" if is_male else "female face and identity"
+
+        if is_addon_pass:
+            prompt = (
+                f"A photorealistic fashion studio portrait editing the {gender_label} from the primary reference image. "
+                f"PRESERVATION RULE (CRITICAL): Keep the EXACT outfit, shirt, jacket, trousers, shoes, pose, lighting, and body already worn in the primary reference image completely unchanged. "
+                f"ADD-ON ACCESSORY RULES: Only add and naturally equip these specific additional items from additional_images onto {gender_pronoun} body: "
+                f"{', '.join(outfit_prompts)}. "
+                f"Each added accessory (hat on head, glasses on eyes, necklace around neck, belt on trouser waist, watch on wrist, or bag carried) must strictly match the EXACT color, material, and design of its reference image. "
+                f"Strictly preserve {gender_pronoun} exact face, eyes, hairstyle, and {identity_term}. Photorealistic 8k fashion photography."
+            )
+        else:
+            has_layered_tops = any(r == "outer_top" for r, _ in tagged_items) and any(r in ("top", "inner_top") for r, _ in tagged_items)
+            layer_rule = (
+                "Layering rule: Wear the inner shirt underneath and the outer jacket/coat layered open on top of it so both garments are clearly visible together. "
+                if has_layered_tops else ""
+            )
+            prompt = (
+                f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, wearing a complete stylish outfit. "
+                f"BODY MORPHOLOGY & WEIGHT OVERRIDE: {morph_info['transform_instruction']} "
+                f"Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {morph_info['bmi']:.1f}. "
+                f"STRICT VISUAL MATCHING RULES: You must accurately replicate and transfer the exact appearance, color, fabric, pattern, and design from each reference image in additional_images: "
+                f"{', '.join(outfit_prompts)}. "
+                f"{layer_rule}"
+                f"Garment positioning: Upper garments worn on upper torso, trousers/skirts on legs and waist, footwear strictly on feet, and accessories naturally worn in their anatomical positions. "
+                f"Footwear color & style rule: Shoes must strictly match the EXACT color, tone, and design of the footwear reference image. "
+                f"Do NOT invent or substitute different clothes, shoes, or accessories; they must faithfully match the reference photos provided. "
+                f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image, while properly adapting {gender_pronoun} body frame to the requested {morph_info['physique_label']} proportions. "
+                f"Photorealistic 8k, ultra-detailed fabric drapery, professional commercial fashion studio lighting, flawless outfit harmony."
+            )
+
+        print(f"[*] Dispatching Mage Mango 3 Turbo ({'Pass 2 Add-on' if is_addon_pass else 'Pass 1 Core'}, {len(additional_imgs)} items): {', '.join(outfit_prompts)}...")
+        req = mage_client.run("mango", {
+            "model_id": "mango-v3-turbo",
+            "prompt": prompt,
+            "image": person_input,
+            "additional_images": additional_imgs[:4],
+            "aspect_ratio": "4:5",
+            "resolution": "1K"
+        }, timeout=85.0)
+
+        if isinstance(req, dict) and req.get("status") == "completed":
+            img_url = req.get("result", {}).get("url")
+            if img_url:
+                req_dl = urllib.request.Request(img_url, headers={"User-Agent": BROWSER_UA})
+                with urllib.request.urlopen(req_dl, timeout=15) as r_dl:
+                    return r_dl.read()
+        return None
+
+    @classmethod
     def composite_outfit_tryon(cls, user_image_data: str, outfit: dict, gender: str = "male", height_cm: float = 175, weight_kg: float = 68, use_mage: bool = False):
         """
-        Phối đồ đa món hoàn chỉnh (Full Outfit Mix & Match):
-        outfit = {
-            "top": garment_info,       # Áo / Áo khoác / Sơ mi / Bomber
-            "bottom": garment_info,    # Quần / Jean / Tây / Váy
-            "shoes": garment_info,     # Giày / Sneaker / Dép
-            "accessory": garment_info  # Mũ / Nón / Phụ kiện
-        }
+        Phối đồ đa món hoàn chỉnh hỗ trợ Layering 2 lớp áo + Nhiều phụ kiện:
+        - Nếu tổng số món <= 4: Chạy 1 lượt AI duy nhất (tiết kiệm & nhanh).
+        - Nếu tổng số món >= 5: Tự động kích hoạt Chặng 2 (Pass 2) để mặc đồ chính trước rồi đeo thêm các phụ kiện còn lại.
         """
         from PIL import Image
         if not user_image_data:
             return ""
 
         top = outfit.get("top")
+        outer_top = outfit.get("outer_top")
         bottom = outfit.get("bottom")
         shoes = outfit.get("shoes")
-        accessory = outfit.get("accessory")
 
-        active_items = [item for item in [top, bottom, shoes, accessory] if item and (item.get("id") or item.get("image"))]
-        if not active_items:
+        # Hỗ trợ mảng accessories[] mới + tương thích ngược accessory đơn lẻ
+        accessories_list = []
+        raw_acc_list = outfit.get("accessories")
+        if isinstance(raw_acc_list, list):
+            for acc_item in raw_acc_list:
+                if acc_item and (acc_item.get("id") or acc_item.get("image")):
+                    accessories_list.append(acc_item)
+        legacy_acc = outfit.get("accessory")
+        if legacy_acc and (legacy_acc.get("id") or legacy_acc.get("image")):
+            if not any(str(a.get("id")) == str(legacy_acc.get("id")) for a in accessories_list):
+                accessories_list.append(legacy_acc)
+
+        tagged_items = []
+        if top and (top.get("id") or top.get("image")):
+            tagged_items.append(("inner_top" if outer_top else "top", top))
+        if outer_top and (outer_top.get("id") or outer_top.get("image")):
+            tagged_items.append(("outer_top", outer_top))
+        if bottom and (bottom.get("id") or bottom.get("image")):
+            tagged_items.append(("bottom", bottom))
+        if shoes and (shoes.get("id") or shoes.get("image")):
+            tagged_items.append(("shoes", shoes))
+        for idx, acc in enumerate(accessories_list):
+            tagged_items.append((f"accessory_{idx}", acc))
+
+        if not tagged_items:
             return user_image_data
 
         # Nếu chỉ có duy nhất 1 món, sử dụng luồng composite_tryon đơn lẻ
-        if len(active_items) == 1:
-            single = active_items[0]
+        if len(tagged_items) == 1:
+            single = tagged_items[0][1]
             return cls.composite_tryon(user_image_data, single.get("image", ""), single, gender, height_cm, weight_kg, use_mage=use_mage)
 
-        # 1. Tạo Outfit Signature phục vụ Caching (kết hợp cả khuôn mặt người dùng + kích thước cơ thể)
+        # 1. Tạo Outfit Signature phục vụ Caching (bao gồm tất cả layer áo & mọi phụ kiện)
         user_key = hashlib.md5(user_image_data[:5000].encode()).hexdigest()[:8] if user_image_data else "default"
-        item_ids = [str(item.get("id") or item.get("name") or "item") for item in [top, bottom, shoes, accessory] if item]
+        item_ids = [f"{role}:{str(item.get('id') or item.get('name') or 'item')}" for role, item in tagged_items]
         outfit_sig = "_".join(item_ids)
         outfit_hash = hashlib.md5(outfit_sig.encode()).hexdigest()[:12]
         body_key = f"{int(height_cm)}_{int(weight_kg)}"
@@ -1024,7 +1150,7 @@ class TryOnSynthesizer:
                 except Exception:
                     pass
 
-        # 2. Thử gọi Live Mage Mango 3 Turbo Outfit Swap cho cả bộ phối đồ (Chỉ khi người dùng chủ động bật use_mage=True)
+        # 2. Thử gọi Live Mage Mango 3 Turbo (Tự động 1-Pass khi <= 4 món, 2-Pass khi >= 5 món)
         if use_mage and MAGE_API_KEY:
             try:
                 from mage_space import Mage
@@ -1040,7 +1166,6 @@ class TryOnSynthesizer:
                 morph_info = cls.build_physique_morphology(height_cm, weight_kg, gender)
 
                 if person_pil is not None:
-                    # Áp dụng Adaptive Silhouette Morphing để nắn phom người mẫu theo BMI trước khi gửi AI
                     person_pil = cls.smooth_morph_person_body(person_pil, morph_info["bmi"])
                     person_pil.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
                     buf_u = io.BytesIO()
@@ -1049,69 +1174,42 @@ class TryOnSynthesizer:
                 else:
                     person_input = user_image_data
 
-                # Chuẩn bị danh sách ảnh và mô tả từng món trong bộ phối
-                outfit_prompts = []
-                additional_imgs = []
+                total_count = len(tagged_items)
+                if total_count <= 4:
+                    # <= 4 món: Chạy đúng 1 lượt AI duy nhất cho nhanh và tiết kiệm
+                    raw_bytes = cls._run_mage_outfit_pass(
+                        mage_client, person_input, tagged_items, morph_info, gender, height_cm, weight_kg, is_addon_pass=False
+                    )
+                    if raw_bytes:
+                        with open(cached_outfit_file, "wb") as f_co:
+                            f_co.write(raw_bytes)
+                        print(f"[+] Live 1-Pass Mage outfit completed ({total_count} items)!")
+                        return f"data:image/jpeg;base64,{base64.b64encode(raw_bytes).decode()}"
+                else:
+                    # >= 5 món: Chặng 1 mặc 4 món đầu (đồ chính), Chặng 2 đeo/mặc tiếp các món còn lại
+                    pass1_items = tagged_items[:4]
+                    remaining_items = tagged_items[4:]
+                    print(f"[*] Outfit has {total_count} items (>= 5) -> Auto-activating 2-Pass Pipeline (Pass 1: {len(pass1_items)}, Pass 2: {len(remaining_items)})")
 
-                if top and top.get("name"):
-                    outfit_prompts.append(f"top garment '{top.get('name')}'")
-                    g_b64 = cls._prepare_garment_input(top.get("image", ""))
-                    if g_b64:
-                        additional_imgs.append(g_b64)
-                if bottom and bottom.get("name"):
-                    outfit_prompts.append(f"bottom trousers '{bottom.get('name')}'")
-                    g_b64 = cls._prepare_garment_input(bottom.get("image", ""))
-                    if g_b64:
-                        additional_imgs.append(g_b64)
-                if shoes and shoes.get("name"):
-                    outfit_prompts.append(f"footwear/shoes '{shoes.get('name')}'")
-                    g_b64 = cls._prepare_garment_input(shoes.get("image", ""))
-                    if g_b64:
-                        additional_imgs.append(g_b64)
-                if accessory and accessory.get("name"):
-                    outfit_prompts.append(f"accessory/headwear '{accessory.get('name')}'")
-                    g_b64 = cls._prepare_garment_input(accessory.get("image", ""))
-                    if g_b64:
-                        additional_imgs.append(g_b64)
+                    pass1_bytes = cls._run_mage_outfit_pass(
+                        mage_client, person_input, pass1_items, morph_info, gender, height_cm, weight_kg, is_addon_pass=False
+                    )
+                    if pass1_bytes:
+                        current_bytes = pass1_bytes
+                        # Nếu vẫn còn > 4 phụ kiện ở chặng 2, xử lý từng batch tối đa 4 món
+                        for offset in range(0, len(remaining_items), 4):
+                            batch = remaining_items[offset:offset + 4]
+                            pass_input = "data:image/jpeg;base64," + base64.b64encode(current_bytes).decode()
+                            next_bytes = cls._run_mage_outfit_pass(
+                                mage_client, pass_input, batch, morph_info, gender, height_cm, weight_kg, is_addon_pass=True
+                            )
+                            if next_bytes:
+                                current_bytes = next_bytes
 
-                is_male = gender.lower() == "male"
-                gender_label = "Asian man" if is_male else "Asian woman"
-                gender_pronoun = "his" if is_male else "her"
-                identity_term = "male face and identity" if is_male else "female face and identity"
-
-                prompt = (
-                    f"A photorealistic editorial fashion studio portrait of the {gender_label} from the primary reference image, wearing a complete stylish outfit. "
-                    f"BODY MORPHOLOGY & WEIGHT OVERRIDE: {morph_info['transform_instruction']} "
-                    f"Height: {height_cm:.0f}cm, Weight: {weight_kg:.0f}kg, BMI: {morph_info['bmi']:.1f}. "
-                    f"STRICT VISUAL MATCHING RULES: You must accurately replicate and transfer the exact appearance, color, fabric, pattern, and design from each reference image in additional_images: "
-                    f"{', '.join(outfit_prompts)}. "
-                    f"Garment positioning: The upper garment must be worn exclusively on the upper torso, the lower trousers exclusively on the legs and waist, and the footwear strictly on the feet. "
-                    f"Footwear color & style rule: The shoes must strictly match the EXACT color, tone, and design of the footwear reference image (e.g., if the shoe photo is red, burgundy, or maroon, the footwear on {gender_pronoun} feet MUST be red/burgundy; never substitute with black or another color). "
-                    f"Do NOT invent or substitute different clothes or shoes; they must faithfully match the reference photos provided. "
-                    f"Strictly preserve {gender_pronoun} exact face, facial features, eyes, smile, skin tone, hairstyle, and {identity_term} from the reference image, while properly adapting {gender_pronoun} body frame to the requested {morph_info['physique_label']} proportions. "
-                    f"Photorealistic 8k, ultra-detailed fabric drapery, professional commercial fashion studio lighting, flawless outfit harmony."
-                )
-
-                print(f"[*] Dispatching multi-item outfit swap to Mage Mango 3 Turbo ({len(additional_imgs)} items, prompt: {', '.join(outfit_prompts)})...")
-                req = mage_client.run("mango", {
-                    "model_id": "mango-v3-turbo",
-                    "prompt": prompt,
-                    "image": person_input,
-                    "additional_images": additional_imgs[:4],
-                    "aspect_ratio": "4:5",
-                    "resolution": "1K"
-                }, timeout=85.0)
-
-                if isinstance(req, dict) and req.get("status") == "completed":
-                    img_url = req.get("result", {}).get("url")
-                    if img_url:
-                        req_dl = urllib.request.Request(img_url, headers={"User-Agent": BROWSER_UA})
-                        with urllib.request.urlopen(req_dl, timeout=15) as r_dl:
-                            raw_bytes = r_dl.read()
-                            with open(cached_outfit_file, "wb") as f_co:
-                                f_co.write(raw_bytes)
-                            print(f"[+] Live multi-item Mage Mango 3 Turbo outfit completed!")
-                            return f"data:image/jpeg;base64,{base64.b64encode(raw_bytes).decode()}"
+                        with open(cached_outfit_file, "wb") as f_co:
+                            f_co.write(current_bytes)
+                        print(f"[+] Live 2-Pass Mage outfit completed ({total_count} items)!")
+                        return f"data:image/jpeg;base64,{base64.b64encode(current_bytes).decode()}"
             except Exception as e_mage:
                 print(f"[!] Mage outfit swap warning: {e_mage}")
 
@@ -1184,11 +1282,17 @@ class TryOnSynthesizer:
                     px = int((target_w - pw) / 2)
                     py = int(target_h * 0.50)
                 elif layer_type == "top":
-                    # Áo / Áo khoác: y ~ 26% - 50%
-                    pw = int(target_w * 0.60 * w_factor)
-                    ph = min(int(target_h * 0.32), int(pw * ratio))
+                    # Áo lớp trong: y ~ 26% - 50%
+                    pw = int(target_w * 0.58 * w_factor)
+                    ph = min(int(target_h * 0.31), int(pw * ratio))
                     px = int((target_w - pw) / 2)
                     py = int(target_h * 0.26)
+                elif layer_type == "outer_top":
+                    # Áo khoác lớp ngoài (Layer 2): hơi rộng hơn áo trong một chút
+                    pw = int(target_w * 0.65 * w_factor)
+                    ph = min(int(target_h * 0.35), int(pw * ratio))
+                    px = int((target_w - pw) / 2)
+                    py = int(target_h * 0.25)
                 elif layer_type == "shoes":
                     # Giày dép: y ~ 80% - 93%
                     pw = int(target_w * 0.42)
@@ -1196,22 +1300,30 @@ class TryOnSynthesizer:
                     px = int((target_w - pw) / 2)
                     py = int(target_h * 0.81)
                 elif layer_type == "accessory":
-                    # Phụ kiện: Mũ / Nón / Kính / Khăn / Dây chuyền / Túi xách
+                    # Phụ kiện: Mũ / Nón / Kính / Khăn / Dây chuyền / Dây nịt / Túi xách / Đồng hồ
                     item_name = (garment_data.get("name") or "").lower()
-                    if any(k in item_name for k in ["kính", "kinh", "gọng"]):
-                        # Kính mắt: đặt ngang tầm mắt (y ~ 14% - 19%)
+                    if any(k in item_name for k in ["kính", "kinh", "gọng", "glasses"]):
                         pw = int(target_w * 0.22)
                         ph = min(int(target_h * 0.08), int(pw * ratio))
                         px = int((target_w - pw) / 2)
                         py = int(target_h * 0.14)
-                    elif any(k in item_name for k in ["dây chuyền", "vòng cổ", "kiềng", "khăn"]):
-                        # Dây chuyền / vòng cổ / khăn: đặt ngang cổ (y ~ 22% - 27%)
+                    elif any(k in item_name for k in ["dây chuyền", "vòng cổ", "kiềng", "khăn", "necklace"]):
                         pw = int(target_w * 0.22)
                         ph = min(int(target_h * 0.10), int(pw * ratio))
                         px = int((target_w - pw) / 2)
                         py = int(target_h * 0.22)
-                    elif any(k in item_name for k in ["túi", "ví", "balo", "ba lô"]):
-                        # Túi xách / Ví / Balo: đặt bên hông
+                    elif any(k in item_name for k in ["dây nịt", "thắt lưng", "belt", "day nit", "that lung"]):
+                        # Dây nịt / thắt lưng: đặt ngang cạp quần (y ~ 49%)
+                        pw = int(target_w * 0.38 * w_factor)
+                        ph = min(int(target_h * 0.06), int(pw * ratio))
+                        px = int((target_w - pw) / 2)
+                        py = int(target_h * 0.49)
+                    elif any(k in item_name for k in ["đồng hồ", "vòng tay", "lắc tay", "watch"]):
+                        pw = int(target_w * 0.12)
+                        ph = min(int(target_h * 0.08), int(pw * ratio))
+                        px = int(target_w * 0.22)
+                        py = int(target_h * 0.50)
+                    elif any(k in item_name for k in ["túi", "ví", "balo", "ba lô", "bag"]):
                         pw = int(target_w * 0.26)
                         ph = min(int(target_h * 0.22), int(pw * ratio))
                         px = int(target_w * 0.12)
@@ -1228,11 +1340,13 @@ class TryOnSynthesizer:
                 resized = g_rgba.resize((pw, ph), Image.Resampling.LANCZOS)
                 canvas.paste(resized, (px, py), resized)
 
-            # Ghép từng tầng theo thứ tự giải phẫu: Quần -> Áo -> Giày -> Mũ
+            # Ghép từng tầng theo thứ tự giải phẫu: Quần -> Áo trong -> Áo khoác ngoài -> Giày -> Tất cả Phụ kiện
             overlay_layer(bottom, "bottom")
             overlay_layer(top, "top")
+            overlay_layer(outer_top, "outer_top")
             overlay_layer(shoes, "shoes")
-            overlay_layer(accessory, "accessory")
+            for acc_item in accessories_list:
+                overlay_layer(acc_item, "accessory")
 
             final_rgb = canvas.convert("RGB")
             buf = io.BytesIO()
@@ -2295,18 +2409,43 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                 user_image = payload.get("user_image", "")
                 use_mage = bool(payload.get("use_mage", False))
 
-                has_outfit = bool(outfit and any(outfit.get(k) for k in ["top", "bottom", "shoes", "accessory"]))
+                acc_list = outfit.get("accessories") if isinstance(outfit, dict) and isinstance(outfit.get("accessories"), list) else []
+                has_outfit = bool(outfit and (
+                    any(outfit.get(k) for k in ["top", "outer_top", "bottom", "shoes", "accessory"]) or
+                    len(acc_list) > 0
+                ))
+
+                # Đếm tổng số món thực tế để xác định số chặng AI (<= 4 món -> 1 Pass, >= 5 món -> 2 Pass)
+                total_outfit_count = 0
+                if has_outfit:
+                    for k in ["top", "outer_top", "bottom", "shoes"]:
+                        if outfit.get(k) and (outfit[k].get("id") or outfit[k].get("image")):
+                            total_outfit_count += 1
+                    seen_acc_ids = set()
+                    for a in acc_list:
+                        if a and (a.get("id") or a.get("image")):
+                            aid = str(a.get("id") or a.get("name"))
+                            if aid not in seen_acc_ids:
+                                seen_acc_ids.add(aid)
+                                total_outfit_count += 1
+                    if outfit.get("accessory") and (outfit["accessory"].get("id") or outfit["accessory"].get("image")):
+                        aid = str(outfit["accessory"].get("id") or outfit["accessory"].get("name"))
+                        if aid not in seen_acc_ids:
+                            total_outfit_count += 1
+
+                passes_used = 2 if total_outfit_count >= 5 else 1
+                first_acc = acc_list[0] if len(acc_list) > 0 else outfit.get("accessory")
 
                 if not user_image or not str(user_image).strip():
                     # Người dùng chưa đưa ảnh vào -> Tuyệt đối không gọi AI sinh ảnh để bảo vệ 100% Gem Mage.space của người dùng
                     print("[*] full-pipeline: user_image is empty. Skipping AI image generation to preserve user Gems.")
                     composite_result = ""
                     primary_item = (
-                        (outfit.get("bottom") or outfit.get("top") or outfit.get("shoes") or outfit.get("accessory") or pant)
+                        (outfit.get("bottom") or outfit.get("top") or outfit.get("outer_top") or outfit.get("shoes") or first_acc or pant)
                         if has_outfit else pant
                     )
                 elif has_outfit:
-                    primary_item = outfit.get("bottom") or outfit.get("top") or outfit.get("shoes") or outfit.get("accessory") or pant
+                    primary_item = outfit.get("bottom") or outfit.get("top") or outfit.get("outer_top") or outfit.get("shoes") or first_acc or pant
                     composite_result = TryOnSynthesizer.composite_outfit_tryon(
                         user_image, outfit, gender=gender, height_cm=h, weight_kg=w, use_mage=use_mage
                     )
@@ -2333,7 +2472,9 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     "render_status": "COMPLETED",
                     "accelerated_by": f"Apple Silicon M4 ({DEVICE.upper()}) + FASHN VTON 1.5",
                     "fit_overlay": fit_result.get("zones", {}),
-                    "is_multi_outfit": has_outfit
+                    "is_multi_outfit": has_outfit,
+                    "passes_used": passes_used,
+                    "total_items_count": total_outfit_count or 1
                 }
 
                 self._set_cors(200)

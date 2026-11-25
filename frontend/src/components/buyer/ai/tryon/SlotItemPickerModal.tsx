@@ -1,13 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import type { Product } from '../../FlashSale'
-import type { CartFashionItem, OutfitSlots } from './types'
-import { detectItemSlot, isProductMatchingGender } from './tryonUtils'
+import type { CartFashionItem, OutfitSlots, OutfitSlotKey } from './types'
+import {
+  detectItemSlot,
+  isProductMatchingGender,
+  isOuterwearProduct,
+  detectAccessoryZone,
+  getAccessoryZoneLabel,
+  flattenOutfitItems,
+} from './tryonUtils'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 export interface SlotItemPickerModalProps {
   isOpen: boolean
   onClose: () => void
-  slot: 'top' | 'bottom' | 'shoes' | 'accessory' | null
+  slot: OutfitSlotKey | null
   cartFashionItems: CartFashionItem[]
   availableProducts: Product[]
   selectedOutfit: OutfitSlots
@@ -15,16 +22,17 @@ export interface SlotItemPickerModalProps {
   weight: number
   gender?: 'male' | 'female'
   onGenderChange?: (gender: 'male' | 'female') => void
-  onSelectItem: (item: Product, slot: 'top' | 'bottom' | 'shoes' | 'accessory') => void
+  onSelectItem: (item: Product, slot: OutfitSlotKey) => void
 }
 
 const ITEMS_PER_PAGE = 20
 
-const SLOT_META: Record<'top' | 'bottom' | 'shoes' | 'accessory', { label: string; icon: string; desc: string }> = {
-  top: { label: 'Áo', icon: '👔', desc: 'Chọn áo thun, sơ mi, polo, khoác hoặc hoodie phối cùng trang phục' },
+const SLOT_META: Record<OutfitSlotKey, { label: string; icon: string; desc: string }> = {
+  top: { label: 'Áo Trong (Layer 1)', icon: '👔', desc: 'Chọn áo thun, sơ mi, polo hoặc áo giữ nhiệt làm lớp nền bên trong' },
+  outer_top: { label: 'Áo Khoác Ngoài (Layer 2)', icon: '🧥', desc: 'Chọn áo khoác, blazer, cardigan hoặc bomber mặc phủ bên ngoài áo trong' },
   bottom: { label: 'Quần & Váy', icon: '👖', desc: 'Chọn quần jean, tây, jogger, short hoặc chân váy chuẩn phom dáng' },
   shoes: { label: 'Giày & Dép', icon: '👟', desc: 'Chọn giày sneaker, da, lười, cao gót hoặc sandal năng động' },
-  accessory: { label: 'Phụ Kiện & Nón', icon: '🧢', desc: 'Chọn mũ nón, túi xách, kính mắt hoặc thắt lưng tạo điểm nhấn' },
+  accessory: { label: 'Phụ Kiện (Đeo Nhiều Món)', icon: '🧢', desc: 'Chọn đồng thời nhiều phụ kiện khác vùng: Mũ, Kính, Dây chuyền, Dây nịt, Túi xách...' },
 }
 
 export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
@@ -33,7 +41,7 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   slot,
   cartFashionItems = [],
   availableProducts = [],
-  selectedOutfit = { top: null, bottom: null, shoes: null, accessory: null },
+  selectedOutfit = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] },
   height = 175,
   weight = 68,
   gender = 'male',
@@ -58,25 +66,29 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   // Danh sách các món đồ đang được trang bị ở các slot khác để AI phân tích tính tương hợp
   const otherEquippedItems = useMemo(() => {
     if (!slot || !selectedOutfit) return []
-    return Object.entries(selectedOutfit)
-      .filter(([s, p]) => s !== slot && p !== null)
-      .map(([s, p]) => ({ slot: s, product: p! }))
+    const allItems = flattenOutfitItems(selectedOutfit)
+    const currentId = slot === 'accessory' ? null : selectedOutfit[slot]?.id
+    return allItems
+      .filter(p => p && p.id !== currentId)
+      .map(p => ({ slot: detectItemSlot(p) || 'top', product: p }))
   }, [slot, selectedOutfit])
 
   // Thuật toán AI Stylist: Phân tích hành vi & chấm điểm tương hợp từng món đồ theo giới tính
   const analyzedProducts = useMemo(() => {
     if (!slot || !Array.isArray(availableProducts)) return []
 
+    const targetDetectSlot = slot === 'outer_top' ? 'top' : slot
+
     // 1. Lọc sản phẩm thuộc đúng slot này VÀ phù hợp với giới tính đang chọn (Nam / Nữ / Unisex)
     const matchingProducts = availableProducts.filter(p => {
-      if (!p || detectItemSlot(p) !== slot) return false
+      if (!p || detectItemSlot(p) !== targetDetectSlot) return false
       return isProductMatchingGender(p, genderFilter)
     })
 
     // Tạo tập set ID các món có trong giỏ hàng để ưu tiên hàng đầu
     const cartProductIds = new Set(
       (Array.isArray(cartFashionItems) ? cartFashionItems : [])
-        .filter(c => c && c.product && detectItemSlot(c.product) === slot && isProductMatchingGender(c.product, genderFilter))
+        .filter(c => c && c.product && detectItemSlot(c.product) === targetDetectSlot && isProductMatchingGender(c.product, genderFilter))
         .map(c => c.product.id)
     )
 
@@ -120,6 +132,13 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
         reason = reason || `📏 AI Phân tích: Form suông tôn vóc dáng ${height}cm`
       }
 
+      if (slot === 'outer_top' && isOuterwearProduct(item)) {
+        score += 10
+        reason = reason || '🧥 Phù hợp làm Áo khoác lớp ngoài (Layer 2)'
+      } else if (slot === 'top' && !isOuterwearProduct(item)) {
+        score += 5
+      }
+
       // Giới hạn điểm từ 88 - 99
       const finalScore = Math.min(99, Math.max(88, score))
       if (!reason) {
@@ -131,8 +150,13 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
         inCart,
         aiScore: finalScore,
         aiReason: reason,
+        isOuter: isOuterwearProduct(item),
       }
     }).sort((a, b) => {
+      if (slot === 'outer_top') {
+        if (a.isOuter && !b.isOuter) return -1
+        if (!a.isOuter && b.isOuter) return 1
+      }
       // Ưu tiên số 1: Hàng trong giỏ hàng luôn lên đầu
       if (a.inCart && !b.inCart) return -1
       if (!a.inCart && b.inCart) return 1
@@ -174,7 +198,8 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
   }
 
   const meta = SLOT_META[slot]
-  const currentlyEquippedInThisSlot = selectedOutfit ? selectedOutfit[slot] : null
+  const accessoriesEquipped = selectedOutfit?.accessories || []
+  const currentlyEquippedInThisSlot = slot !== 'accessory' && selectedOutfit ? selectedOutfit[slot] : null
 
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -243,6 +268,32 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
               </p>
             </div>
           </div>
+
+          {/* DANH SÁCH PHỤ KIỆN ĐANG ĐEO CÙNG LÚC */}
+          {slot === 'accessory' && accessoriesEquipped.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap bg-amber-50/70 border border-amber-200/80 rounded-xl px-3 py-2">
+              <span className="text-[11px] font-bold text-amber-900 shrink-0">
+                🧢 Đang đeo ({accessoriesEquipped.length}):
+              </span>
+              {accessoriesEquipped.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => onSelectItem(acc, 'accessory')}
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-rose-50 border border-amber-300 hover:border-rose-300 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-800 transition cursor-pointer group"
+                  title="Bấm để bỏ phụ kiện này"
+                >
+                  <img
+                    src={acc.image || 'https://placehold.co/32x32'}
+                    alt={acc.name}
+                    className="w-4 h-4 rounded object-cover"
+                  />
+                  <span className="max-w-[120px] truncate">{acc.name}</span>
+                  <span className="text-rose-500 font-bold text-[10px]">✕</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* THANH TÌM KIẾM & BỘ LỌC NHANH */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
@@ -387,7 +438,17 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-3.5">
               {paginatedItems.map(({ product: item, inCart, aiScore, aiReason }) => {
-                const isEquipped = currentlyEquippedInThisSlot?.id === item.id
+                const isEquipped =
+                  slot === 'accessory'
+                    ? accessoriesEquipped.some(a => a.id === item.id)
+                    : currentlyEquippedInThisSlot?.id === item.id
+                const itemZone = slot === 'accessory' ? detectAccessoryZone(item) : null
+                const hasSameZoneEquipped =
+                  slot === 'accessory' &&
+                  itemZone &&
+                  itemZone !== 'other' &&
+                  !isEquipped &&
+                  accessoriesEquipped.some(a => detectAccessoryZone(a) === itemZone)
 
                 return (
                   <div
@@ -412,6 +473,13 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
                       {inCart && (
                         <span className="absolute top-2 left-2 text-[10px] font-bold text-white bg-[#ee4d2d] px-2 py-0.5 rounded-md shadow-xs">
                           🛒 Trong Giỏ
+                        </span>
+                      )}
+
+                      {/* Nhãn vùng phụ kiện (nếu là tab phụ kiện) */}
+                      {slot === 'accessory' && itemZone && (
+                        <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-white/95 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs">
+                          {getAccessoryZoneLabel(itemZone)}
                         </span>
                       )}
 
@@ -449,11 +517,19 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
                           onClick={() => onSelectItem(item, slot)}
                           className={`mt-2 w-full py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
                             isEquipped
-                              ? 'bg-slate-100 text-slate-500 border border-slate-200'
+                              ? 'bg-emerald-600 hover:bg-rose-600 text-white shadow-2xs'
+                              : hasSameZoneEquipped
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
                               : 'bg-[#ee4d2d] hover:bg-[#d93b1d] text-white shadow-2xs hover:shadow-xs'
                           }`}
                         >
-                          {isEquipped ? '✓ Đang Chọn' : '+ Phối Món Này'}
+                          {isEquipped
+                            ? '✓ Đang Đeo (Bấm bỏ)'
+                            : hasSameZoneEquipped
+                            ? '🔄 Đổi Cùng Vùng'
+                            : slot === 'accessory'
+                            ? '+ Đeo Thêm Cùng Lúc'
+                            : '+ Phối Món Này'}
                         </button>
                       </div>
                     </div>
@@ -483,14 +559,26 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
         {/* MODAL FOOTER */}
         <div className="px-6 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 shrink-0">
           <p className="text-xs text-slate-500">
-            💡 Bấm <strong className="text-[#ee4d2d]">&quot;+ Phối Món Này&quot;</strong> để gắn vào ô {meta.label.toLowerCase()} và tự động cập nhật vào phòng thử đồ AI.
+            {slot === 'accessory' ? (
+              <>
+                💡 Đã chọn <strong className="text-[#ee4d2d]">{accessoriesEquipped.length} phụ kiện</strong>. Bạn có thể bấm chọn nhiều vùng (Mũ, Kính, Dây chuyền, Dây nịt...) cùng lúc rồi bấm Hoàn Tất.
+              </>
+            ) : (
+              <>
+                💡 Bấm <strong className="text-[#ee4d2d]">&quot;+ Phối Món Này&quot;</strong> để gắn vào ô {meta.label.toLowerCase()} và tự động cập nhật vào phòng thử đồ AI.
+              </>
+            )}
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer shrink-0"
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+              slot === 'accessory'
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
           >
-            Đóng
+            {slot === 'accessory' ? `✓ Hoàn Tất (${accessoriesEquipped.length} PK)` : 'Đóng'}
           </button>
         </div>
 

@@ -81,11 +81,17 @@ export interface CartFashionItem {
   quantity: number
 }
 
+export type OutfitSlotKey = 'top' | 'outer_top' | 'bottom' | 'shoes' | 'accessory'
+
+export type AccessoryZone = 'hat' | 'eyewear' | 'necklace' | 'belt' | 'bag' | 'wrist' | 'earring' | 'other'
+
 export interface OutfitSlots {
   top: Product | null
+  outer_top: Product | null
   bottom: Product | null
   shoes: Product | null
   accessory: Product | null
+  accessories: Product[]
 }
 
 export type TryonEngineMode = 'free' | 'mage'
