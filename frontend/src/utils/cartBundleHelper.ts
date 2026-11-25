@@ -6,6 +6,68 @@ export interface AddBundleResult {
   bundleKeys: string[]
 }
 
+function resolveBundleItemVariant(prod: Product, preferredVariant: string): string {
+  const rawPreferred = (preferredVariant || '').trim()
+  const preferredSizeToken = rawPreferred.replace(/^Size\s+/i, '').trim().toLowerCase()
+  const isGenericFallback = !rawPreferred || rawPreferred === 'Size Tiêu Chuẩn'
+
+  let groups: any[] = []
+  let rows: any[] = []
+  try {
+    groups = typeof prod.variationGroups === 'string'
+      ? JSON.parse(prod.variationGroups)
+      : Array.isArray(prod.variationGroups) ? prod.variationGroups : []
+  } catch {}
+  try {
+    rows = typeof prod.variationRows === 'string'
+      ? JSON.parse(prod.variationRows)
+      : Array.isArray(prod.variationRows) ? prod.variationRows : []
+  } catch {}
+
+  const inStockRows = rows.filter((r) => (parseInt(String(r?.stock ?? 0), 10) || 0) > 0)
+  const candidateRows = inStockRows.length > 0 ? inStockRows : rows
+
+  if (candidateRows.length > 0) {
+    // 1. Khớp trực tiếp theo size gợi ý (ví dụ S, M, L, XL) nếu sản phẩm có đúng option đó
+    if (!isGenericFallback && preferredSizeToken) {
+      const exactMatch = candidateRows.find((r) => {
+        const label = String(r.name || r.key || '').trim().toLowerCase()
+        return label === preferredSizeToken || label === rawPreferred.toLowerCase()
+      })
+      if (exactMatch) {
+        return String(exactMatch.name || exactMatch.key)
+      }
+      // Map size chữ (S/M/L/XL) sang size số quần hoặc giày tương ứng
+      const sizeIndexMap: Record<string, number> = { s: 0, m: 1, l: 2, xl: 3, xxl: 4 }
+      if (preferredSizeToken in sizeIndexMap) {
+        const targetIdx = Math.min(sizeIndexMap[preferredSizeToken], candidateRows.length - 1)
+        const mapped = candidateRows[targetIdx]
+        if (mapped) return String(mapped.name || mapped.key)
+      }
+    }
+
+    // 2. Lấy phân loại phổ thông ở giữa (hoặc đầu tiên còn hàng)
+    const midRow = candidateRows[Math.min(1, candidateRows.length - 1)]
+    return String(midRow.name || midRow.key || 'Size Tiêu Chuẩn')
+  }
+
+  if (groups.length > 0) {
+    const picked = groups
+      .map((g) => {
+        const opts: string[] = Array.isArray(g?.options) ? g.options : []
+        if (!isGenericFallback && preferredSizeToken) {
+          const found = opts.find((o) => o.trim().toLowerCase() === preferredSizeToken)
+          if (found) return found
+        }
+        return opts[Math.min(1, opts.length - 1)] || opts[0] || ''
+      })
+      .filter(Boolean)
+    if (picked.length > 0) return picked.join(' - ')
+  }
+
+  return rawPreferred || 'Size Tiêu Chuẩn'
+}
+
 /**
  * Thêm trọn bộ các sản phẩm trong một Set phối đồ vào giỏ hàng,
  * đồng thời cập nhật danh sách chọn (zm_selected_keys) để khi vào Giỏ hàng
@@ -40,12 +102,12 @@ export function addOutfitBundleToCart(
     validProducts.push(prod)
   }
 
-  const cleanVariant = variant || 'Size Tiêu Chuẩn'
   const bundleKeys: string[] = []
 
   for (const prod of validProducts) {
-    onAddToCart(prod, 1, cleanVariant)
-    bundleKeys.push(`${prod.id}#${cleanVariant}`)
+    const resolvedVariant = resolveBundleItemVariant(prod, variant)
+    onAddToCart(prod, 1, resolvedVariant)
+    bundleKeys.push(`${prod.id}#${resolvedVariant}`)
   }
 
   if (bundleKeys.length > 0) {
