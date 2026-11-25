@@ -1893,25 +1893,25 @@ class AiStylistEngine:
             "http://localhost:8000",
             "http://localhost:3002"
         ]
-        categories = ["thoi-trang-nam", "thoi-trang-nu", "giay-dep-nam", "giay-dep-nu", "phu-kien-nu", "tui-vi-nu"]
+        categories = ["thoi-trang-nam", "thoi-trang-nu", "giay-dep-nam", "giay-dep-nu", "phu-kien-nu", "tui-vi-nu", "dong-ho"]
 
         for b_url in base_urls:
-            combined = []
+            combined_map = {}
             try:
                 for cat in categories:
                     try:
-                        u = f"{b_url}/products?category={cat}&limit=35"
+                        u = f"{b_url}/products?category={cat}&limit=80"
                         req = urllib.request.Request(u, headers={"User-Agent": BROWSER_UA})
                         with urllib.request.urlopen(req, timeout=3) as resp:
                             data = json.loads(resp.read().decode())
                             prods = data if isinstance(data, list) else (data.get("products") or [])
-                            active_prods = [
-                                p for p in prods
-                                if p.get("status") not in ("hidden", "deleted", "violated") and not p.get("isViolated")
-                            ]
-                            combined.extend(active_prods)
+                            for p in prods:
+                                pid = str(p.get("id") or "")
+                                if pid and p.get("status") not in ("hidden", "deleted", "violated") and not p.get("isViolated"):
+                                    combined_map[pid] = p
                     except Exception:
                         pass
+                combined = list(combined_map.values())
                 if len(combined) >= 20:
                     cls._CACHED_FASHION_PRODUCTS = combined
                     cls._LAST_CACHE_TIME = now
@@ -1932,8 +1932,12 @@ class AiStylistEngine:
         if "giày dép" in cat or any(k in name for k in ["giày", "sneaker", "dép", "sandal", "boots", "boot", "loafer", "giày oxford", "giày lười", "giày tây"]):
             return "shoes"
 
-        # 2. Phụ kiện, túi, nón, đồng hồ
-        if any(c in cat for c in ["túi", "ví", "phụ kiện", "đồng hồ"]) or any(k in name for k in ["túi", "ví", "balo", "nón", "mũ", "kính", "đồng hồ", "thắt lưng", "dây chuyền"]):
+        is_garment_name = any(g in name for g in ["quần", "áo", "đầm", "váy", "jacket", "hoodie", "blazer", "sơ mi"])
+
+        # 2. Phụ kiện, túi, nón, đồng hồ (không nhầm với "Quần túi hộp" hay "Áo có mũ")
+        if any(c in cat for c in ["túi", "ví", "phụ kiện", "đồng hồ"]) or any(
+            k in name for k in ["túi xách", "túi đeo", "túi tote", "ví da", "ví cầm tay", "balo", "nón", "kính mát", "kính râm", "kính mắt", "đồng hồ", "thắt lưng", "dây nịt", "dây chuyền"]
+        ) or (not is_garment_name and any(k in name for k in ["túi", "ví", "mũ", "kính"])):
             return "accessory"
 
         # 3. Quần / Chân váy
@@ -1955,14 +1959,47 @@ class AiStylistEngine:
     @staticmethod
     def filter_gender(items: list, gender: str) -> list:
         res = []
+        female_only_kw = ["đầm", "váy", "chân váy", "cao gót", "búp bê", "croptop", "bikini", "túi xách nữ"]
         for it in items:
-            name = (it.get("name", "") + " " + it.get("category", "")).lower()
-            if gender == "male" and ("nữ" in name and "nam" not in name):
-                continue
-            if gender == "female" and ("nam" in name and "nữ" not in name):
-                continue
+            name_lower = (it.get("name", "")).lower()
+            cat_lower = (it.get("category", "")).lower()
+            text = f"{name_lower} {cat_lower}"
+            is_unisex = "nam nữ" in text or "unisex" in text
+            if gender == "male":
+                if not is_unisex and "nữ" in text and "nam" not in text:
+                    continue
+                if any(kw in name_lower for kw in female_only_kw):
+                    continue
+            elif gender == "female":
+                if not is_unisex and "nam" in text and "nữ" not in text:
+                    continue
             res.append(it)
         return res
+
+    @staticmethod
+    def is_full_dress(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["đầm", "váy liền", "maxi", "dạ hội", "dự tiệc"]) and "chân váy" not in name
+
+    @staticmethod
+    def is_shorts_or_beachwear(p: dict) -> bool:
+        text = f"{p.get('name', '')} {p.get('description', '')}".lower()
+        return any(k in text for k in ["quần đùi", "quần short", "short đùi", "mặc nhà", "đi biển", "đồ ngủ", "pijama"])
+
+    @staticmethod
+    def is_slipper_or_flipflop(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["dép lê", "dép kẹp", "xỏ ngón", "tông", "sục"])
+
+    @staticmethod
+    def classify_formality(p: dict) -> str:
+        text = f"{p.get('name', '')} {p.get('category', '')}".lower()
+        # Kiêm tra đồ mặc nhà / quần đùi / đi biển / tập thể dục trước để tránh nhận nhầm
+        if any(k in text for k in ["quần đùi", "quần short", "short", "mặc nhà", "đi biển", "đồ ngủ", "pijama", "dép lê", "dép kẹp", "xỏ ngón", "chạy bộ", "gym", "thể dục"]):
+            return "ultra_casual"
+        if any(k in text for k in ["blazer", "vest", "suit", "sơ mi", "quần tây", "quần âu", "tây âu", "oxford", "giày tây", "loafer", "giày lười", "cao gót", "bút chì", "công sở", "dạ hội", "dự tiệc"]):
+            return "formal"
+        return "casual"
 
     @staticmethod
     def parse_numeric_price(val) -> float:
@@ -1995,12 +2032,12 @@ class AiStylistEngine:
     @staticmethod
     def detect_vibe(p: dict) -> str:
         name = p.get("name", "").lower()
+        if any(k in name for k in ["blazer", "vest", "suit", "sơ mi", "tây", "âu", "polo", "oxford", "giày tây", "loafer", "công sở", "dạ hội"]):
+            return "Smart Casual Lịch Lãm"
+        if any(k in name for k in ["quần đùi", "short", "mặc nhà", "đi biển", "thể thao", "co giãn", "chạy", "gym", "thoáng khí"]):
+            return "Sporty Năng Động"
         if any(k in name for k in ["bomber", "hoodie", "cargo", "jogger", "sneaker", "unisex", "jean", "rách"]):
             return "Streetwear Cá Tính"
-        if any(k in name for k in ["sơ mi", "tây", "âu", "blazer", "polo", "oxford", "da", "loafer", "công sở"]):
-            return "Smart Casual Lịch Lãm"
-        if any(k in name for k in ["thể thao", "co giãn", "chạy", "gym", "thoáng khí"]):
-            return "Sporty Năng Động"
         if any(k in name for k in ["thun", "cotton", "basic", "dép", "kaki", "trơn"]):
             return "Minimalist Tối Giản"
         return "Hàn Quốc Trẻ Trung"
@@ -2008,55 +2045,135 @@ class AiStylistEngine:
     @staticmethod
     def score_single_outfit(items: list, user_measurements: dict) -> tuple:
         """
-        Chấm điểm thẩm mỹ thời trang theo 4 trọng số:
-        1. Phối màu (Color Harmony): 35 điểm
-        2. Sự ăn khớp phong cách (Style Consistency): 35 điểm
-        3. Tương thích thể hình (Body Fit): 20 điểm
-        4. Tính đầy đủ của bộ phối: 10 điểm
+        Chấm điểm thẩm mỹ thời trang theo quy tắc phối đồ thực tế:
+        1. Phối màu (Color Harmony): tối đa 30 điểm
+        2. Tương thích ngữ cảnh & phom dáng (Formality & Style Compatibility): tối đa 40 điểm (+ điểm phạt xung đột)
+        3. Tương thích thể hình (Body Fit): tối đa 20 điểm
+        4. Tính đầy đủ & cân đối giá trị set: tối đa 10 điểm
         """
         all_colors = []
+        tops_in_set = []
+        bottoms_in_set = []
+        shoes_in_set = []
         for it in items:
             all_colors.extend(AiStylistEngine.extract_colors(it))
-        unique_colors = set(all_colors)
+            role = AiStylistEngine.classify_item(it)
+            if role == "top":
+                tops_in_set.append(it)
+            elif role == "bottom":
+                bottoms_in_set.append(it)
+            elif role == "shoes":
+                shoes_in_set.append(it)
 
-        # 1. Điểm màu sắc (Max 35)
-        if "black" in unique_colors and "white" in unique_colors:
-            color_score = 35
-        elif "blue" in unique_colors and ("white" in unique_colors or "black" in unique_colors):
-            color_score = 34
-        elif len(unique_colors) <= 2:
-            color_score = 33
-        elif len(unique_colors) <= 3:
+        explicit_colors = [c for c in all_colors if c != "neutral"]
+        unique_explicit = set(explicit_colors)
+
+        # 1. Điểm màu sắc (Max 30 - có phân hóa theo màu thực tế)
+        if "black" in unique_explicit and "white" in unique_explicit:
             color_score = 30
-        else:
+        elif "blue" in unique_explicit and ("white" in unique_explicit or "black" in unique_explicit or "earth" in unique_explicit):
+            color_score = 29
+        elif "earth" in unique_explicit and ("white" in unique_explicit or "black" in unique_explicit):
+            color_score = 28
+        elif len(unique_explicit) == 1:
+            color_score = 26
+        elif len(unique_explicit) == 0:
+            color_score = 24
+        elif len(unique_explicit) <= 3:
             color_score = 25
+        else:
+            color_score = 20
 
-        # 2. Ăn khớp phong cách (Max 35)
+        # 2. Tương thích ngữ cảnh & phong cách (Base 26, Max 40, Penalty khi lệch phom)
         vibes = [AiStylistEngine.detect_vibe(it) for it in items]
-        top_vibe = max(set(vibes), key=vibes.count)
+        top_vibe = vibes[0] if items else "Smart Casual Lịch Lãm"
+        # Ưu tiên lấy vibe của món chính (items[0]) nếu là trang phục chủ đạo
+        if items and AiStylistEngine.classify_item(items[0]) in ("top", "bottom"):
+            top_vibe = AiStylistEngine.detect_vibe(items[0])
+        else:
+            top_vibe = max(set(vibes), key=vibes.count)
+
         match_count = vibes.count(top_vibe)
-        vibe_score = min(35, 20 + match_count * 5)
+        style_score = 24 + min(10, match_count * 3)
+
+        top_item = tops_in_set[0] if tops_in_set else None
+        bottom_item = bottoms_in_set[0] if bottoms_in_set else None
+        shoe_item = shoes_in_set[0] if shoes_in_set else None
+
+        if top_item and bottom_item:
+            top_form = AiStylistEngine.classify_formality(top_item)
+            bot_form = AiStylistEngine.classify_formality(bottom_item)
+            bot_name = (bottom_item.get("name", "")).lower()
+
+            # Xung đột nghiêm trọng: Áo Blazer/Vest/Sơ mi công sở mặc với Quần đùi / Mặc nhà / Đi biển / Đồ gym
+            if top_form == "formal" and (bot_form == "ultra_casual" or AiStylistEngine.is_shorts_or_beachwear(bottom_item)):
+                style_score -= 35
+            elif AiStylistEngine.is_full_dress(top_item):
+                # Đầm liền / Đầm maxi không mặc kèm quần bên dưới
+                if "quần" in bot_name:
+                    style_score -= 40
+            elif top_form == "formal":
+                if "jogger" in bot_name or "thể thao" in bot_name:
+                    style_score -= 8  # Blazer không hợp quần jogger thể thao bằng quần tây/kaki/jean
+                elif bot_form == "formal":
+                    style_score += 8  # Blazer/Sơ mi + Quần Tây/Quần Âu/Chân váy
+                elif any(k in bot_name for k in ["kaki", "chân váy"]):
+                    style_score += 6
+                elif "jean" in bot_name and "rách" not in bot_name:
+                    style_score += 4  # Smart casual (Blazer + Jean trơn)
+            elif top_form == "casual":
+                if bot_form == "ultra_casual" and any(k in (top_item.get("name", "")).lower() for k in ["sweater", "nỉ", "hoodie", "khoác"]):
+                    style_score -= 10
+                else:
+                    style_score += 4
+
+        if top_item and shoe_item:
+            top_form = AiStylistEngine.classify_formality(top_item)
+            shoe_form = AiStylistEngine.classify_formality(shoe_item)
+            shoe_name = (shoe_item.get("name", "")).lower()
+            if top_form == "formal" and AiStylistEngine.is_slipper_or_flipflop(shoe_item):
+                style_score -= 22
+            elif top_form == "formal" and shoe_form == "formal":
+                style_score += 6
+            elif top_form == "formal" and "sneaker" in shoe_name:
+                style_score += 2  # Smart casual Sneaker gọn gàng vẫn hợp, nhưng thấp điểm hơn Giày Tây/Loafer
+            elif top_form != "formal" and "cao gót" in shoe_name and not AiStylistEngine.is_full_dress(top_item):
+                style_score -= 10
 
         # 3. Khớp số đo thể trạng (Max 20)
         bmi = float(user_measurements.get("bmi", 22.0) or 22.0)
-        body_fit = 18
-        if bmi >= 25 and ("black" in unique_colors or "earth" in unique_colors):
-            body_fit = 20
-        elif bmi < 19 and len(items) >= 4:
-            body_fit = 20
+        body_fit = 17
+        if bmi >= 25 and ("black" in unique_explicit or "blue" in unique_explicit or "earth" in unique_explicit):
+            body_fit = 19
+        elif 18.5 <= bmi < 25:
+            body_fit = 19
+        elif bmi < 18.5 and len(items) >= 4:
+            body_fit = 19
 
         # 4. Tính đầy đủ (Max 10)
-        completeness = 10 if len(items) >= 3 else 7
+        completeness = 10 if len(items) >= 4 else (8 if len(items) == 3 else 6)
 
-        total_score = min(99, max(84, color_score + vibe_score + body_fit + completeness))
+        # Thêm điểm tinh chỉnh ổn định theo mức độ ăn khớp chi tiết để phân tách Top 1 -> Top 5 rõ ràng
+        fine_bonus = 0
+        if bottom_item:
+            bn = (bottom_item.get("name", "")).lower()
+            if (any(k in bn for k in ["tây", "âu"]) or ("kaki" in bn and "jogger" not in bn and "thể thao" not in bn)):
+                if top_item and AiStylistEngine.classify_formality(top_item) == "formal":
+                    fine_bonus += 2
+        if shoe_item and len(shoes_in_set) == 1:
+            shoe_n = (shoe_item.get("name", "")).lower()
+            if "da" in shoe_n or "tây" in shoe_n or "oxford" in shoe_n or "loafer" in shoe_n:
+                if top_item and AiStylistEngine.classify_formality(top_item) == "formal":
+                    fine_bonus += 2
+
+        total_score = min(98, max(45, color_score + style_score + body_fit + completeness + fine_bonus))
         return total_score, top_vibe
 
     @staticmethod
     def generate_top_100_scored_outfits(target_product: dict, user_measurements: dict, gender: str = "male", limit: int = 100):
         """
         Mô phỏng 100 bộ phối đồ độc nhất từ kho hàng thực tế của ZeroMall,
-        chấm điểm tự động và trả về danh sách các bộ phối sắp xếp theo điểm thẩm mỹ giảm dần.
-        Hỗ trợ phân trang 5 set/lần trên Frontend, tốn 0 đồng chi phí AI sinh ảnh (0 Gem).
+        chấm điểm tự động theo ngữ cảnh & phom dáng và trả về Top 5 đa dạng hình ảnh (cố định theo sản phẩm).
         """
         try:
             all_prods = AiStylistEngine.fetch_real_zero_products()
@@ -2099,54 +2216,93 @@ class AiStylistEngine:
             gender_prods = fashion_prods
 
         target_role = AiStylistEngine.classify_item(target_product)
-        target_id = target_product.get("id")
+        target_id = str(target_product.get("id") or target_product.get("name") or "default")
+        target_formality = AiStylistEngine.classify_formality(target_product)
+        target_is_dress = AiStylistEngine.is_full_dress(target_product)
 
-        tops = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_id]
-        bottoms = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_id]
-        shoes = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_id]
-        accs = [p for p in gender_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_id]
+        # Sắp xếp cố định theo ID trước khi lấy mẫu để kết quả không bị lệ thuộc thứ tự API
+        def _sorted_role(pool: list, role_name: str) -> list:
+            items = [p for p in pool if AiStylistEngine.classify_item(p) == role_name and str(p.get("id")) != target_id]
+            items.sort(key=lambda x: str(x.get("id", "")))
+            return items
 
-        # Nếu thiếu nhóm theo giới tính, bổ sung từ toàn bộ kho thời trang thực tế (không dùng dữ liệu tĩnh giả)
-        if not tops:
-            tops = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "top" and p.get("id") != target_id]
-        if not bottoms:
-            bottoms = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "bottom" and p.get("id") != target_id]
-        if not shoes:
-            shoes = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "shoes" and p.get("id") != target_id]
-        if not accs:
-            accs = [p for p in fashion_prods if AiStylistEngine.classify_item(p) == "accessory" and p.get("id") != target_id]
+        tops = _sorted_role(gender_prods, "top") or _sorted_role(fashion_prods, "top")
+        bottoms = _sorted_role(gender_prods, "bottom") or _sorted_role(fashion_prods, "bottom")
+        shoes = _sorted_role(gender_prods, "shoes") or _sorted_role(fashion_prods, "shoes")
+        accs = _sorted_role(gender_prods, "accessory") or _sorted_role(fashion_prods, "accessory")
+
+        # Lọc trước nhóm tương thích ngữ cảnh nếu kho có đủ ứng viên phù hợp
+        compat_bottoms = bottoms
+        compat_shoes = shoes
+        compat_tops = tops
+
+        if target_role == "top" and target_formality == "formal":
+            clean_bottoms = [b for b in bottoms if not AiStylistEngine.is_shorts_or_beachwear(b) and AiStylistEngine.classify_formality(b) != "ultra_casual"]
+            if clean_bottoms:
+                compat_bottoms = clean_bottoms
+            clean_shoes = [s for s in shoes if not AiStylistEngine.is_slipper_or_flipflop(s)]
+            if clean_shoes:
+                compat_shoes = clean_shoes
+        elif target_role == "bottom" and (AiStylistEngine.is_shorts_or_beachwear(target_product) or target_formality == "ultra_casual"):
+            clean_tops = [t for t in tops if AiStylistEngine.classify_formality(t) != "formal" and not AiStylistEngine.is_full_dress(t)]
+            if clean_tops:
+                compat_tops = clean_tops
+        elif target_role == "bottom":
+            clean_tops = [t for t in tops if not AiStylistEngine.is_full_dress(t)]
+            if clean_tops:
+                compat_tops = clean_tops
+
+        # PRNG cố định theo (target_id, gender, shape_class) để Top 5 ổn định mỗi lần mở cùng sản phẩm
+        seed_str = f"{target_id}:{gender}:{user_measurements.get('shape_class', 'standard')}"
+        seed_int = int(hashlib.md5(seed_str.encode("utf-8")).hexdigest()[:16], 16)
+        rng = random.Random(seed_int)
 
         # ---------------------------------------------------------------
-        # MÔ PHỎNG 100 SET PHỐI ĐỒ ĐỘC NHẤT (100 Outfit Combinations)
+        # MÔ PHỎNG TỔ HỢP ĐỘC NHẤT & KHỬ TRÙNG HÌNH ẢNH
         # ---------------------------------------------------------------
         simulated_pool = []
         used_signatures = set()
-        max_attempts = 600
+        used_visual_sigs = set()
+        # Tránh lặp toàn bộ ảnh giống hệt nhau trong pool cho đến khi thử hết các tổ hợp ảnh khác biệt
+        max_attempts = 1200
         attempts = 0
 
         target_limit = max(10, min(limit, 100))
 
+        def _norm_img(it: dict) -> str:
+            return str(it.get("image") or "").split("?")[0].strip()
+
         while len(simulated_pool) < target_limit and attempts < max_attempts:
             attempts += 1
             if target_role == "top":
-                b = random.choice(bottoms) if bottoms else None
-                s = random.choice(shoes) if shoes else None
-                a = random.choice(accs) if accs else None
-                outfit_items = [it for it in [target_product, b, s, a] if it]
+                if target_is_dress:
+                    # Đầm liền: không mặc kèm quần bên dưới, thay bằng Giày + 2 Phụ kiện khác ảnh
+                    s = rng.choice(compat_shoes) if compat_shoes else None
+                    a1 = rng.choice(accs) if accs else None
+                    other_accs = [a for a in accs if a1 and _norm_img(a) != _norm_img(a1)] if a1 else accs
+                    a2 = rng.choice(other_accs) if other_accs else None
+                    outfit_items = [it for it in [target_product, s, a1, a2] if it]
+                else:
+                    b = rng.choice(compat_bottoms) if compat_bottoms else None
+                    s = rng.choice(compat_shoes) if compat_shoes else None
+                    a = rng.choice(accs) if accs else None
+                    outfit_items = [it for it in [target_product, b, s, a] if it]
             elif target_role == "bottom":
-                t = random.choice(tops) if tops else None
-                s = random.choice(shoes) if shoes else None
-                a = random.choice(accs) if accs else None
+                t = rng.choice(compat_tops) if compat_tops else None
+                s = rng.choice(compat_shoes) if compat_shoes else None
+                a = rng.choice(accs) if accs else None
                 outfit_items = [it for it in [target_product, t, s, a] if it]
             elif target_role == "shoes":
-                t = random.choice(tops) if tops else None
-                b = random.choice(bottoms) if bottoms else None
-                a = random.choice(accs) if accs else None
+                t = rng.choice(compat_tops) if compat_tops else None
+                is_t_dress = t and AiStylistEngine.is_full_dress(t)
+                b = None if is_t_dress else (rng.choice(compat_bottoms) if compat_bottoms else None)
+                a = rng.choice(accs) if accs else None
                 outfit_items = [it for it in [target_product, t, b, a] if it]
             else:
-                t = random.choice(tops) if tops else None
-                b = random.choice(bottoms) if bottoms else None
-                s = random.choice(shoes) if shoes else None
+                t = rng.choice(compat_tops) if compat_tops else None
+                is_t_dress = t and AiStylistEngine.is_full_dress(t)
+                b = None if is_t_dress else (rng.choice(compat_bottoms) if compat_bottoms else None)
+                s = rng.choice(compat_shoes) if compat_shoes else None
                 outfit_items = [it for it in [target_product, t, b, s] if it]
 
             # Đảm bảo không trùng ID sản phẩm trong cùng 1 set
@@ -2154,21 +2310,71 @@ class AiStylistEngine:
             if len(item_ids) != len(set(item_ids)):
                 continue
 
-            sig = "-".join(sorted(str(it.get("id", "")) for it in outfit_items))
+            sig = "-".join(sorted(item_ids))
             if sig in used_signatures:
                 continue
+
+            # Tránh tạo các set khác ID/giá nhưng giống hệt toàn bộ ảnh sản phẩm (trong 850 lần thử đầu)
+            vis_sig = "|".join(sorted(_norm_img(it) for it in outfit_items))
+            if vis_sig in used_visual_sigs and attempts < 850:
+                continue
+
             used_signatures.add(sig)
+            used_visual_sigs.add(vis_sig)
 
             score, top_vibe = AiStylistEngine.score_single_outfit(outfit_items, user_measurements)
             simulated_pool.append({
                 "score": score,
                 "vibe": top_vibe,
-                "items": outfit_items
+                "items": outfit_items,
+                "sig": sig,
             })
 
-        # Sắp xếp toàn bộ các set theo điểm thẩm mỹ giảm dần
-        simulated_pool.sort(key=lambda x: x["score"], reverse=True)
-        top_chosen = simulated_pool[:target_limit]
+        # Sắp xếp toàn bộ các set theo điểm thẩm mỹ giảm dần (ổn định theo sig)
+        simulated_pool.sort(key=lambda x: (-x["score"], x["sig"]))
+
+        # Chọn Top 5 đầu tiên ưu tiên đa dạng hình ảnh (quần, giày, phụ kiện) trên toàn pool điểm cao
+        top_diverse = []
+        remaining = list(simulated_pool)
+        seen_top5_bottom_imgs = set()
+        seen_top5_shoe_imgs = set()
+        seen_top5_acc_imgs = set()
+
+        while remaining and len(top_diverse) < 5:
+            best_idx = 0
+            best_rank_score = -10**9
+            for idx_cand in range(len(remaining)):
+                cand = remaining[idx_cand]
+                b_imgs = {_norm_img(it) for it in cand["items"] if AiStylistEngine.classify_item(it) == "bottom" and str(it.get("id")) != target_id}
+                s_imgs = {_norm_img(it) for it in cand["items"] if AiStylistEngine.classify_item(it) == "shoes" and str(it.get("id")) != target_id}
+                a_imgs = {_norm_img(it) for it in cand["items"] if AiStylistEngine.classify_item(it) == "accessory" and str(it.get("id")) != target_id}
+                penalty = 0
+                if b_imgs & seen_top5_bottom_imgs:
+                    penalty += 15
+                if s_imgs & seen_top5_shoe_imgs:
+                    penalty += 12
+                if a_imgs & seen_top5_acc_imgs:
+                    penalty += 8
+                rank_val = cand["score"] - penalty
+                if rank_val > best_rank_score:
+                    best_rank_score = rank_val
+                    best_idx = idx_cand
+            chosen = remaining.pop(best_idx)
+            top_diverse.append(chosen)
+            for it in chosen["items"]:
+                if str(it.get("id")) == target_id:
+                    continue
+                role = AiStylistEngine.classify_item(it)
+                if role == "bottom":
+                    seen_top5_bottom_imgs.add(_norm_img(it))
+                elif role == "shoes":
+                    seen_top5_shoe_imgs.add(_norm_img(it))
+                elif role == "accessory":
+                    seen_top5_acc_imgs.add(_norm_img(it))
+
+        # Sắp xếp lại Top 5 đã đa dạng hóa theo điểm giảm dần để Top 1 luôn cao điểm nhất
+        top_diverse.sort(key=lambda x: (-x["score"], x["sig"]))
+        top_chosen = (top_diverse + remaining)[:target_limit]
 
         # Định dạng kết quả trả về cho Frontend
         badges = [
