@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
+import { OtpVerifyField } from '../common/OtpVerifyField'
 
 interface SellerAuthFormProps {
   onAuthSuccess: (user: any, token: string) => void
@@ -10,11 +11,13 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
   onAuthSuccess,
   onBackToHome
 }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login')
   
   // Auth Form Fields
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [otpCode, setOtpCode] = useState('')
   const [name, setName] = useState('')
   const [shopName, setShopName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -23,26 +26,47 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
     setSuccess(null)
 
-    const endpoint = authMode === 'login' ? 'login' : 'register'
-    const payload = authMode === 'login'
-      ? { email, password }
-      : { 
-          email, 
-          password, 
-          name, 
-          role: 'SHOP_OWNER',
-          shopName 
-        }
+    if (authMode === 'forgot') {
+      if (password.length < 6) {
+        setError('Mật khẩu mới phải có ít nhất 6 ký tự.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Mật khẩu mới và Xác nhận mật khẩu không khớp.')
+        return
+      }
+    }
+
+    setLoading(true)
+
+    const endpoint =
+      authMode === 'login' ? 'login' : authMode === 'register' ? 'register' : 'reset-password'
+    const payload =
+      authMode === 'login'
+        ? { email, password }
+        : authMode === 'register'
+        ? {
+            email,
+            password,
+            name,
+            otpCode,
+            role: 'SHOP_OWNER',
+            shopName,
+          }
+        : {
+            email,
+            otpCode,
+            newPassword: password,
+          }
 
     try {
       const response = await fetch(`${API_BASE_URL}/auth/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -56,8 +80,19 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
           throw new Error('Tài khoản của bạn không phải là Chủ shop hoặc Nhân viên shop!')
         }
         onAuthSuccess(data.user, data.accessToken)
+      } else if (authMode === 'register') {
+        setSuccess('Đăng ký & xác thực Gmail Kênh Người Bán thành công! Đang chuyển sang Đăng nhập...')
+        setOtpCode('')
+        setTimeout(() => {
+          setAuthMode('login')
+          setError(null)
+          setSuccess(null)
+        }, 1500)
       } else {
-        setSuccess('Đăng ký Kênh Người Bán thành công! Đang chuyển sang Đăng nhập...')
+        setSuccess('Đặt lại mật khẩu thành công! Đang chuyển sang Đăng nhập...')
+        setOtpCode('')
+        setPassword('')
+        setConfirmPassword('')
         setTimeout(() => {
           setAuthMode('login')
           setError(null)
@@ -159,7 +194,8 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
                   Đăng Nhập Shop
                 </button>
                 <button 
-                  onClick={() => { setAuthMode('register'); setError(null); }}
+                  type="button"
+                  onClick={() => { setAuthMode('register'); setOtpCode(''); setError(null); setSuccess(null); }}
                   className={`flex-1 pb-3.5 text-center font-black text-sm transition-all cursor-pointer ${
                     authMode === 'register' 
                       ? 'text-emerald-600 border-b-2 border-emerald-600' 
@@ -168,6 +204,11 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
                 >
                   Đăng Ký Mở Shop
                 </button>
+                {authMode === 'forgot' && (
+                  <span className="flex-1 pb-3.5 text-center font-black text-sm text-emerald-600 border-b-2 border-emerald-600">
+                    Quên Mật Khẩu
+                  </span>
+                )}
               </div>
 
               {/* Alert Feedback */}
@@ -222,27 +263,93 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="seller@zeromall.com"
+                    placeholder="seller@gmail.com"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
                   />
                 </div>
 
+                {(authMode === 'register' || authMode === 'forgot') && (
+                  <OtpVerifyField
+                    email={email}
+                    otpCode={otpCode}
+                    onOtpChange={setOtpCode}
+                    purpose={authMode === 'register' ? 'REGISTER' : 'RESET_PASSWORD'}
+                    disabled={loading}
+                    onFeedback={(fb) => {
+                      if (!fb) {
+                        setError(null)
+                        setSuccess(null)
+                      } else if (fb.type === 'error') {
+                        setError(fb.text)
+                        setSuccess(null)
+                      } else {
+                        setSuccess(fb.text)
+                        setError(null)
+                      }
+                    }}
+                  />
+                )}
+
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700">Mật Khẩu</label>
-                    {authMode === 'login' && (
-                      <span className="text-[11px] font-semibold text-emerald-600 hover:underline cursor-pointer">Quên mật khẩu?</span>
-                    )}
+                    <label className="block text-xs font-bold text-slate-700">
+                      {authMode === 'forgot' ? 'Mật Khẩu Mới' : 'Mật Khẩu'}
+                    </label>
+                    {authMode === 'login' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('forgot')
+                          setOtpCode('')
+                          setPassword('')
+                          setConfirmPassword('')
+                          setError(null)
+                          setSuccess(null)
+                        }}
+                        className="text-[11px] font-semibold text-emerald-600 hover:underline cursor-pointer"
+                      >
+                        Quên mật khẩu?
+                      </button>
+                    ) : authMode === 'forgot' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthMode('login')
+                          setOtpCode('')
+                          setError(null)
+                          setSuccess(null)
+                        }}
+                        className="text-[11px] font-semibold text-slate-500 hover:underline cursor-pointer"
+                      >
+                        ← Quay lại Đăng nhập
+                      </button>
+                    ) : null}
                   </div>
                   <input 
                     type="password" 
                     required
+                    minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
                   />
                 </div>
+
+                {authMode === 'forgot' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Xác Nhận Mật Khẩu Mới</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu mới"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -256,8 +363,10 @@ export const SellerAuthForm: React.FC<SellerAuthFormProps> = ({
                     </>
                   ) : authMode === 'login' ? (
                     <span>Đăng Nhập Kênh Người Bán</span>
+                  ) : authMode === 'register' ? (
+                    <span>Xác Nhận OTP &amp; Mở Shop</span>
                   ) : (
-                    <span>Hoàn Tất Đăng Ký Mở Shop</span>
+                    <span>Xác Nhận Đổi Mật Khẩu</span>
                   )}
                 </button>
               </form>

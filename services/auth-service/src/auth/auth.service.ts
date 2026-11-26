@@ -1,24 +1,99 @@
-import { ConflictException, Injectable, UnauthorizedException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import * as crypto from 'crypto';
+import { RegisterDto, LoginDto, SendOtpDto, ResetPasswordDto, GoogleAuthDto } from './dto/auth.dto';
+import { EmailOtpService } from './email-otp.service';
+
+const MAX_FAILED_LOGINS = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailOtpService: EmailOtpService,
   ) {}
 
+  private buildJwtResponse(user: any) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      shopId: user.shopId || user.ownedShop?.id || null,
+      hubId: user.hubId || null,
+    };
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        shopId: payload.shopId,
+        hubId: user.hubId || null,
+        avatar: user.avatar,
+        gender: user.gender,
+        birthday: user.birthday,
+        phoneNumber: user.phoneNumber,
+        emailVerified: !!user.emailVerified,
+        mustChangePassword: !!(user as any).mustChangePassword,
+      },
+    };
+  }
+
+  async sendOtp(dto: SendOtpDto) {
+    const email = (dto.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('Định dạng email không hợp lệ.');
+    }
+
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+
+    if (dto.purpose === 'REGISTER' && existingUser) {
+      throw new ConflictException('Email này đã tồn tại trong hệ thống. Vui lòng đăng nhập hoặc chọn Quên mật khẩu.');
+    }
+
+    if ((dto.purpose === 'RESET_PASSWORD' || dto.purpose === 'CHANGE_PASSWORD') && !existingUser) {
+      throw new NotFoundException('Email này chưa được đăng ký tài khoản ZeroMall.');
+    }
+
+    return this.emailOtpService.sendOtp(email, dto.purpose);
+  }
+
   async register(dto: RegisterDto) {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+    const normalizedEmail = (dto.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw new BadRequestException('Email không hợp lệ.');
+    }
+    if (!dto.password || dto.password.length < 6) {
+      throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự.');
+    }
+
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
     });
 
     if (existingUser) {
       throw new ConflictException('Email đã tồn tại trong hệ thống');
     }
+
+    // Xác thực OTP Gmail bắt buộc cho đăng ký công khai trên sàn
+    await this.emailOtpService.verifyAndConsumeOtp(normalizedEmail, 'REGISTER', dto.otpCode);
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(dto.password, salt);
@@ -27,11 +102,12 @@ export class AuthService {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: dto.email,
+          email: normalizedEmail,
           password: passwordHash,
           name: dto.name,
           role: dto.role,
           gender: dto.gender,
+          emailVerified: true,
         },
       });
 
@@ -93,9 +169,10 @@ export class AuthService {
     });
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+  async login(dto: LoginDto, clientIp?: string) {
+    const normalizedEmail = (dto.email || '').trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
       include: {
         ownedShop: true,
       },
@@ -105,35 +182,155 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    if (user.loginLockedUntil && user.loginLockedUntil.getTime() > Date.now()) {
+      const waitMin = Math.ceil((user.loginLockedUntil.getTime() - Date.now()) / 60000);
+      throw new ForbiddenException(
+        `Tài khoản đang tạm khóa bảo mật do nhập sai mật khẩu quá ${MAX_FAILED_LOGINS} lần. Vui lòng thử lại sau ${waitMin} phút hoặc chọn "Quên mật khẩu?" để mở khóa bằng OTP.`
+      );
     }
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      shopId: user.shopId || user.ownedShop?.id || null,
-      hubId: user.hubId || null,
-    };
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    if (!isPasswordValid) {
+      const nextFailed = (user.failedLoginAttempts || 0) + 1;
+      const shouldLock = nextFailed >= MAX_FAILED_LOGINS;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: nextFailed,
+          ...(shouldLock ? { loginLockedUntil: new Date(Date.now() + LOGIN_LOCK_MS) } : {}),
+        },
+      });
+
+      if (shouldLock) {
+        await this.emailOtpService.sendSecurityAlert(
+          user.email,
+          '[ZeroMall] Cảnh báo bảo mật: Tài khoản tạm khóa 15 phút',
+          'Cảnh báo đăng nhập bất thường',
+          `Tài khoản ${user.email} vừa nhập sai mật khẩu ${MAX_FAILED_LOGINS} lần liên tiếp (IP: ${clientIp || 'không rõ'}) và đã được tạm khóa bảo vệ trong 15 phút. Nếu không phải bạn, hãy dùng chức năng Quên mật khẩu để đổi mật khẩu ngay.`
+        );
+        throw new ForbiddenException(
+          `Bạn đã nhập sai mật khẩu ${MAX_FAILED_LOGINS} lần. Tài khoản tạm khóa 15 phút để bảo vệ, hoặc dùng "Quên mật khẩu?" để đặt lại ngay.`
+        );
+      }
+
+      throw new UnauthorizedException(`Email hoặc mật khẩu không đúng (còn ${MAX_FAILED_LOGINS - nextFailed} lần thử).`);
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: 0,
+        loginLockedUntil: null,
+        lastLoginAt: new Date(),
+        ...(clientIp ? { lastLoginIp: clientIp.slice(0, 64) } : {}),
+      },
+      include: { ownedShop: true },
+    });
+
+    return this.buildJwtResponse(updatedUser);
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const email = (dto.email || '').trim().toLowerCase();
+    if (!dto.newPassword || dto.newPassword.length < 6) {
+      throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
+    if (!user) {
+      throw new NotFoundException('Email này chưa được đăng ký tài khoản ZeroMall.');
+    }
+
+    await this.emailOtpService.verifyAndConsumeOtp(user.email, 'RESET_PASSWORD', dto.otpCode);
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(dto.newPassword, salt);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: passwordHash,
+        emailVerified: true,
+        failedLoginAttempts: 0,
+        loginLockedUntil: null,
+        mustChangePassword: false,
+      },
+    });
+
+    await this.emailOtpService.sendSecurityAlert(
+      user.email,
+      '[ZeroMall] Mật khẩu của bạn vừa được thay đổi',
+      'Đặt lại mật khẩu thành công',
+      `Mật khẩu cho tài khoản ${user.email} vừa được cập nhật qua mã xác thực OTP. Nếu bạn không thực hiện thao tác này, hãy liên hệ CSKH ngay.`
+    );
 
     return {
-      accessToken: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        shopId: payload.shopId,
-        hubId: user.hubId || null,
-        avatar: user.avatar,
-        gender: user.gender,
-        birthday: user.birthday,
-        phoneNumber: user.phoneNumber,
-        mustChangePassword: !!(user as any).mustChangePassword,
-      },
+      success: true,
+      message: 'Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.',
     };
+  }
+
+  async loginWithGoogle(dto: GoogleAuthDto, clientIp?: string) {
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    if (!clientId) {
+      throw new ServiceUnavailableException('Chức năng Đăng nhập Google chưa được cấu hình GOOGLE_CLIENT_ID trên server.');
+    }
+    if (!dto.idToken) {
+      throw new BadRequestException('Thiếu Google ID Token.');
+    }
+
+    const verifyRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.idToken)}`
+    );
+    if (!verifyRes.ok) {
+      throw new UnauthorizedException('Token Google không hợp lệ hoặc đã hết hạn.');
+    }
+
+    const info: any = await verifyRes.json();
+    if (info.aud !== clientId || info.email_verified !== 'true' || !info.email) {
+      throw new UnauthorizedException('Xác thực tài khoản Google thất bại.');
+    }
+
+    const email = String(info.email).trim().toLowerCase();
+    let user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      include: { ownedShop: true },
+    });
+
+    if (!user) {
+      const randomPass = crypto.randomBytes(24).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPass, 10);
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          password: passwordHash,
+          name: info.name || email.split('@')[0],
+          role: 'BUYER',
+          avatar: info.picture || null,
+          emailVerified: true,
+          lastLoginAt: new Date(),
+          ...(clientIp ? { lastLoginIp: clientIp.slice(0, 64) } : {}),
+        },
+        include: { ownedShop: true },
+      });
+    } else {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+          failedLoginAttempts: 0,
+          loginLockedUntil: null,
+          lastLoginAt: new Date(),
+          ...(clientIp ? { lastLoginIp: clientIp.slice(0, 64) } : {}),
+          ...(!user.avatar && info.picture ? { avatar: info.picture } : {}),
+        },
+        include: { ownedShop: true },
+      });
+    }
+
+    return this.buildJwtResponse(user);
   }
 
   async getShopById(id: string) {

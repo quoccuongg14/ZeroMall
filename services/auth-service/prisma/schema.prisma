@@ -24,6 +24,11 @@ model User {
   birthday    String?
   phoneNumber String?
   mustChangePassword Boolean @default(false)
+  emailVerified       Boolean   @default(false)
+  failedLoginAttempts Int       @default(0)
+  loginLockedUntil    DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
 
   // Mối quan hệ Nhân viên CSKH của shop (Nhiều nhân viên thuộc 1 Shop)
   shopId    String?
@@ -127,5 +132,19 @@ model ShopUpdateRequest {
 
   @@index([shopId])
   @@index([status])
+}
+
+model EmailOtp {
+  id        String    @id @default(uuid())
+  email     String
+  purpose   String
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
 }
 

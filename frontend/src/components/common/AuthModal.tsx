@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
+import { OtpVerifyField } from './OtpVerifyField'
+
+declare global {
+  interface Window {
+    google?: any
+  }
+}
 
 interface AuthModalProps {
   isOpen: boolean
@@ -14,13 +21,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onAuthSuccess,
   initialTab = 'login',
 }) => {
-  const [tab, setTab] = useState<'login' | 'register'>(initialTab)
+  const [tab, setTab] = useState<'login' | 'register' | 'forgot'>(initialTab)
   
   // Form fields
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [otpCode, setOtpCode] = useState('')
   const [name, setName] = useState('')
   const [gender, setGender] = useState<'NAM' | 'NU' | 'KHAC'>('NAM')
+  const googleBtnRef = useRef<HTMLDivElement | null>(null)
   
   // Status states
   const [loading, setLoading] = useState(false)
@@ -31,16 +41,82 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setTab(initialTab)
+      setOtpCode('')
+      setConfirmPassword('')
       setError(null)
       setSuccessMsg(null)
     }
   }, [isOpen, initialTab])
+
+  // Tải nút Đăng nhập Google nếu đã cấu hình VITE_GOOGLE_CLIENT_ID
+  useEffect(() => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!isOpen || !googleClientId || tab === 'forgot') return
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id || !googleBtnRef.current) return
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (resp: { credential?: string }) => {
+          if (!resp?.credential) return
+          setLoading(true)
+          setError(null)
+          try {
+            const res = await fetch(`${API_BASE_URL}/auth/google`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ idToken: resp.credential }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || 'Đăng nhập Google thất bại.')
+            if (data.user?.role && data.user.role !== 'BUYER') {
+              throw new Error('Tài khoản này thuộc hệ thống quản trị/bán hàng, không đăng nhập tại Sàn Khách Hàng.')
+            }
+            onAuthSuccess(data.user, data.accessToken)
+            resetForm()
+            onClose()
+          } catch (err: any) {
+            setError(err.message)
+          } finally {
+            setLoading(false)
+          }
+        },
+      })
+      googleBtnRef.current.innerHTML = ''
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: 340,
+        text: 'continue_with',
+        shape: 'pill',
+      })
+    }
+
+    if (window.google?.accounts?.id) {
+      initGoogle()
+      return
+    }
+    const scriptId = 'zeromall-google-gsi'
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null
+    if (!script) {
+      script = document.createElement('script')
+      script.id = scriptId
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      document.head.appendChild(script)
+    }
+    script.addEventListener('load', initGoogle)
+    return () => script?.removeEventListener('load', initGoogle)
+  }, [isOpen, tab])
 
   if (!isOpen) return null
 
   const resetForm = () => {
     setEmail('')
     setPassword('')
+    setConfirmPassword('')
+    setOtpCode('')
     setName('')
     setGender('NAM')
     setError(null)
@@ -49,26 +125,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
     setSuccessMsg(null)
 
-    const endpoint = tab === 'login' ? 'login' : 'register'
-    const payload = tab === 'login' 
-      ? { email, password }
-      : { 
-          email, 
-          password, 
-          name, 
-          gender,
-          role: 'BUYER' // Mặc định đăng ký là người mua (BUYER)
-        }
+    if (tab === 'forgot') {
+      if (password.length < 6) {
+        setError('Mật khẩu mới phải có ít nhất 6 ký tự.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Mật khẩu mới và Xác nhận mật khẩu không khớp.')
+        return
+      }
+    }
+
+    setLoading(true)
+
+    const endpoint =
+      tab === 'login' ? 'login' : tab === 'register' ? 'register' : 'reset-password'
+    const payload =
+      tab === 'login'
+        ? { email, password }
+        : tab === 'register'
+        ? {
+            email,
+            password,
+            name,
+            gender,
+            otpCode,
+            role: 'BUYER',
+          }
+        : {
+            email,
+            otpCode,
+            newPassword: password,
+          }
 
     try {
       const response = await fetch(`${API_BASE_URL}/auth/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
@@ -89,8 +186,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onAuthSuccess(data.user, data.accessToken)
         resetForm()
         onClose()
+      } else if (tab === 'register') {
+        setSuccessMsg('Đăng ký & xác thực Gmail thành công! Đang chuyển sang Đăng nhập...')
+        setOtpCode('')
+        setTimeout(() => {
+          setTab('login')
+          setError(null)
+          setSuccessMsg(null)
+        }, 1200)
       } else {
-        setSuccessMsg('Đăng ký tài khoản thành công! Đang chuyển sang Đăng nhập...')
+        setSuccessMsg('Đặt lại mật khẩu thành công! Đang chuyển sang Đăng nhập...')
+        setOtpCode('')
+        setPassword('')
+        setConfirmPassword('')
         setTimeout(() => {
           setTab('login')
           setError(null)
@@ -189,7 +297,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {/* Tab Switcher */}
               <div className="flex border-b border-slate-100 mb-6">
                 <button 
-                  onClick={() => { setTab('login'); setError(null); setSuccessMsg(null); }}
+                  type="button"
+                  onClick={() => { setTab('login'); setOtpCode(''); setError(null); setSuccessMsg(null); }}
                   className={`flex-1 pb-3 text-center font-black text-sm transition cursor-pointer ${
                     tab === 'login' 
                       ? 'text-emerald-600 border-b-2 border-emerald-600' 
@@ -199,7 +308,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Đăng Nhập
                 </button>
                 <button 
-                  onClick={() => { setTab('register'); setError(null); setSuccessMsg(null); }}
+                  type="button"
+                  onClick={() => { setTab('register'); setOtpCode(''); setError(null); setSuccessMsg(null); }}
                   className={`flex-1 pb-3 text-center font-black text-sm transition cursor-pointer ${
                     tab === 'register' 
                       ? 'text-emerald-600 border-b-2 border-emerald-600' 
@@ -208,6 +318,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 >
                   Đăng Ký
                 </button>
+                {tab === 'forgot' && (
+                  <span className="flex-1 pb-3 text-center font-black text-sm text-emerald-600 border-b-2 border-emerald-600">
+                    Quên Mật Khẩu
+                  </span>
+                )}
               </div>
 
               {/* Thông báo Lỗi / Thành công */}
@@ -288,33 +403,86 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Email Tài Khoản</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Email Tài Khoản (Gmail)</label>
                   <input 
                     type="email" 
                     required
-                    placeholder="buyer@zeromall.com"
+                    placeholder="example@gmail.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
                   />
                 </div>
 
+                {(tab === 'register' || tab === 'forgot') && (
+                  <OtpVerifyField
+                    email={email}
+                    otpCode={otpCode}
+                    onOtpChange={setOtpCode}
+                    purpose={tab === 'register' ? 'REGISTER' : 'RESET_PASSWORD'}
+                    disabled={loading}
+                    onFeedback={(fb) => {
+                      if (!fb) {
+                        setError(null)
+                        setSuccessMsg(null)
+                      } else if (fb.type === 'error') {
+                        setError(fb.text)
+                        setSuccessMsg(null)
+                      } else {
+                        setSuccessMsg(fb.text)
+                        setError(null)
+                      }
+                    }}
+                  />
+                )}
+
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700">Mật Khẩu</label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      {tab === 'forgot' ? 'Mật Khẩu Mới' : 'Mật Khẩu'}
+                    </label>
                     {tab === 'login' && (
-                      <span className="text-[11px] font-semibold text-emerald-600 hover:underline cursor-pointer">Quên mật khẩu?</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab('forgot')
+                          setOtpCode('')
+                          setPassword('')
+                          setConfirmPassword('')
+                          setError(null)
+                          setSuccessMsg(null)
+                        }}
+                        className="text-[11px] font-semibold text-emerald-600 hover:underline cursor-pointer"
+                      >
+                        Quên mật khẩu?
+                      </button>
                     )}
                   </div>
                   <input 
                     type="password" 
                     required
+                    minLength={6}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
                   />
                 </div>
+
+                {tab === 'forgot' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Xác Nhận Mật Khẩu Mới</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Nhập lại mật khẩu mới"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition"
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -328,10 +496,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </>
                   ) : tab === 'login' ? (
                     <span>Đăng Nhập Khách Hàng</span>
+                  ) : tab === 'register' ? (
+                    <span>Xác Nhận OTP &amp; Đăng Ký</span>
                   ) : (
-                    <span>Hoàn Tất Đăng Ký Tài Khoản</span>
+                    <span>Xác Nhận Đổi Mật Khẩu</span>
                   )}
                 </button>
+
+                {import.meta.env.VITE_GOOGLE_CLIENT_ID && tab !== 'forgot' && (
+                  <div className="pt-2 space-y-2">
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 uppercase font-bold">
+                      <div className="flex-1 h-px bg-slate-200" />
+                      <span>Hoặc</span>
+                      <div className="flex-1 h-px bg-slate-200" />
+                    </div>
+                    <div ref={googleBtnRef} className="flex justify-center" />
+                  </div>
+                )}
               </form>
             </div>
 
