@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { OtpVerifyField } from './OtpVerifyField'
+import { ZeroMallLogoMark } from './ZeroMallLogo'
 
 declare global {
   interface Window {
@@ -238,9 +239,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Top Brand Logo */}
             <div className="relative z-10 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xl shadow-lg shadow-emerald-950">
-                  🌱
-                </div>
+                <ZeroMallLogoMark size="lg" className="shadow-lg shadow-emerald-950/60" />
                 <div>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-xl font-black tracking-tight text-white">Zero<span className="text-emerald-400">Mall</span></span>

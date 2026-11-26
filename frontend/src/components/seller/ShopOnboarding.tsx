@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { ShopAddressModal } from './ShopAddressModal'
+import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
 
 interface Address {
   fullName: string
@@ -110,7 +111,7 @@ export const ShopOnboarding: React.FC<ShopOnboardingProps> = ({
       <header className="bg-white border-b border-slate-200/80 py-4 shadow-3xs sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
           <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
-            <span className="text-2xl">🌱</span>
+            <ZeroMallLogoMark size="md" />
             <span className="text-lg font-black tracking-tight text-slate-800">
               Zero<span className="text-emerald-600">Mall</span> 
               <span className="text-slate-400 font-normal text-sm ml-2">Đăng Ký Người Bán</span>

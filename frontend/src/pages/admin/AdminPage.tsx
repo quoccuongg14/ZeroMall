@@ -10,6 +10,7 @@ import { CommissionSettingTab } from '../../components/admin/CommissionSettingTa
 import { AuditLogsTab } from '../../components/admin/AuditLogsTab'
 import { AiEvaluationStudioTab } from '../../components/admin/AiEvaluationStudioTab'
 import { BannersTab } from '../../components/admin/banners/BannersTab'
+import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
 
 interface AdminPageProps {
   user: any
@@ -260,7 +261,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* Logo Header */}
           <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3 bg-white shrink-0">
-            <span className="text-2xl">🛡️</span>
+            <ZeroMallLogoMark size="md" />
             <div className="flex flex-col">
               <span className="text-sm font-black tracking-tight text-slate-800">
                 Zero<span className="text-emerald-600">Mall</span>

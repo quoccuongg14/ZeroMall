@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
+import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
 
 interface AdminAuthFormProps {
   onAuthSuccess: (user: any, token: string) => void
@@ -51,9 +52,7 @@ export const AdminAuthForm: React.FC<AdminAuthFormProps> = ({
       <header className="bg-slate-900/90 border-b border-slate-800/80 py-3.5 px-6 sm:px-12 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xl shadow-lg shadow-emerald-950">
-              🛡️
-            </div>
+            <ZeroMallLogoMark size="lg" className="shadow-lg shadow-emerald-950/60" />
             <div>
               <div className="flex items-baseline gap-2">
                 <span className="text-xl font-black tracking-tight text-white">Zero<span className="text-emerald-400">Mall</span></span>

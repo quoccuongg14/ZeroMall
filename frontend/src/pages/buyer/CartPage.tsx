@@ -9,6 +9,7 @@ import { SepayPaymentModal } from '../../components/buyer/SepayPaymentModal'
 import { ShopVoucherModal } from '../../components/buyer/ShopVoucherModal'
 import { PlatformVoucherModal } from '../../components/buyer/PlatformVoucherModal'
 import type { ShippingAddress } from '../../models/address.model'
+import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
 
 export const VIETNAM_PROVINCES = [
   "Thành phố Hà Nội",
@@ -868,7 +869,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       {/* 1. Header */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/60 shadow-2xs flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🌱</span>
+          <ZeroMallLogoMark size="md" />
           <div className="flex items-center gap-2">
             <span className="text-xl font-black text-slate-800 tracking-tight">
               Zero<span className="text-emerald-600">Mall</span>

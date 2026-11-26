@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import type { Order } from '../../models/order.model'
 import { uploadProductImage, uploadReturnEvidence } from '../../services/supabase-storage.service'
+import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
 
 interface ReviewModalProps {
   isOpen: boolean
@@ -110,7 +111,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ isOpen, order, user, o
         {/* Header */}
         <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-3xs py-4 px-6 sm:px-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🌱</span>
+            <ZeroMallLogoMark size="md" />
             <div className="flex items-center gap-3">
               <span className="text-lg font-black text-[#ee4d2d] tracking-tight">ZeroMall</span>
               <span className="text-slate-350 font-light text-base">|</span>

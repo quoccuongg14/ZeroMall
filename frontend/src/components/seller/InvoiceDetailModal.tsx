@@ -1,5 +1,6 @@
 import React, { useRef } from 'react'
 import type { Order } from '../../models/order.model'
+import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
 
 interface InvoiceDetailModalProps {
   order: Order
@@ -124,9 +125,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           <div className="border-b-2 border-slate-800 pb-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-2xl shadow-sm">
-                  🌱
-                </div>
+                <ZeroMallLogoMark size="lg" className="shadow-sm" />
                 <div>
                   <h1 className="text-xl font-black text-slate-900 tracking-tight">
                     Zero<span className="text-emerald-600">Mall</span> E-COMMERCE

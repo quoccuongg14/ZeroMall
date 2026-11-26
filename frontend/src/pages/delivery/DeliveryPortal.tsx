@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import type { ReturnData } from '../../services/return.service'
+import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
 
 interface TrackingLog {
   id: string
@@ -365,15 +366,7 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
         <header className="bg-slate-900 text-white py-3.5 px-6 sm:px-12 sticky top-0 z-30 shadow-md">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div className="flex items-center gap-3.5">
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-xs font-black ${
-                  isAssignedSoc
-                    ? 'bg-gradient-to-tr from-indigo-600 to-purple-600'
-                    : 'bg-gradient-to-tr from-sky-500 to-emerald-600'
-                }`}
-              >
-                {isAssignedSoc ? '🏭' : '🏢'}
-              </div>
+              <ZeroMallLogoMark size="lg" className="shadow-xs" />
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-xl font-black tracking-tight text-white">

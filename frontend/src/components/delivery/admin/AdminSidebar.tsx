@@ -1,5 +1,6 @@
 import React from 'react'
 import type { AdminActiveNav } from './types'
+import { ZeroMallLogoMark } from '../../common/ZeroMallLogo'
 
 interface AdminSidebarProps {
   activeNav: AdminActiveNav
@@ -75,9 +76,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       <div>
         <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-lg shadow-md font-black">
-              🚚
-            </div>
+            <ZeroMallLogoMark size="md" className="shadow-md" />
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-base font-black tracking-tight text-white">

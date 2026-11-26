@@ -4,6 +4,7 @@ import type { CartItem } from '../../models/cart.model'
 import { NotificationPopover } from '../common/NotificationPopover'
 import { useLanguage } from '../../context/LanguageContext'
 import { VisualSearchModal } from './ai/VisualSearchModal'
+import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
 
 interface HeaderProps {
   cart: CartItem[]
@@ -213,8 +214,8 @@ export const Header: React.FC<HeaderProps> = ({
           if (onBackToHome) onBackToHome()
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }}>
-          <div className="flex items-center gap-1.5 hover:opacity-90 transition">
-            <span className="text-2xl">🌱</span>
+          <div className="flex items-center gap-2 hover:opacity-90 transition">
+            <ZeroMallLogoMark size="md" />
             <span className="text-xl font-black tracking-tight text-slate-800">
               Zero<span className="text-emerald-600">Mall</span>
             </span>

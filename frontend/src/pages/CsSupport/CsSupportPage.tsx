@@ -11,6 +11,7 @@ import { CsUsersTab } from '../../components/cs-support/CsUsersTab'
 import { CsPriceAuditTab } from '../../components/cs-support/compliance/CsPriceAuditTab'
 import { CsShopProfileAuditsTab } from '../../components/cs-support/CsShopProfileAuditsTab'
 import { subscribeDisputeChanges } from '../../services/supabase-realtime.service'
+import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
 
 interface CsSupportPageProps {
   user: any
@@ -356,7 +357,7 @@ export const CsSupportPage: React.FC<CsSupportPageProps> = ({
       <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 sticky top-0 h-screen z-20">
         <div className="flex flex-col">
           <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3 bg-white">
-            <span className="text-2xl">🎧</span>
+            <ZeroMallLogoMark size="md" />
             <div className="flex flex-col">
               <span className="text-sm font-black tracking-tight text-slate-800">
                 Zero<span className="text-emerald-600">Mall</span>
