@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { API_BASE_URL, TRYON_SERVICE_URL } from '../../../../config/api.config'
 import type { Product } from '../../FlashSale'
 import type {
@@ -21,6 +21,7 @@ import {
   flattenOutfitItems,
 } from './tryonUtils'
 import { addOutfitBundleToCart } from '../../../../utils/cartBundleHelper'
+import { predictProductSize, type SizePredictionResult } from '../../../../utils/sizePredictor'
 
 export const useTryOnLogic = ({
   isOpen,
@@ -61,6 +62,7 @@ export const useTryOnLogic = ({
   const [gemBalance, setGemBalance] = useState<number | null>(7060)
   const [tryonEngineMode, setTryonEngineMode] = useState<TryonEngineMode>('mage')
   const [showMageConfirmModal, setShowMageConfirmModal] = useState<boolean>(false)
+  const [sizeOverrides, setSizeOverrides] = useState<Record<string, string>>({})
 
   // Đồng bộ dọn sạch ảnh cũ & nạp số dư Gem từ Backend
   useEffect(() => {
@@ -918,7 +920,7 @@ export const useTryOnLogic = ({
     }
     if (onAddToCart) {
       const variant = `Size ${fitResult?.recommended_size || 'L'}`
-      const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart)
+      const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedItemSizes)
       if (addedCount === 0) {
         triggerToast('⚠️ Các món trong bộ phối hiện đã hết hàng!')
         return
@@ -1054,7 +1056,25 @@ export const useTryOnLogic = ({
     }
     const items = bundle.items.map((it) => it.product).filter(Boolean)
     const variant = `Size ${fitResult?.recommended_size || 'L'}`
-    const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart)
+    const bundleSizes: Record<string, string> = {}
+    items.forEach((item) => {
+      const isOuter = bundle.items.some(
+        (bIt) =>
+          bIt.product?.id === item.id &&
+          ((bIt.slot as string) === 'outer_top' || /khoác|blazer|jacket/i.test(bIt.role || ''))
+      )
+      const pred = predictProductSize({
+        product: item,
+        heightCm: Number(height) || 170,
+        weightKg: Number(weight) || 65,
+        gender,
+        isOuterLayer: isOuter,
+      })
+      if (pred.recommendedSize) {
+        bundleSizes[item.id] = pred.recommendedSize
+      }
+    })
+    const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart, bundleSizes)
     if (addedCount === 0) {
       triggerToast('⚠️ Các món trong set này hiện đã hết hàng!')
       return
@@ -1081,6 +1101,41 @@ export const useTryOnLogic = ({
   }
 
   const outfitItems = flattenOutfitItems(selectedOutfit)
+
+  const predictedSizes = useMemo<Record<string, SizePredictionResult>>(() => {
+    const map: Record<string, SizePredictionResult> = {}
+    const h = Number(height) || 170
+    const w = Number(weight) || 65
+    outfitItems.forEach((item) => {
+      map[item.id] = predictProductSize({
+        product: item,
+        heightCm: h,
+        weightKg: w,
+        gender,
+        isOuterLayer: selectedOutfit.outer_top?.id === item.id,
+      })
+    })
+    return map
+  }, [outfitItems, selectedOutfit.outer_top?.id, height, weight, gender])
+
+  const resolvedItemSizes = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    outfitItems.forEach((item) => {
+      const pred = predictedSizes[item.id]
+      const override = sizeOverrides[item.id]
+      if (override && pred?.availableOptions?.includes(override)) {
+        map[item.id] = override
+      } else if (pred?.recommendedSize) {
+        map[item.id] = pred.recommendedSize
+      }
+    })
+    return map
+  }, [outfitItems, predictedSizes, sizeOverrides])
+
+  const setItemSizeOverride = (productId: string, size: string) => {
+    setSizeOverrides((prev) => ({ ...prev, [productId]: size }))
+  }
+
   const totalOutfitPrice = outfitItems.reduce((sum, item) => {
     const raw = item.price || item.flashPrice || 0
     const num = typeof raw === 'number' ? raw : (parseFloat(String(raw).replace(/[^0-9]/g, '')) || 0)
@@ -1144,6 +1199,9 @@ export const useTryOnLogic = ({
     fileInputRef,
     customGarmentInputRef,
     outfitItems,
+    predictedSizes,
+    resolvedItemSizes,
+    setItemSizeOverride,
     totalOutfitPrice,
     handleSearchDatabase,
     handlePhotoUpload,

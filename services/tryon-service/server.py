@@ -216,18 +216,191 @@ class Body3DGenerator:
 # ---------------------------------------------------------------------------
 class GarmentFitEngine:
     @staticmethod
+    def _extract_item_options(item_spec: dict = None) -> tuple:
+        if not item_spec:
+            return ("Kích thước", [])
+        vg = item_spec.get("variationGroups")
+        if isinstance(vg, str):
+            try:
+                vg = json.loads(vg)
+            except Exception:
+                vg = []
+        if isinstance(vg, list) and len(vg) > 0:
+            # Ưu tiên nhóm có chữ size / kích / chiều dài / chu vi
+            for g in vg:
+                gname = str((g or {}).get("name") or "")
+                opts = (g or {}).get("options") or []
+                if any(k in gname.lower() for k in ["size", "kích", "dài", "vòng", "mặt"]) and isinstance(opts, list) and opts:
+                    return (gname, [str(o) for o in opts])
+            first_g = vg[0] or {}
+            return (str(first_g.get("name") or "Kích thước"), [str(o) for o in (first_g.get("options") or [])])
+        return ("Kích thước", [])
+
+    @staticmethod
+    def recommend_item_size(user_measurements: dict, item_spec: dict = None, is_outerwear: bool = False) -> dict:
+        """
+        Dự đoán & gợi ý Size chính xác theo Chiều cao, Cân nặng, Giới tính và Loại sản phẩm
+        (Áo trong, Áo khoác 2 lớp, Quần size chữ/số, Thắt lưng, Đồng hồ, Vòng tay, Giày dép).
+        """
+        h = float(user_measurements.get("height_cm", 170) or 170)
+        w = float(user_measurements.get("weight_kg", 65) or 65)
+        gender = str(user_measurements.get("gender", "male") or "male").lower()
+        waist = float(user_measurements.get("waist_cm", 78) or 78)
+        chest = float(user_measurements.get("chest_cm", 94) or 94)
+
+        name = str((item_spec or {}).get("name") or "").lower()
+        cat = str((item_spec or {}).get("category") or "").lower()
+        group_name, available_options = GarmentFitEngine._extract_item_options(item_spec)
+
+        # Kiểm tra giày dép (không đoán số giày từ cân nặng)
+        if "giày" in cat or "dép" in cat or any(k in name for k in ["giày", "sneaker", "boots", "loafer", "dép", "sandal"]):
+            return {
+                "applicable": False,
+                "recommended_size": available_options[min(2, len(available_options) - 1)] if available_options else "Chọn theo chân",
+                "alt_size": None,
+                "note": "Cỡ giày phụ thuộc vào chiều dài bàn chân (cm), bạn vui lòng chọn trực tiếp theo cỡ chân thường đi.",
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Thắt lưng / Dây nịt
+        if any(k in name for k in ["thắt lưng", "dây nịt"]):
+            if waist < 76: rec, alt = "105cm", "110cm"
+            elif waist < 84: rec, alt = "110cm", "115cm"
+            elif waist < 92: rec, alt = "115cm", "120cm"
+            else: rec, alt = "120cm", None
+            if available_options and rec not in available_options:
+                rec = available_options[min(1, len(available_options) - 1)]
+            return {
+                "applicable": True,
+                "recommended_size": rec,
+                "alt_size": alt,
+                "note": f"Vòng eo ước tính ~{waist}cm phù hợp dây dài {rec}" + (f" (hoặc {alt} nếu thích đuôi dây dư rộng)" if alt else "."),
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Đồng hồ
+        if "đồng hồ" in cat or "đồng hồ" in name:
+            if available_options:
+                if "28mm" in available_options and "32mm" in available_options:
+                    rec = "32mm" if (h >= 163 or w >= 55) else "28mm"
+                    alt = "28mm" if rec == "32mm" else "32mm"
+                elif "40mm" in available_options:
+                    rec = "42mm" if (h >= 178 and w >= 72 and "42mm" in available_options) else ("38mm" if (h < 166 and w < 58 and "38mm" in available_options) else "40mm")
+                    alt = "40mm" if rec != "40mm" else None
+                else:
+                    rec, alt = available_options[0], None
+            else:
+                rec, alt = ("28mm" if gender == "female" else "40mm"), None
+            return {
+                "applicable": True,
+                "recommended_size": rec,
+                "alt_size": alt,
+                "note": f"Mặt {rec} cân đối cổ tay theo thể trạng {int(h)}cm • {int(w)}kg.",
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Vòng tay
+        if "vòng tay" in name:
+            rec = "18cm" if (gender == "male" or w >= 68) else ("17cm" if w >= 52 else "16cm")
+            if available_options and rec not in available_options:
+                rec = available_options[min(1, len(available_options) - 1)]
+            return {
+                "applicable": True,
+                "recommended_size": rec,
+                "alt_size": None,
+                "note": f"Chu vi vòng {rec} ôm vừa cổ tay theo chiều cao {int(h)}cm • {int(w)}kg.",
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Mũ, Kính, Túi, Phụ kiện Freesize
+        if any(c in cat for c in ["túi", "ví", "phụ kiện"]) and not any(k in name for k in ["áo", "quần", "váy", "đầm"]):
+            rec = available_options[0] if available_options else "Freesize"
+            return {
+                "applicable": True,
+                "recommended_size": rec,
+                "alt_size": None,
+                "note": "Phụ kiện thiết kế Freesize dễ điều chỉnh theo nhiều vóc dáng.",
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Tính chỉ số Size chuẩn form Việt Nam (0=S, 1=M, 2=L, 3=XL, 4=XXL)
+        if gender == "female":
+            h_idx = 0 if h < 156 else (1 if h < 162 else (2 if h < 168 else 3))
+            w_idx = 0 if w < 46 else (1 if w < 53 else (2 if w < 61 else 3))
+            base_idx = max(h_idx, w_idx)
+            # Kiểm tra ranh giới cân nặng sát ngưỡng trên để gợi ý +1 size
+            near_upper = (w_idx == base_idx and ((base_idx == 0 and w >= 44) or (base_idx == 1 and w >= 51) or (base_idx == 2 and w >= 58)))
+            letters = ["S", "M", "L", "XL"]
+        else:
+            h_idx = 0 if h < 164 else (1 if h < 171 else (2 if h < 177 else (3 if h < 183 else 4)))
+            w_idx = 0 if w < 56 else (1 if w < 65 else (2 if w < 74 else (3 if w < 84 else 4)))
+            base_idx = max(h_idx, w_idx)
+            near_upper = (w_idx == base_idx and ((base_idx == 0 and w >= 54) or (base_idx == 1 and w >= 63) or (base_idx == 2 and w >= 71) or (base_idx == 3 and w >= 80)))
+            letters = ["S", "M", "L", "XL", "XXL"]
+
+        is_outer = is_outerwear or any(k in name for k in ["áo khoác", "bomber", "blazer", "vest", "hoodie", "cardigan", "jacket"])
+        is_bottom_num = any(o.isdigit() for o in available_options)
+
+        # Quần có size số (29-34 Nam / 26-30 Nữ)
+        if is_bottom_num or (any(k in name for k in ["quần jean", "quần tây", "quần âu", "quần kaki"]) and available_options):
+            num_opts = [o for o in available_options if o.isdigit()] or (["26", "27", "28", "29", "30"] if gender == "female" else ["29", "30", "31", "32", "34"])
+            idx = min(len(num_opts) - 1, base_idx)
+            rec = num_opts[idx]
+            alt = num_opts[idx + 1] if (near_upper and idx + 1 < len(num_opts)) else (num_opts[idx - 1] if idx > 0 and not near_upper else None)
+            return {
+                "applicable": True,
+                "recommended_size": rec,
+                "alt_size": alt,
+                "note": f"Eo ước tính ~{waist}cm ({int(h)}cm • {int(w)}kg) mặc vừa đẹp size {rec}" + (f" (chọn {alt} nếu thích thoải mái)" if alt and int(alt) > int(rec) else "."),
+                "available_options": available_options,
+                "group_name": group_name,
+            }
+
+        # Áo / Đầm / Váy / Jogger dùng size chữ
+        eff_idx = min(len(letters) - 1, base_idx + (1 if (is_outer and near_upper) else 0))
+        rec = letters[eff_idx]
+        if available_options and rec not in available_options:
+            # Nếu sản phẩm chỉ có đến XL mà gợi ý XXL -> kẹp về XL
+            if rec == "XXL" and "XL" in available_options:
+                rec = "XL"
+            else:
+                rec = available_options[min(eff_idx, len(available_options) - 1)]
+
+        alt = None
+        if eff_idx + 1 < len(letters) and (not available_options or letters[eff_idx + 1] in available_options):
+            if is_outer or near_upper:
+                alt = letters[eff_idx + 1]
+
+        layer_msg = " (tính dư phom khoác ngoài rộng rãi)" if is_outer else f" (ngực ~{chest}cm, eo ~{waist}cm)"
+        return {
+            "applicable": True,
+            "recommended_size": rec,
+            "alt_size": alt,
+            "note": f"Thể trạng {int(h)}cm • {int(w)}kg chuẩn size {rec}{layer_msg}" + (f" • Muốn mặc oversize chọn {alt}." if alt else "."),
+            "available_options": available_options,
+            "group_name": group_name,
+        }
+
+    @staticmethod
     def evaluate_pant_fit(user_measurements: dict, pant_spec: dict = None):
         """
-        Đối chiếu số đo người dùng với thông số chiếc quần để đưa ra:
+        Đối chiếu số đo người dùng với thông số món đồ để đưa ra:
+        - Size đề xuất khớp đúng loại món đồ (Áo, Áo khoác, Quần, Thắt lưng...)
         - Bản đồ độ căng áp lực (Pressure Tension Heatmap: Eo, Mông, Đùi, Ống chân)
         - Điểm vừa vặn (Fit Score /100)
-        - Lời khuyên cụ thể theo từng điểm chạm cơ thể
         """
         waist = user_measurements["waist_cm"]
         hip = user_measurements["hip_cm"]
         thigh = user_measurements["thigh_cm"]
         outseam = user_measurements["outseam_cm"]
-        rec_size = user_measurements["recommended_pant_size"].split()[0] # S, M, L, XL, 2XL
+        size_pred = GarmentFitEngine.recommend_item_size(user_measurements, pant_spec)
+        rec_size = size_pred.get("recommended_size") or user_measurements["recommended_pant_size"].split()[0]
+        letter_key = user_measurements["recommended_pant_size"].split()[0]
 
         # Kích thước chuẩn tương ứng của size đề xuất (cm)
         size_standards = {
@@ -237,7 +410,7 @@ class GarmentFitEngine:
             "XL": {"waist": 90, "hip": 108, "thigh": 64, "length": 105},
             "2XL": {"waist": 96, "hip": 114, "thigh": 68, "length": 107}
         }
-        std = size_standards.get(rec_size, size_standards["L"])
+        std = size_standards.get(letter_key, size_standards["L"])
 
         # Độ chênh lệch áp lực (%)
         waist_diff = round(((waist - std["waist"]) / std["waist"]) * 100, 1)
@@ -2471,6 +2644,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     "/api/tryon/fit-garment",
                     "/api/tryon/stylist-recommend",
                     "/api/tryon/generate-top-outfits",
+                    "/api/tryon/recommend-sizes",
                     "/api/tryon/extract-garment",
                     "/api/tryon/extract-face",
                     "/api/tryon/full-pipeline"
@@ -2548,6 +2722,36 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
 
             self._set_cors(200)
             res = {"success": True, "measurements": measurements, "fit": fit_result}
+            self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
+
+        elif self.path == "/api/tryon/recommend-sizes":
+            # Dự đoán size chuẩn cho danh sách sản phẩm theo chiều cao, cân nặng, giới tính
+            h = float(payload.get("height_cm", 170) or 170)
+            w = float(payload.get("weight_kg", 65) or 65)
+            gender = str(payload.get("gender", "male") or "male")
+            items = payload.get("items") or []
+            has_inner_layer = bool(payload.get("has_inner_layer", False))
+
+            measurements = Body3DGenerator.calculate_measurements(h, w, gender)
+            recommendations = []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                is_outer = bool(item.get("is_outerwear")) or (has_inner_layer and str(item.get("slot") or "") == "outer_top")
+                rec = GarmentFitEngine.recommend_item_size(measurements, item, is_outerwear=is_outer)
+                recommendations.append({
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "slot": item.get("slot"),
+                    **rec,
+                })
+
+            self._set_cors(200)
+            res = {
+                "success": True,
+                "measurements": measurements,
+                "recommendations": recommendations,
+            }
             self.wfile.write(json.dumps(res, ensure_ascii=False).encode("utf-8"))
 
         elif self.path == "/api/tryon/detect-gender":

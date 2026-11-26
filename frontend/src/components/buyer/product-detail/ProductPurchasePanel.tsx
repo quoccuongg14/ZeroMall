@@ -2,6 +2,12 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Product, VariationGroup, VariationRow } from '../FlashSale'
 import { isFashionProduct } from '../ai/tryon/tryonUtils'
+import {
+  loadSavedBodyProfile,
+  saveBodyProfile,
+  predictProductSize,
+  type BodyProfile,
+} from '../../../utils/sizePredictor'
 
 interface ProductPurchasePanelProps {
   product: Product
@@ -54,6 +60,27 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
 }) => {
   const navigate = useNavigate()
   const isFashion = isFashionProduct(product)
+  const [bodyProfile, setBodyProfile] = React.useState<BodyProfile>(() => loadSavedBodyProfile())
+
+  const updateBodyProfile = (patch: Partial<BodyProfile>) => {
+    setBodyProfile((prev) => {
+      const next = { ...prev, ...patch }
+      saveBodyProfile(next)
+      return next
+    })
+  }
+
+  const sizePrediction = React.useMemo(
+    () =>
+      predictProductSize({
+        product,
+        heightCm: bodyProfile.heightCm,
+        weightKg: bodyProfile.weightKg,
+        gender: bodyProfile.gender,
+      }),
+    [product, bodyProfile.heightCm, bodyProfile.weightKg, bodyProfile.gender]
+  )
+
   const variationGroups: VariationGroup[] = product.variationGroups && product.variationGroups.length > 0
     ? product.variationGroups
     : (product.variants && product.variants.length > 0 ? [{ name: 'Phân loại', options: product.variants }] : [])
@@ -336,6 +363,95 @@ export const ProductPurchasePanel: React.FC<ProductPurchasePanelProps> = ({
                 </div>
               </div>
             ))}
+
+            {isFashion && (sizePrediction.applicable || sizePrediction.note) && (
+              <div className="ml-0 sm:ml-28 bg-orange-50/70 border border-orange-200/80 rounded-xl p-2.5 space-y-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm">📏</span>
+                    <span className="font-bold text-slate-800">
+                      {sizePrediction.applicable
+                        ? `AI Gợi Ý: Size ${sizePrediction.recommendedSize}`
+                        : 'Lưu Ý Chọn Size'}
+                    </span>
+                    {sizePrediction.applicable && sizePrediction.alternativeSize && (
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        (hoặc {sizePrediction.alternativeSize})
+                      </span>
+                    )}
+                  </div>
+                  {sizePrediction.applicable &&
+                    sizePrediction.groupIndex >= 0 &&
+                    sizePrediction.recommendedSize && (
+                      <button
+                        type="button"
+                        disabled={!sizePrediction.inStock}
+                        onClick={() => {
+                          if (selectedOptions[sizePrediction.groupIndex] !== sizePrediction.recommendedSize) {
+                            onSelectOption(sizePrediction.groupIndex, sizePrediction.recommendedSize)
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                          selectedOptions[sizePrediction.groupIndex] === sizePrediction.recommendedSize
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-[#ee4d2d] hover:bg-[#d93b1d] text-white disabled:opacity-40'
+                        }`}
+                      >
+                        {selectedOptions[sizePrediction.groupIndex] === sizePrediction.recommendedSize
+                          ? `✓ Đã chọn ${sizePrediction.recommendedSize}`
+                          : `Chọn ${sizePrediction.recommendedSize}`}
+                      </button>
+                    )}
+                </div>
+
+                {sizePrediction.note && (
+                  <p className="text-[11px] text-slate-600 leading-snug">{sizePrediction.note}</p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-orange-200/60 text-[11px]">
+                  <label className="flex items-center gap-1 text-slate-600">
+                    <span>Cao</span>
+                    <input
+                      type="number"
+                      min={130}
+                      max={220}
+                      value={bodyProfile.heightCm}
+                      onChange={(e) => updateBodyProfile({ heightCm: Math.max(130, Math.min(220, Number(e.target.value) || 170)) })}
+                      className="w-14 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-center font-semibold text-slate-800 focus:outline-none focus:border-[#ee4d2d]"
+                    />
+                    <span>cm</span>
+                  </label>
+                  <label className="flex items-center gap-1 text-slate-600">
+                    <span>Nặng</span>
+                    <input
+                      type="number"
+                      min={30}
+                      max={180}
+                      value={bodyProfile.weightKg}
+                      onChange={(e) => updateBodyProfile({ weightKg: Math.max(30, Math.min(180, Number(e.target.value) || 65)) })}
+                      className="w-14 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-center font-semibold text-slate-800 focus:outline-none focus:border-[#ee4d2d]"
+                    />
+                    <span>kg</span>
+                  </label>
+                  <div className="flex bg-white border border-slate-200 rounded overflow-hidden">
+                    {(['male', 'female'] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => updateBodyProfile({ gender: g })}
+                        className={`px-2 py-0.5 font-semibold cursor-pointer transition ${
+                          bodyProfile.gender === g
+                            ? 'bg-[#ee4d2d] text-white'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {g === 'male' ? 'Nam' : 'Nữ'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

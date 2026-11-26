@@ -2,6 +2,7 @@ import React from 'react'
 import type { Product } from '../../FlashSale'
 import type { BodyMeasurements, ExtractedGarment, FitResult, TryonEngineMode } from './types'
 import { formatCurrencyVND } from '../../../../utils/formatters'
+import type { SizePredictionResult } from '../../../../utils/sizePredictor'
 
 interface TryOnMirrorStudioProps {
   activeTab: 'photo' | 'scanner' | 'heatmap'
@@ -21,6 +22,9 @@ interface TryOnMirrorStudioProps {
   fitResult: FitResult | null
   measurements: BodyMeasurements | null
   outfitItems: Product[]
+  predictedSizes: Record<string, SizePredictionResult>
+  selectedItemSizes: Record<string, string>
+  onSelectItemSize: (productId: string, size: string) => void
   totalOutfitPrice: number
   onAddWholeOutfitToCart: () => void
   fileInputRef: React.RefObject<HTMLInputElement | null>
@@ -51,6 +55,9 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
   fitResult,
   measurements,
   outfitItems,
+  predictedSizes,
+  selectedItemSizes,
+  onSelectItemSize,
   totalOutfitPrice,
   onAddWholeOutfitToCart,
   fileInputRef,
@@ -302,7 +309,14 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
                     {formatCurrencyVND(totalOutfitPrice)}
                   </span>
                   <span className="text-emerald-700 font-semibold text-[10px] bg-emerald-50 px-2 py-0.2 rounded-full border border-emerald-200">
-                    Khớp {fitResult?.fit_score || 95}% • Size {fitResult?.recommended_size || measurements?.recommended_pant_size || 'L'}
+                    {(() => {
+                      const focusItem = selectedPant || outfitItems[0]
+                      const focusSize = focusItem
+                        ? selectedItemSizes[focusItem.id] || predictedSizes[focusItem.id]?.recommendedSize
+                        : undefined
+                      const displaySize = focusSize || fitResult?.recommended_size || measurements?.recommended_pant_size || 'L'
+                      return `Khớp ${fitResult?.fit_score || 95}% • Size ${displaySize}`
+                    })()}
                   </span>
                 </div>
               </div>
@@ -521,6 +535,72 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
           </div>
         </div>
       </div>
+
+      {/* KHỐI 3: GỢI Ý SIZE THEO CHIỀU CAO & CÂN NẶNG CHO TỪNG MÓN */}
+      {outfitItems.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5 shadow-2xs text-slate-800">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+              <span>📏</span> Gợi Ý Size Chuẩn Cho Từng Món
+            </h4>
+            <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {height || '--'}cm • {weight || '--'}kg • {gender === 'male' ? 'Nam' : 'Nữ'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {outfitItems.map((item) => {
+              const pred = predictedSizes[item.id]
+              const activeSize = selectedItemSizes[item.id] || pred?.recommendedSize || ''
+              const options = pred?.availableOptions || []
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {item.image && (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-slate-800 truncate">{item.name}</p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {pred?.applicable ? (
+                          <>
+                            <span className="text-emerald-700 font-semibold">
+                              Gợi ý: {pred.recommendedSize}
+                            </span>
+                            {pred.note ? ` • ${pred.note}` : ''}
+                          </>
+                        ) : (
+                          <span>{pred?.note || 'Chọn kích cỡ phù hợp trước khi thêm giỏ'}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {options.length > 0 && (
+                    <select
+                      aria-label={`Chọn size cho ${item.name}`}
+                      value={activeSize}
+                      onChange={(e) => onSelectItemSize(item.id, e.target.value)}
+                      className="text-[11px] font-bold text-[#ee4d2d] bg-white border border-orange-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#ee4d2d] cursor-pointer shrink-0 max-w-[110px]"
+                    >
+                      {options.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* LỜI KHUYÊN TỪ AI STYLIST */}
       {fitResult && (

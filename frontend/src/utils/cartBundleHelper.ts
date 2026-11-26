@@ -76,7 +76,8 @@ function resolveBundleItemVariant(prod: Product, preferredVariant: string): stri
 export function addOutfitBundleToCart(
   products: Product[],
   variant: string,
-  onAddToCart: (product: Product, quantity: number, variant: string) => void
+  onAddToCart: (product: Product, quantity: number, variant: string) => void,
+  perItemVariants?: Record<string, string>
 ): AddBundleResult {
   const uniqueMap = new Map<string, Product>()
   for (const p of products) {
@@ -105,9 +106,9 @@ export function addOutfitBundleToCart(
   const bundleKeys: string[] = []
 
   for (const prod of validProducts) {
-    const resolvedVariant = resolveBundleItemVariant(prod, variant)
-    onAddToCart(prod, 1, resolvedVariant)
-    bundleKeys.push(`${prod.id}#${resolvedVariant}`)
+    const chosenVariant = perItemVariants?.[prod.id] || resolveBundleItemVariant(prod, variant)
+    onAddToCart(prod, 1, chosenVariant)
+    bundleKeys.push(`${prod.id}#${chosenVariant}`)
   }
 
   if (bundleKeys.length > 0) {

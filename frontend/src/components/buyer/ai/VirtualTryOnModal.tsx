@@ -112,6 +112,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               fitResult={logic.fitResult}
               measurements={logic.measurements}
               outfitItems={logic.outfitItems}
+              predictedSizes={logic.predictedSizes}
+              selectedItemSizes={logic.resolvedItemSizes}
+              onSelectItemSize={logic.setItemSizeOverride}
               totalOutfitPrice={logic.totalOutfitPrice}
               onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
               fileInputRef={logic.fileInputRef}
