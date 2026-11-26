@@ -44,6 +44,39 @@ import { trackUserEngagement } from './services/ai-recommendation.service'
 
 // Wrappers and containers for React Router
 
+function DocumentTitleSync({
+  isSellerHost,
+  isAdminHost,
+  isDeliveryHost,
+}: {
+  isSellerHost: boolean;
+  isAdminHost: boolean;
+  isDeliveryHost: boolean;
+}) {
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = location.pathname.toLowerCase();
+    let nextTitle = 'ZeroMall - Mua sắm online';
+
+    if (isSellerHost || path.startsWith('/seller')) {
+      nextTitle = 'ZeroMall Seller - Kênh Người Bán';
+    } else if (path.startsWith('/cs-support')) {
+      nextTitle = 'ZeroMall CSKH - Trung Tâm Hỗ Trợ';
+    } else if (isAdminHost || path.startsWith('/admin')) {
+      nextTitle = 'ZeroMall Admin - Quản Trị Hệ Thống';
+    } else if (isDeliveryHost || path.startsWith('/delivery')) {
+      nextTitle = 'ZeroMall Express - Giao Hàng Nhanh';
+    }
+
+    if (document.title !== nextTitle) {
+      document.title = nextTitle;
+    }
+  }, [location.pathname, isSellerHost, isAdminHost, isDeliveryHost]);
+
+  return null;
+}
+
 function DeliveryPortalWrapper() {
   return <DeliveryPortal onBackToHome={() => { window.location.href = getBuyerHomeUrl(); }} />
 }
@@ -911,6 +944,11 @@ function App() {
 
   return (
     <Router>
+      <DocumentTitleSync
+        isSellerHost={isSellerHost}
+        isAdminHost={isAdminHost}
+        isDeliveryHost={isDeliveryHost}
+      />
       <Routes>
         {/* If visiting seller subdomain, route default to Seller Portal */}
         {isSellerHost ? (
