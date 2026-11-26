@@ -1,4 +1,5 @@
 import { apiRequest } from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 import { io } from 'socket.io-client';
 
 export interface ChatConversation {
@@ -73,8 +74,17 @@ export async function markConversationRead(conversationId: string, userType: 'BU
 }
 
 export function createChatSocket() {
+  const explicitUrl = import.meta.env.VITE_CHAT_SOCKET_URL;
+  if (explicitUrl) {
+    return io(explicitUrl, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+    });
+  }
   const host = typeof window !== 'undefined' ? window.location.hostname || 'localhost' : 'localhost';
-  return io(`http://${host}:3007/chat`, {
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+  const socketUrl = isLocalHost ? `http://${host}:3007/chat` : `${API_BASE_URL}/chat`;
+  return io(socketUrl, {
     transports: ['websocket', 'polling'],
     autoConnect: true,
   });

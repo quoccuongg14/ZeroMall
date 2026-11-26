@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { API_BASE_URL } from '../../config/api.config'
+import { API_BASE_URL, getDeliveryPortalUrl } from '../../config/api.config'
 import type { Order } from '../../models/order.model'
 import { orderService } from '../../services/order.service'
 import { formatOrderId } from '../../utils/orderUtils'
@@ -724,7 +724,7 @@ export const ShopOrders: React.FC<ShopOrdersProps> = ({ user, token, activeSubMe
                         </button>
 
                         <a
-                          href="http://delivery.zeromall.local:3000"
+                          href={getDeliveryPortalUrl()}
                           target="_blank"
                           rel="noreferrer"
                           className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition duration-200 flex items-center gap-1 cursor-pointer"

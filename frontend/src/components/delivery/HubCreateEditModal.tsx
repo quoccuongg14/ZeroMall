@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { API_BASE_URL } from '../../config/api.config'
+import { API_BASE_URL, getDeliveryPortalUrl } from '../../config/api.config'
 import type { LatLngCoords } from '../buyer/address/types'
 import { useVietnamAddress } from '../buyer/address/useVietnamAddress'
 import { AddressLocationSelects } from '../buyer/address/AddressLocationSelects'
@@ -416,7 +416,7 @@ export const HubCreateEditModal: React.FC<HubCreateEditModalProps> = ({
                   Tài Khoản Gmail & Mật Khẩu Đăng Nhập Trạm
                 </h4>
                 <p className="text-[10px] text-emerald-700 font-medium">
-                  Cấp quyền cho Trưởng trạm đăng nhập trực tiếp tại <span className="font-mono font-bold">http://delivery.zeromall.local:3000</span>
+                  Cấp quyền cho Trưởng trạm đăng nhập trực tiếp tại <span className="font-mono font-bold">{getDeliveryPortalUrl()}</span>
                 </p>
               </div>
             </div>

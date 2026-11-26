@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LiveMapTracking } from '../delivery/LiveMapTracking'
 import { Truck, ExternalLink, Package, Loader2 } from 'lucide-react'
+import { getDeliveryPortalUrl } from '../../config/api.config'
 
 export interface ShipmentTrackingDialogProps {
   isOpen: boolean
@@ -169,7 +170,7 @@ export const ShipmentTrackingDialog: React.FC<ShipmentTrackingDialogProps> = ({
         <div className="pt-3 border-t shrink-0 flex items-center justify-between">
           {showPortalLink ? (
             <a
-              href="http://delivery.zeromall.local:3000"
+              href={getDeliveryPortalUrl()}
               target="_blank"
               rel="noreferrer"
               className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"

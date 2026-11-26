@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { API_BASE_URL } from '../../config/api.config'
+import { API_BASE_URL, getDeliveryPortalUrl } from '../../config/api.config'
 import { HubCreateEditModal } from './HubCreateEditModal'
 
 const formatMoney = (val: number) => (val || 0).toLocaleString('vi-VN') + 'đ'
@@ -1988,7 +1988,7 @@ export const LogisticsHubsFleetTab: React.FC<LogisticsHubsFleetTabProps> = ({
                       Tài Khoản Đăng Nhập App Cho Tài Xế
                     </h4>
                     <p className="text-[10px] text-emerald-700 font-medium">
-                      Tài xế dùng tài khoản này để đăng nhập vào app nhận đơn tại <span className="font-mono font-bold">http://delivery.zeromall.local:3000</span>
+                      Tài xế dùng tài khoản này để đăng nhập vào app nhận đơn tại <span className="font-mono font-bold">{getDeliveryPortalUrl()}</span>
                     </p>
                   </div>
                 </div>
