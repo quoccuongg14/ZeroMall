@@ -1,4 +1,5 @@
 import React from 'react'
+import { openShopStorefront } from '../../config/api.config'
 
 interface ShopDetailModalProps {
   isOpen: boolean
@@ -306,17 +307,7 @@ export const ShopDetailModal: React.FC<ShopDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
-                const buyerPort = window.location.port ? `:${window.location.port}` : ''
-                const rawUser = localStorage.getItem('zm_user') || ''
-                const rawToken = localStorage.getItem('zm_token') || ''
-                if (isSubdomain) {
-                  window.open(`${window.location.protocol}//zeromall.local${buyerPort}/shop/${shop.id}?sso_user=${encodeURIComponent(rawUser)}&sso_token=${encodeURIComponent(rawToken)}`, '_blank')
-                } else {
-                  window.open(`/shop/${shop.id}`, '_blank')
-                }
-              }}
+              onClick={() => openShopStorefront(shop.id)}
               className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
               title="Mở trang bán hàng công khai ngoài Chợ kèm Thanh Điều Hành ZERO CONTROL"
             >

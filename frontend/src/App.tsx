@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { API_BASE_URL } from './config/api.config'
+import { API_BASE_URL, getBuyerHomeUrl } from './config/api.config'
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { Header } from './components/buyer/Header'
 import type { CartItem } from './models/cart.model'
@@ -43,17 +43,6 @@ import { DailyDiscoverPage } from './pages/buyer/DailyDiscoverPage'
 import { trackUserEngagement } from './services/ai-recommendation.service'
 
 // Wrappers and containers for React Router
-
-function getBuyerHomeUrl() {
-  if (typeof window === 'undefined') return '/';
-  const hostname = window.location.hostname;
-  const port = window.location.port ? `:${window.location.port}` : '';
-  const protocol = window.location.protocol;
-  if (hostname.endsWith('.zeromall.local') || hostname === 'zeromall.local') {
-    return `${protocol}//zeromall.local${port}/`;
-  }
-  return '/';
-}
 
 function DeliveryPortalWrapper() {
   return <DeliveryPortal onBackToHome={() => { window.location.href = getBuyerHomeUrl(); }} />

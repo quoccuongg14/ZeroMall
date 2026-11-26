@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { API_BASE_URL } from '../../config/api.config'
+import { API_BASE_URL, openShopStorefront } from '../../config/api.config'
 import { LockShopModal } from './LockShopModal'
 import { DeleteShopModal } from './DeleteShopModal'
 import { ShopDetailModal } from './ShopDetailModal'
@@ -118,18 +118,7 @@ export const ShopsTab: React.FC<ShopsTabProps> = ({ shops, fetchShops, triggerAu
 
   // Mở trang Storefront gian hàng kèm thanh điều hành ZERO CONTROL
   const handleOpenStorefront = (shopId: string) => {
-    const isSubdomain = window.location.hostname.endsWith('.zeromall.local')
-    if (isSubdomain) {
-      const buyerPort = window.location.port ? `:${window.location.port}` : ''
-      const protocol = window.location.protocol
-      const rawUser = localStorage.getItem('zm_user') || ''
-      const rawToken = localStorage.getItem('zm_token') || ''
-      const ssoUser = encodeURIComponent(rawUser)
-      const ssoToken = encodeURIComponent(rawToken)
-      window.open(`${protocol}//zeromall.local${buyerPort}/shop/${shopId}?sso_user=${ssoUser}&sso_token=${ssoToken}`, '_blank')
-    } else {
-      window.open(`/shop/${shopId}`, '_blank')
-    }
+    openShopStorefront(shopId)
   }
 
   // Lọc danh sách theo từ khóa tìm kiếm và bộ lọc trạng thái
