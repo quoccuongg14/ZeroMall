@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { LiveMapTracking } from '../delivery/LiveMapTracking'
 import { API_BASE_URL } from '../../config/api.config'
+import { DemoNextStepButton } from '../common/DemoNextStepButton'
 
 interface Shipment {
   id: string
@@ -245,12 +246,15 @@ export const ShopLogisticsManager: React.FC<ShopLogisticsManagerProps> = ({ user
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => setSelectedShipment(s)}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition cursor-pointer"
-                        >
-                          📜 Xem Hành Trình
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <DemoNextStepButton identifier={s.trackingNumber || s.orderId} portal="seller" compact />
+                          <button
+                            onClick={() => setSelectedShipment(s)}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition cursor-pointer"
+                          >
+                            📜 Xem Hành Trình
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

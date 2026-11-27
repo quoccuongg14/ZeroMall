@@ -621,4 +621,154 @@ export class RouteAccountsService {
       stages,
     };
   }
+
+  /**
+   * Trả về DUY NHẤT 1 bước tiếp theo cần thao tác dựa trên trạng thái hiện tại của đơn hàng
+   */
+  async getNextStepHint(identifier: string, contextHubId?: string, portal?: string) {
+    const trace = await this.traceRouteAccounts(identifier);
+    const byKey = new Map(trace.stages.map((s) => [s.stageKey, s]));
+
+    const orderStatus = (trace.order.orderStatus || '').toUpperCase();
+    const sp = trace.shipment;
+    const spStatus = (sp?.status || '').toUpperCase();
+    const currentHub = trace.stages.find((s) => s.stageKey === 'ORIGIN_HUB');
+    const originSoc = trace.stages.find((s) => s.stageKey === 'ORIGIN_SOC');
+    const destSoc = trace.stages.find((s) => s.stageKey === 'DEST_SOC');
+    const destHub = trace.stages.find((s) => s.stageKey === 'DEST_HUB');
+
+    const pick = (
+      stageKey: RouteStageSummary['stageKey'],
+      actionGuide: string,
+      completed = false,
+    ) => ({
+      completed,
+      actionGuide,
+      stage: byKey.get(stageKey)!,
+      order: trace.order,
+      shipment: trace.shipment,
+      isCrossSoc: trace.isCrossSoc,
+    });
+
+    if (orderStatus === 'CANCELLED' || spStatus === 'CANCELLED') {
+      return pick('SELLER', 'Đơn hàng này đã bị hủy, không còn bước tiếp theo.', true);
+    }
+
+    if (orderStatus === 'COMPLETED' || spStatus === 'DELIVERED') {
+      return pick('DELIVERY_DRIVER', 'Đơn hàng đã giao thành công! Không còn bước tiếp theo.', true);
+    }
+
+    // 1. Chưa có vận đơn hoặc mới CREATED -> Seller xác nhận & chuẩn bị hàng
+    if (!sp || spStatus === 'CREATED') {
+      if (portal === 'seller') {
+        const isPendingConfirm = ['PENDING', 'PENDING_PAYMENT', 'UNPAID'].includes(orderStatus);
+        const guide = isPendingConfirm
+          ? 'Bước hiện tại: Bấm "Xác nhận đơn hàng" -> "Chuẩn bị hàng" ngay tại đây. Tài khoản Shipper Lấy Hàng tiếp theo:'
+          : 'Bước hiện tại: Bấm "Chuẩn bị hàng" ngay tại đây để gọi Shipper. Tài khoản Shipper Lấy Hàng tiếp theo:';
+        return pick('PICKUP_DRIVER', guide);
+      }
+      return pick(
+        'SELLER',
+        `Đăng nhập Seller (${trace.order.shopName || 'Shop'}) để bấm Xác nhận đơn & Chuẩn bị hàng.`,
+      );
+    }
+
+    // 2. Chờ lấy / đã gán shipper lấy
+    if (['WAITING_PICKUP', 'PICKUP_ASSIGNED', 'PICKING_UP'].includes(spStatus)) {
+      return pick(
+        'PICKUP_DRIVER',
+        'Đăng nhập App Shipper Lấy Hàng để nhận đơn & bấm "Xác nhận đã lấy hàng".',
+      );
+    }
+
+    // 3. Shipper đã lấy xong -> Bưu cục lấy hàng quét nhập kho
+    if (spStatus === 'PICKED_UP') {
+      return pick(
+        'ORIGIN_HUB',
+        `Đăng nhập Bưu Cục Lấy Hàng (${currentHub?.hubName || 'Origin Hub'}) -> Tab Nhập Hàng từ Shipper để quét nhập kho.`,
+      );
+    }
+
+    // 4. Đang ở Origin Hub -> Kiểm tra xem đã ở SOC hay còn ở Hub con
+    if (spStatus === 'AT_ORIGIN_HUB') {
+      const originSocId = await this.findHubIdByCode(originSoc?.hubCode);
+      const isAtOriginSoc =
+        (contextHubId && originSocId && contextHubId === originSocId) ||
+        (sp.currentHubCode && originSoc?.hubCode && sp.currentHubCode === originSoc.hubCode);
+
+      if (isAtOriginSoc) {
+        if (trace.isCrossSoc) {
+          return pick(
+            'DEST_SOC',
+            `Đóng xe tải liên vùng gửi đi, sau đó đăng nhập SOC Đích (${destSoc?.hubName || 'Dest SOC'}) để nhận chuyến.`,
+          );
+        }
+        return pick(
+          'DEST_HUB',
+          `Bấm "Chuyển về ${destHub?.hubCode || 'Hub giao'}", sau đó đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}).`,
+        );
+      }
+
+      return pick(
+        'ORIGIN_SOC',
+        `Tại ${currentHub?.hubName || 'Origin Hub'} bấm "Bàn Giao Về SOC", sau đó đăng nhập ${originSoc?.hubName || 'SOC Xuất Phát'} để tiếp nhận.`,
+      );
+    }
+
+    // 5. Đang trung chuyển (Hub -> SOC hoặc SOC -> SOC / Hub)
+    if (spStatus === 'IN_TRANSIT') {
+      const isFromOriginSoc = sp.currentHubCode && originSoc?.hubCode && sp.currentHubCode === originSoc.hubCode;
+      if (isFromOriginSoc) {
+        if (trace.isCrossSoc) {
+          return pick(
+            'DEST_SOC',
+            `Đăng nhập SOC Đích (${destSoc?.hubName || 'Dest SOC'}) -> Tab Nhập Hàng / Đối Soát Chuyến để nhận xe tải.`,
+          );
+        }
+        return pick(
+          'DEST_HUB',
+          `Đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}) để nhập kho phát hàng.`,
+        );
+      }
+      return pick(
+        'ORIGIN_SOC',
+        `Đăng nhập SOC Xuất Phát (${originSoc?.hubName || 'Origin SOC'}) -> Tab Nhập Hàng / Đối Soát Chuyến để nhận kiện từ Hub.`,
+      );
+    }
+
+    // 6. Đang phân loại tại SOC
+    if (spStatus === 'SORTING') {
+      const isAtDestSoc = trace.isCrossSoc && sp.currentHubCode && destSoc?.hubCode && sp.currentHubCode === destSoc.hubCode;
+      if (trace.isCrossSoc && !isAtDestSoc) {
+        return pick(
+          'DEST_SOC',
+          `Tại ${originSoc?.hubName || 'Origin SOC'} bấm "Đóng Xe" tuyến liên vùng, sau đó đăng nhập SOC Đích (${destSoc?.hubName || 'Dest SOC'}).`,
+        );
+      }
+      return pick(
+        'DEST_HUB',
+        `Tại SOC bấm "Chuyển Về ${destHub?.hubCode || 'Hub Giao'}", sau đó đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}).`,
+      );
+    }
+
+    // 7. Đã đến Hub phát hoặc đã gán / đang đi giao
+    if (['AT_DESTINATION_HUB', 'DELIVERY_ASSIGNED', 'OUT_FOR_DELIVERY'].includes(spStatus)) {
+      const guide =
+        spStatus === 'AT_DESTINATION_HUB'
+          ? `Tại ${destHub?.hubName || 'Bưu Cục Giao'} bấm "Phân Tuyến Giao", sau đó đăng nhập Shipper Giao Hàng để nhận đơn & giao khách.`
+          : 'Đăng nhập App Shipper Giao Hàng để quét nhận đơn & xác nhận giao hàng thành công cho khách.';
+      return pick('DELIVERY_DRIVER', guide);
+    }
+
+    return pick(
+      'DELIVERY_DRIVER',
+      'Mở cổng Giao Vận để kiểm tra và xử lý chặng tiếp theo của đơn hàng.',
+    );
+  }
+
+  private async findHubIdByCode(code?: string): Promise<string | null> {
+    if (!code) return null;
+    const h = await this.prisma.hub.findUnique({ where: { code }, select: { id: true } });
+    return h?.id || null;
+  }
 }

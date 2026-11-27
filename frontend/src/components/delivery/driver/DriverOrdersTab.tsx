@@ -3,6 +3,7 @@ import { DriverPickupConfirmModal } from './DriverPickupConfirmModal'
 import { DriverDeliveryConfirmModal } from './DriverDeliveryConfirmModal'
 import { DriverReturnPickupCard } from './DriverReturnPickupCard'
 import type { ReturnData } from '../../../services/return.service'
+import { DemoNextStepButton } from '../../common/DemoNextStepButton'
 
 export interface Shipment {
   id: string
@@ -372,6 +373,11 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <DemoNextStepButton
+                            identifier={shipment.trackingNumber || shipment.orderId}
+                            portal="delivery"
+                            compact
+                          />
                           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                             💰 +8.000đ
                           </span>
@@ -669,6 +675,11 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <DemoNextStepButton
+                            identifier={shipment.trackingNumber || shipment.orderId}
+                            portal="delivery"
+                            compact
+                          />
                           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                             💰 +8.000đ
                           </span>
@@ -732,7 +743,12 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <DemoNextStepButton
+                            identifier={shipment.trackingNumber || shipment.orderId}
+                            portal="delivery"
+                            compact
+                          />
                           <button
                             type="button"
                             onClick={() =>
@@ -919,6 +935,11 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <DemoNextStepButton
+                            identifier={shipment.trackingNumber || shipment.orderId}
+                            portal="delivery"
+                            compact
+                          />
                           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                             💰 +8.000đ
                           </span>

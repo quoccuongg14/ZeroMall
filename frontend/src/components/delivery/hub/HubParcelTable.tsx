@@ -2,6 +2,7 @@ import React from 'react'
 import type { Shipment, StationTab, DockTruck, Hub, LinehaulTrip } from './types'
 import { STATUS_CONFIG, timeAgo, extractLinehaulInfo, getPickupDriver, getDeliveryDriver } from './helpers'
 import { returnService } from '../../../services/return.service'
+import { DemoNextStepButton } from '../../common/DemoNextStepButton'
 
 interface HubParcelTableProps {
   stationTab: StationTab
@@ -480,6 +481,13 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
 
                     {/* Thao Tác */}
                     <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        <DemoNextStepButton
+                          identifier={s.trackingNumber || s.orderId}
+                          portal="delivery"
+                          hubId={currentHub?.id}
+                          compact
+                        />
                       {stationTab === 'INBOUND_PICKUP' &&
                         (s.isReturn ? (
                           <button
@@ -655,6 +663,7 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                           )}
                         </div>
                       )}
+                      </div>
                     </td>
                   </tr>
                 )

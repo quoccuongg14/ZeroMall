@@ -22,4 +22,15 @@ export class RouteAccountsController {
     this.routeAccountsService.verifyPin(pin);
     return this.routeAccountsService.traceRouteAccounts(identifier);
   }
+
+  @Get('next-step/:identifier')
+  async getNextStep(
+    @Param('identifier') identifier: string,
+    @Headers('x-demo-pin') pin?: string,
+    @Query('hubId') hubId?: string,
+    @Query('portal') portal?: string,
+  ) {
+    this.routeAccountsService.verifyPin(pin);
+    return this.routeAccountsService.getNextStepHint(identifier, hubId, portal);
+  }
 }

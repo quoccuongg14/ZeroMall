@@ -7,6 +7,7 @@ import { OrderDetail } from './OrderDetail'
 import { ShopTrackingModal } from './ShopTrackingModal'
 import { ShopHandoverModal } from './ShopHandoverModal'
 import { returnService, type ReturnData } from '../../services/return.service'
+import { DemoNextStepButton } from '../common/DemoNextStepButton'
 
 interface ShopOrdersProps {
   user: any
@@ -666,7 +667,8 @@ export const ShopOrders: React.FC<ShopOrdersProps> = ({ user, token, activeSubMe
                   </div>
 
                   {/* Actions buttons */}
-                  <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+                  <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+                    <DemoNextStepButton identifier={order.id} portal="seller" />
                     {(order.status === 'PENDING' || order.status === 'PENDING_PAYMENT' || order.status === 'UNPAID') && (
                       <>
                         <button

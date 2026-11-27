@@ -1,5 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { API_BASE_URL, getDeliveryPortalUrl, getSellerPortalUrl } from '../../config/api.config';
+import {
+  clearDemoHelperPin,
+  getDemoHelperPin,
+  setDemoHelperPin,
+} from '../../utils/demoHelperState';
 
 interface RouteAccountInfo {
   name: string;
@@ -70,8 +75,6 @@ interface OrderSummary {
   createdAt: string;
 }
 
-const PIN_STORAGE_KEY = 'zm_demo_route_pin';
-
 function getActiveStepNumber(trace: TraceResult): number {
   const spStatus = trace.shipment?.status;
   if (!spStatus) return 1;
@@ -101,13 +104,7 @@ function getActiveStepNumber(trace: TraceResult): number {
 
 export const DemoRouteInspectorModal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [pin, setPin] = useState<string>(() => {
-    try {
-      return sessionStorage.getItem(PIN_STORAGE_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
+  const [pin, setPin] = useState<string>(() => getDemoHelperPin());
   const [pinInput, setPinInput] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
 
@@ -130,15 +127,13 @@ export const DemoRouteInspectorModal: React.FC = () => {
       });
       if (res.status === 403) {
         setIsUnlocked(false);
-        sessionStorage.removeItem(PIN_STORAGE_KEY);
+        clearDemoHelperPin();
         throw new Error('Mã PIN không chính xác.');
       }
       if (!res.ok) throw new Error('Không tải được danh sách đơn hàng.');
       const data: OrderSummary[] = await res.json();
       setIsUnlocked(true);
-      try {
-        sessionStorage.setItem(PIN_STORAGE_KEY, activePin);
-      } catch {}
+      setDemoHelperPin(activePin);
       setOrders(data);
       if (data.length > 0 && !selectedOrderId) {
         setSelectedOrderId(data[0].id);
@@ -242,6 +237,20 @@ export const DemoRouteInspectorModal: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isUnlocked && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearDemoHelperPin();
+                  setPin('');
+                  setIsUnlocked(false);
+                  setIsOpen(false);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-rose-500/80 hover:bg-rose-500 text-white text-[11px] font-bold cursor-pointer transition"
+              >
+                Tắt gợi ý
+              </button>
+            )}
             <button
               type="button"
               onClick={() => openPortal('seller')}

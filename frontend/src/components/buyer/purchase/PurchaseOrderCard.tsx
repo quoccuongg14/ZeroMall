@@ -3,6 +3,7 @@ import type { Order } from '../../../models/order.model'
 import { getStatusText, getStatusColor, formatMoney } from './types'
 
 import type { ReturnData } from '../../../services/return.service'
+import { DemoNextStepButton } from '../../common/DemoNextStepButton'
 
 interface PurchaseOrderCardProps {
   order: Order
@@ -105,7 +106,8 @@ export const PurchaseOrderCard: React.FC<PurchaseOrderCardProps> = ({
             <span>🏪</span> Xem Shop
           </a>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <DemoNextStepButton identifier={order.id} portal="buyer" />
           <button
             onClick={() => onOpenTracking(order.id)}
             className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center gap-1"
