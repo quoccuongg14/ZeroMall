@@ -356,14 +356,7 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                       Bao gồm <b>{trip.shipments.length} bưu kiện</b> đã được quét barcode xác thực đóng thùng
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {isOutbound && trip.shipments[0] && (
-                        <DemoNextStepButton
-                          identifier={trip.shipments[0].trackingNumber || trip.shipments[0].orderId}
-                          portal="delivery"
-                          hubId={currentHub?.id}
-                        />
-                      )}
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSelectedTripForDetail(trip)}
                         className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
