@@ -261,6 +261,9 @@ export class DiscountService {
     if (new Date(voucher.endDate) < now) {
       throw new BadRequestException('Mã giảm giá này đã hết hạn hiệu lực!');
     }
+    if (voucher.usedCount >= voucher.usageLimit) {
+      throw new BadRequestException('Mã giảm giá này đã hết lượt sử dụng!');
+    }
 
     // Check if user already claimed
     const existingClaim = await this.prisma.userVoucherWallet.findUnique({
@@ -358,11 +361,17 @@ export class DiscountService {
     const vouchers = await this.prisma.voucher.findMany({
       where: whereCondition,
       orderBy: { createdAt: 'desc' },
+      include: {
+        _count: {
+          select: { claims: true },
+        },
+      },
     });
 
     if (!userId || vouchers.length === 0) {
       return vouchers.map((v: any) => ({
         ...v,
+        claimedCount: v._count?.claims || 0,
         isClaimed: false,
       }));
     }
@@ -379,6 +388,7 @@ export class DiscountService {
 
     return vouchers.map((v: any) => ({
       ...v,
+      claimedCount: v._count?.claims || 0,
       isClaimed: claimedSet.has(v.id),
     }));
   }

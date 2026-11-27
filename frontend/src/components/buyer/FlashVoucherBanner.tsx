@@ -12,6 +12,7 @@ interface VoucherItem {
   maxDiscount?: number | null;
   usageLimit: number;
   usedCount: number;
+  claimedCount?: number;
   isClaimable: boolean;
   isClaimed?: boolean;
   startDate: string;
@@ -23,55 +24,60 @@ interface FlashVoucherBannerProps {
   onRequireLogin?: () => void;
 }
 
+interface GoldenSlot {
+  time: string;
+  label: string;
+  startHour: number;
+  endHour: number;
+}
+
+const GOLDEN_SLOTS: GoldenSlot[] = [
+  { time: '00:00', label: '00:00 Săn Đêm', startHour: 0, endHour: 9 },
+  { time: '09:00', label: '09:00 Deal Sáng', startHour: 9, endHour: 12 },
+  { time: '12:00', label: '12:00 Giờ Trưa', startHour: 12, endHour: 18 },
+  { time: '18:00', label: '18:00 Săn Tối', startHour: 18, endHour: 21 },
+  { time: '21:00', label: '21:00 Chốt Đơn', startHour: 21, endHour: 24 },
+];
+
+function getLiveSlotIndex(hour: number): number {
+  const idx = GOLDEN_SLOTS.findIndex((s) => hour >= s.startHour && hour < s.endHour);
+  return idx >= 0 ? idx : 0;
+}
+
 export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, onRequireLogin }) => {
   const [vouchers, setVouchers] = useState<VoucherItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set());
-  const [activeSlot, setActiveSlot] = useState<string>('12:00');
+  const [liveIndex, setLiveIndex] = useState<number>(() => getLiveSlotIndex(new Date().getHours()));
+  const [selectedSlotTime, setSelectedSlotTime] = useState<string>(
+    () => GOLDEN_SLOTS[getLiveSlotIndex(new Date().getHours())].time
+  );
   const [countdown, setCountdown] = useState<string>('00:00:00');
 
-  // Khung giờ vàng cố định chuẩn sàn Shopee
-  const GOLDEN_SLOTS = [
-    { time: '00:00', label: '00:00 Săn Đêm', hour: 0 },
-    { time: '09:00', label: '09:00 Deal Sáng', hour: 9 },
-    { time: '12:00', label: '12:00 Giờ Vàng', hour: 12 },
-    { time: '21:00', label: '21:00 Chốt Đơn', hour: 21 },
-  ];
-
-  // Xác định khung giờ hiện tại và đếm ngược
+  // Cập nhật khung giờ đang diễn ra & đếm ngược tới cuối ca hiện tại
   useEffect(() => {
     const updateSlotAndCountdown = () => {
       const now = new Date();
-      const currentHour = now.getHours();
+      const idx = getLiveSlotIndex(now.getHours());
+      const currentSlot = GOLDEN_SLOTS[idx];
 
-      // Tìm slot đang chạy
-      let matchedSlot = GOLDEN_SLOTS[0];
-      for (let i = GOLDEN_SLOTS.length - 1; i >= 0; i--) {
-        if (currentHour >= GOLDEN_SLOTS[i].hour) {
-          matchedSlot = GOLDEN_SLOTS[i];
-          break;
+      setLiveIndex((prevIdx) => {
+        if (prevIdx !== idx) {
+          setSelectedSlotTime(currentSlot.time);
         }
-      }
-      setActiveSlot(matchedSlot.time);
+        return idx;
+      });
 
-      // Tìm slot tiếp theo để đếm ngược
-      let nextSlotHour = GOLDEN_SLOTS[0].hour;
-      let nextDay = false;
-      const nextSlot = GOLDEN_SLOTS.find(s => s.hour > currentHour);
-      if (nextSlot) {
-        nextSlotHour = nextSlot.hour;
+      const endTarget = new Date(now);
+      if (currentSlot.endHour >= 24) {
+        endTarget.setDate(endTarget.getDate() + 1);
+        endTarget.setHours(0, 0, 0, 0);
       } else {
-        nextDay = true;
+        endTarget.setHours(currentSlot.endHour, 0, 0, 0);
       }
 
-      const targetDate = new Date(now);
-      if (nextDay) {
-        targetDate.setDate(targetDate.getDate() + 1);
-      }
-      targetDate.setHours(nextSlotHour, 0, 0, 0);
-
-      const diffSec = Math.max(0, Math.floor((targetDate.getTime() - now.getTime()) / 1000));
+      const diffSec = Math.max(0, Math.floor((endTarget.getTime() - now.getTime()) / 1000));
       const hours = Math.floor(diffSec / 3600);
       const minutes = Math.floor((diffSec % 3600) / 60);
       const seconds = diffSec % 60;
@@ -85,7 +91,6 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch active claimable vouchers
   const fetchVouchers = async () => {
     setLoading(true);
     try {
@@ -98,7 +103,6 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
         const list = Array.isArray(data) ? data : [];
         setVouchers(list);
 
-        // Lưu các voucher user đã claim vào Set
         const claimedSet = new Set<string>();
         list.forEach((v: VoucherItem) => {
           if (v.isClaimed) claimedSet.add(v.id);
@@ -116,13 +120,39 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
     fetchVouchers();
   }, [user?.id]);
 
-  // Lọc các voucher toàn sàn hoặc voucher có gắn cờ isClaimable
+  // Lọc voucher toàn sàn hoặc có cờ isClaimable
   const claimableVouchers = useMemo(() => {
-    return vouchers.filter(v => v.shopId === 'PLATFORM' || v.isClaimable);
+    return vouchers.filter((v) => v.shopId === 'PLATFORM' || v.isClaimable);
   }, [vouchers]);
 
-  // Xử lý bấm "Lưu Voucher"
+  const liveSlot = GOLDEN_SLOTS[liveIndex] || GOLDEN_SLOTS[0];
+  const nextSlot = GOLDEN_SLOTS[(liveIndex + 1) % GOLDEN_SLOTS.length];
+  const selectedSlotIndex = Math.max(
+    0,
+    GOLDEN_SLOTS.findIndex((s) => s.time === selectedSlotTime)
+  );
+  const selectedSlotObj = GOLDEN_SLOTS[selectedSlotIndex] || liveSlot;
+  const selectedSlotState: 'passed' | 'live' | 'upcoming' =
+    selectedSlotIndex < liveIndex
+      ? 'passed'
+      : selectedSlotIndex === liveIndex
+      ? 'live'
+      : 'upcoming';
+
+  // Hiển thị bộ 3 voucher cân đối cho mỗi ca (quay vòng theo ca từ danh sách voucher thật trong DB)
+  const visibleVouchers = useMemo(() => {
+    if (claimableVouchers.length <= 3) return claimableVouchers;
+    const cardsPerSlot = 3;
+    const offset = (selectedSlotIndex * cardsPerSlot) % claimableVouchers.length;
+    const result: VoucherItem[] = [];
+    for (let i = 0; i < Math.min(cardsPerSlot, claimableVouchers.length); i++) {
+      result.push(claimableVouchers[(offset + i) % claimableVouchers.length]);
+    }
+    return result;
+  }, [claimableVouchers, selectedSlotIndex]);
+
   const handleClaim = async (v: VoucherItem) => {
+    if (selectedSlotState !== 'live') return;
     if (!user) {
       if (onRequireLogin) onRequireLogin();
       else alert('Vui lòng đăng nhập để lưu voucher vào ví của bạn!');
@@ -136,11 +166,12 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
       const res = await fetch(`${API_BASE_URL}/discounts/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, voucherId: v.id })
+        body: JSON.stringify({ userId: user.id, voucherId: v.id }),
       });
 
       if (res.ok) {
-        setClaimedIds(prev => new Set(prev).add(v.id));
+        setClaimedIds((prev) => new Set(prev).add(v.id));
+        fetchVouchers();
       } else {
         const err = await res.json().catch(() => ({}));
         alert(err.message || 'Không thể lưu voucher');
@@ -153,13 +184,11 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
   };
 
   if (claimableVouchers.length === 0 && !loading) {
-    return null; // Không hiển thị nếu không có voucher nào
+    return null;
   }
 
   return (
     <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-950 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-emerald-950/20 mb-8 overflow-hidden relative selection:bg-white selection:text-emerald-700 text-left">
-      
-      {/* Background Glow Decorations */}
       <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute -bottom-16 -left-16 w-56 h-56 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none" />
 
@@ -170,73 +199,83 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
             ⚡
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
                 Khung Giờ Vàng Săn Voucher
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 shadow-3xs animate-pulse">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 shadow-3xs">
                 FCFS Nhanh Tay
               </span>
             </div>
             <p className="text-xs text-emerald-100/90 font-semibold mt-0.5">
-              Bấm <strong>"Lưu Vào Ví"</strong> ngay để giữ chỗ • Khi thanh toán, <strong>ai chốt đơn trước được áp dụng trước</strong>!
+              Bấm <strong>"Lưu Vào Ví"</strong> ở ca đang diễn ra • Khi thanh toán, <strong>ai chốt đơn trước được áp dụng trước</strong>!
             </p>
           </div>
         </div>
 
-        {/* Khung Giờ & Đồng Hồ Đếm Ngược */}
+        {/* Đồng hồ đếm ngược chuẩn xác theo ca đang diễn ra */}
         <div className="flex items-center gap-3 bg-black/25 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15 shrink-0">
           <div className="text-left">
             <div className="text-[10px] font-black uppercase text-emerald-200 tracking-wider">
-              Khung giờ tiếp theo
+              Kết thúc ca {liveSlot.time} sau
             </div>
             <div className="font-mono text-base font-black text-white tracking-widest">
               {countdown}
             </div>
           </div>
           <div className="h-8 w-px bg-white/20" />
-          <div className="text-xs font-black text-amber-300">
-            Slot: {activeSlot}
+          <div className="text-left">
+            <div className="text-[10px] text-white/70 font-bold uppercase">Ca kế tiếp</div>
+            <div className="text-xs font-black text-amber-300">{nextSlot.time}</div>
           </div>
         </div>
       </div>
 
-      {/* Golden Hour Slots Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-4 relative z-10">
-        {GOLDEN_SLOTS.map((slot) => {
-          const isCurrent = slot.time === activeSlot;
+      {/* Golden Hour Slots Bar (có thể bấm để xem từng khung giờ) */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 my-4 relative z-10">
+        {GOLDEN_SLOTS.map((slot, idx) => {
+          const isLive = idx === liveIndex;
+          const isPassed = idx < liveIndex;
+          const isSelected = slot.time === selectedSlotObj.time;
+
           return (
-            <div
+            <button
               key={slot.time}
-              className={`py-2 px-3 rounded-xl text-center border transition-all ${
-                isCurrent
-                  ? 'bg-white text-emerald-900 border-white shadow-md font-black scale-102'
-                  : 'bg-white/10 text-white/80 border-white/10 font-bold hover:bg-white/15'
+              type="button"
+              onClick={() => setSelectedSlotTime(slot.time)}
+              className={`py-2 px-3 rounded-xl text-center border transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-white text-emerald-900 border-white shadow-md font-black'
+                  : isLive
+                  ? 'bg-emerald-500/30 text-white border-emerald-300/60 font-bold hover:bg-emerald-500/40'
+                  : isPassed
+                  ? 'bg-black/15 text-white/55 border-white/10 font-semibold hover:bg-black/25'
+                  : 'bg-white/10 text-white/85 border-white/15 font-bold hover:bg-white/20'
               }`}
             >
               <div className="text-xs font-black">{slot.label}</div>
-              <div className="text-[10px] opacity-80 mt-0.5">
-                {isCurrent ? '⚡ Đang Diễn Ra' : 'Sắp Mở'}
+              <div className="text-[10px] opacity-90 mt-0.5">
+                {isLive ? '⚡ Đang Diễn Ra' : isPassed ? 'Đã Kết Thúc' : 'Sắp Mở'}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
-      {/* Voucher Cards Carousel/Grid */}
+      {/* Voucher Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1 relative z-10">
-        {claimableVouchers.map((v) => {
+        {visibleVouchers.map((v) => {
           const isClaimed = claimedIds.has(v.id);
           const isExhausted = v.usedCount >= v.usageLimit;
           const usagePercent = Math.min(Math.round((v.usedCount / (v.usageLimit || 1)) * 100), 100);
           const isClaiming = claimingId === v.id;
+          const canClaim = selectedSlotState === 'live' && !isClaimed && !isExhausted && !isClaiming;
 
           return (
             <div
-              key={v.id}
+              key={`${selectedSlotObj.time}-${v.id}`}
               className="bg-white rounded-2xl p-4 text-slate-800 shadow-md border border-white/40 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-lg"
             >
-              {/* Top Row: Tag & Code */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
@@ -247,7 +286,6 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                   </span>
                 </div>
 
-                {/* Discount Value */}
                 <div className="text-xl font-black text-emerald-600 tracking-tight">
                   Giảm {v.type === 'percentage' ? `${v.value}%` : `${Number(v.value).toLocaleString('vi-VN')}₫`}
                   {v.maxDiscount ? ` (Tối đa ${Number(v.maxDiscount).toLocaleString('vi-VN')}₫)` : ''}
@@ -262,21 +300,22 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                 </div>
               </div>
 
-              {/* Bottom Row: FCFS Progress Bar & Claim Button */}
               <div className="mt-4 pt-3 border-t border-slate-100 space-y-2.5">
-                
-                {/* Real-time FCFS Usage Meter */}
                 <div>
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1">
                     <span>
                       {isExhausted ? (
-                        <strong className="text-rose-600">Đã hết lượt ngân sách</strong>
+                        <strong className="text-rose-600">Đã hết lượt sử dụng</strong>
                       ) : (
-                        <span>Đã dùng <strong>{v.usedCount}/{v.usageLimit}</strong> ({usagePercent}%)</span>
+                        <span>
+                          Đã dùng <strong>{v.usedCount}/{v.usageLimit}</strong> ({usagePercent}%)
+                        </span>
                       )}
                     </span>
                     <span className="text-emerald-700 font-black">
-                      {isExhausted ? 'HẾT' : 'FCFS'}
+                      {isExhausted
+                        ? 'HẾT LƯỢT'
+                        : `${v.claimedCount || 0} đã lưu • FCFS`}
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -289,15 +328,16 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                   </div>
                 </div>
 
-                {/* Action Button: Lưu vào ví */}
                 <button
                   type="button"
-                  disabled={isClaimed || isClaiming}
+                  disabled={!canClaim}
                   onClick={() => handleClaim(v)}
-                  className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-3xs ${
+                  className={`w-full py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-3xs ${
                     isClaimed
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
-                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/20 active:scale-98'
+                      : selectedSlotState !== 'live' || isExhausted
+                      ? 'bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-600/20 cursor-pointer active:scale-98'
                   }`}
                 >
                   {isClaiming ? (
@@ -307,6 +347,12 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                       <span>✅</span>
                       <span>Đã Trong Ví Của Bạn</span>
                     </>
+                  ) : isExhausted ? (
+                    <span>Đã Hết Suất</span>
+                  ) : selectedSlotState === 'upcoming' ? (
+                    <span>🕒 Mở Lưu Lúc {selectedSlotObj.time}</span>
+                  ) : selectedSlotState === 'passed' ? (
+                    <span>Đã Kết Thúc Ca {selectedSlotObj.time}</span>
                   ) : (
                     <>
                       <span>⚡</span>
@@ -314,13 +360,11 @@ export const FlashVoucherBanner: React.FC<FlashVoucherBannerProps> = ({ user, on
                     </>
                   )}
                 </button>
-
               </div>
             </div>
           );
         })}
       </div>
-
     </div>
   );
 };
