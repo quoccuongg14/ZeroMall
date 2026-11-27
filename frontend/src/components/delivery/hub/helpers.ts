@@ -52,8 +52,37 @@ export function extractLinehaulInfo(s: Shipment) {
 export function isDestinedForCurrentHub(s: Shipment, currentHub?: Hub | null): boolean {
   if (!currentHub) return true
 
-  // 1. Nếu kiện hàng đã được chuyển tiếp đích danh về Hub/SOC này
-  if (s.currentHubId && s.currentHubId === currentHub.id) return true
+  const currentHubCode = (currentHub.code || '').trim().toUpperCase()
+
+  // Khi xe đang chạy trên đường (IN_TRANSIT), currentHubId là trạm XUẤT PHÁT chứ không phải trạm ĐẾN
+  if (s.status === 'IN_TRANSIT') {
+    if (s.currentHubId && s.currentHubId === currentHub.id) {
+      return false
+    }
+
+    const linehaul = extractLinehaulInfo(s)
+    const sealParts = (linehaul?.sealNumber || '').toUpperCase().split('-')
+    // Định dạng chuẩn: SEAL-<ORIGIN_CODE>-<DEST_CODE>-<RAND>
+    if (sealParts.length >= 4 && sealParts[0] === 'SEAL') {
+      const originCode = sealParts[1]
+      const destCode = sealParts[2]
+      if (originCode && currentHubCode && originCode === currentHubCode) {
+        return false
+      }
+      if (destCode && currentHubCode) {
+        return destCode === currentHubCode
+      }
+    }
+
+    // Fallback theo log gần nhất nếu Seal không theo chuẩn 4 phần
+    const latestDesc = (s.trackingLogs?.[0]?.description || '').toLowerCase()
+    if (currentHub.name && latestDesc.includes(`về [${currentHub.name.toLowerCase()}]`)) {
+      return true
+    }
+  } else {
+    // 1. Với trạng thái đã nhập kho đích (AT_DESTINATION_HUB, DELIVERY_ASSIGNED)
+    if (s.currentHubId && s.currentHubId === currentHub.id) return true
+  }
 
   // Với đơn hàng hoàn (Return reverse logistics), tuyến đích là Kho của Shop (pickupAddress của đơn gốc hoặc deliveryAddress đã map thành Kho Shop)
   let addr = (s.deliveryAddress || '').toLowerCase()

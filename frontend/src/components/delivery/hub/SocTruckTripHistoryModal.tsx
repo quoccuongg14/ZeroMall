@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { API_BASE_URL } from '../../../config/api.config'
 import type { Hub } from './types'
+import { DemoNextStepButton } from '../../common/DemoNextStepButton'
 
 export interface TripShipmentItem {
   id: string
@@ -355,7 +356,14 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                       Bao gồm <b>{trip.shipments.length} bưu kiện</b> đã được quét barcode xác thực đóng thùng
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isOutbound && trip.shipments[0] && (
+                        <DemoNextStepButton
+                          identifier={trip.shipments[0].trackingNumber || trip.shipments[0].orderId}
+                          portal="delivery"
+                          hubId={currentHub?.id}
+                        />
+                      )}
                       <button
                         onClick={() => setSelectedTripForDetail(trip)}
                         className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
@@ -449,9 +457,17 @@ export const SocTruckTripHistoryModal: React.FC<SocTruckTripHistoryModalProps> =
                           {Number(item.codAmount || 0).toLocaleString('vi-VN')}đ
                         </td>
                         <td className="py-3 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
-                            {item.status}
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+                              {item.status}
+                            </span>
+                            <DemoNextStepButton
+                              identifier={item.trackingNumber || item.orderId}
+                              portal="delivery"
+                              hubId={currentHub?.id}
+                              compact
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}

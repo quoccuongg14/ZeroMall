@@ -482,12 +482,16 @@ export const HubParcelTable: React.FC<HubParcelTableProps> = ({
                     {/* Thao Tác */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                        <DemoNextStepButton
-                          identifier={s.trackingNumber || s.orderId}
-                          portal="delivery"
-                          hubId={currentHub?.id}
-                          compact
-                        />
+                        {(stationTab === 'DISPATCH_LASTMILE' ||
+                          stationTab === 'INBOUND_RECEIVING' ||
+                          (stationTab === 'SORTING_LINEHAUL' && isSoc)) && (
+                          <DemoNextStepButton
+                            identifier={s.trackingNumber || s.orderId}
+                            portal="delivery"
+                            hubId={currentHub?.id}
+                            compact
+                          />
+                        )}
                       {stationTab === 'INBOUND_PICKUP' &&
                         (s.isReturn ? (
                           <button
