@@ -256,6 +256,7 @@ export const ZeroAssistantModal: React.FC<ZeroAssistantModalProps> = ({
                       <AssistantProductCard
                         key={p.id}
                         product={p}
+                        compact={!isExpanded}
                         onSelectProduct={onSelectProduct}
                       />
                     ))}
