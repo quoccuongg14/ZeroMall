@@ -152,6 +152,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/zeromall?schema=delivery&options=-csearch_path=delivery
       - ORDER_SERVICE_URL=http://order-service:3004
+      - DEMO_HELPER_PIN=${DEMO_HELPER_PIN:-zm2026}
       - TZ=Asia/Ho_Chi_Minh
     depends_on:
       postgres:

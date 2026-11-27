@@ -41,6 +41,7 @@ import { UserWalletTab } from './pages/buyer/UserWalletTab'
 import { VirtualTryOnPage } from './pages/buyer/VirtualTryOnPage'
 import { DailyDiscoverPage } from './pages/buyer/DailyDiscoverPage'
 import { trackUserEngagement } from './services/ai-recommendation.service'
+import { DemoRouteInspectorModal } from './components/common/DemoRouteInspectorModal'
 
 // Wrappers and containers for React Router
 
@@ -554,7 +555,21 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
 
           {/* Corporate info */}
           <div className="pt-8 text-center text-slate-400 space-y-2 text-[11px]">
-            <p>{t('footer.all_rights', '© 2026 ZeroMall. Tất cả quyền lợi được bảo lưu.')}</p>
+            <p
+              onClick={(e) => {
+                const now = Date.now()
+                const el = e.currentTarget as HTMLParagraphElement & { _tapTimes?: number[] }
+                const recent = [...(el._tapTimes || []), now].filter((ts) => now - ts < 2500)
+                el._tapTimes = recent
+                if (recent.length >= 5) {
+                  el._tapTimes = []
+                  window.dispatchEvent(new CustomEvent('zm:open-route-inspector'))
+                }
+              }}
+              className="select-none"
+            >
+              {t('footer.all_rights', '© 2026 ZeroMall. Tất cả quyền lợi được bảo lưu.')}
+            </p>
             <p>{t('footer.regions', 'Quốc gia & Khu vực: Việt Nam | Singapore | Malaysia | Thái Lan | Philippines | Indonesia')}</p>
             <div className="pt-4 max-w-2xl mx-auto space-y-1">
               <p className="font-bold text-slate-500 text-xs">Công ty TNHH ZeroMall Việt Nam</p>
@@ -1052,6 +1067,7 @@ function App() {
           </>
         )}
       </Routes>
+      <DemoRouteInspectorModal />
     </Router>
   )
 }

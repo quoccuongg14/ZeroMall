@@ -85,3 +85,13 @@ export function getDeliveryPortalUrl(): string {
   const rootDomain = getRootDomain(hostname)
   return `${protocol}//delivery.${rootDomain}${port ? `:${port}` : ''}`
 }
+
+export function getSellerPortalUrl(): string {
+  if (typeof window === 'undefined') return '/seller'
+  const { hostname, port, protocol, origin } = window.location
+  if (isSingleHostEnvironment(hostname)) {
+    return `${origin}/seller`
+  }
+  const rootDomain = getRootDomain(hostname)
+  return `${protocol}//seller.${rootDomain}${port ? `:${port}` : ''}`
+}
