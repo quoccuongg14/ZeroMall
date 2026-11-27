@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
+import { handleSecretDemoTap } from '../../utils/demoHelperState'
 
 interface DeliveryAuthFormProps {
   onAuthSuccess: (user: any, token: string) => void
@@ -226,7 +227,10 @@ export const DeliveryAuthForm: React.FC<DeliveryAuthFormProps> = ({
       </main>
 
       {/* 3. Footer */}
-      <footer className="bg-white border-t border-slate-200 py-3.5 text-center text-xs text-slate-400 font-medium">
+      <footer
+        onClick={() => handleSecretDemoTap()}
+        className="bg-white border-t border-slate-200 py-3.5 text-center text-xs text-slate-400 font-medium select-none"
+      >
         © 2026 ZeroExpress (ZMX) Logistics System • Nền tảng điều phối vận tải TMĐT chuẩn ZeroMall
       </footer>
     </div>

@@ -42,6 +42,7 @@ import { VirtualTryOnPage } from './pages/buyer/VirtualTryOnPage'
 import { DailyDiscoverPage } from './pages/buyer/DailyDiscoverPage'
 import { trackUserEngagement } from './services/ai-recommendation.service'
 import { DemoRouteInspectorModal } from './components/common/DemoRouteInspectorModal'
+import { handleSecretDemoTap } from './utils/demoHelperState'
 
 // Wrappers and containers for React Router
 
@@ -556,16 +557,7 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
           {/* Corporate info */}
           <div className="pt-8 text-center text-slate-400 space-y-2 text-[11px]">
             <p
-              onClick={(e) => {
-                const now = Date.now()
-                const el = e.currentTarget as HTMLParagraphElement & { _tapTimes?: number[] }
-                const recent = [...(el._tapTimes || []), now].filter((ts) => now - ts < 2500)
-                el._tapTimes = recent
-                if (recent.length >= 5) {
-                  el._tapTimes = []
-                  window.dispatchEvent(new CustomEvent('zm:open-route-inspector'))
-                }
-              }}
+              onClick={() => handleSecretDemoTap()}
               className="select-none"
             >
               {t('footer.all_rights', '© 2026 ZeroMall. Tất cả quyền lợi được bảo lưu.')}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { API_BASE_URL } from '../../config/api.config'
 import type { ReturnData } from '../../services/return.service'
 import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
+import { handleSecretDemoTap } from '../../utils/demoHelperState'
 
 interface TrackingLog {
   id: string
@@ -427,7 +428,10 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
           />
         </main>
 
-        <footer className="bg-white border-t border-slate-200 py-3.5 text-center text-xs text-slate-400 font-medium">
+        <footer
+          onClick={() => handleSecretDemoTap()}
+          className="bg-white border-t border-slate-200 py-3.5 text-center text-xs text-slate-400 font-medium select-none"
+        >
           © 2026 ZeroExpress (ZMX) Logistics • {isAssignedSoc ? 'Hệ Thống Trung Tâm Phân Loại Tự Động SOC' : 'Mạng Lưới Bưu Cục Phát Giao Hàng Tận Nơi'} • {assignedHub?.name}
         </footer>
       </div>

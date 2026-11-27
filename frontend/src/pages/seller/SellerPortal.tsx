@@ -25,6 +25,7 @@ import { ShopProfileSettings } from '../../components/seller/ShopProfileSettings
 import { NotificationPopover } from '../../components/common/NotificationPopover'
 import { orderService } from '../../services/order.service'
 import { safeParseJson } from '../../utils/formatters'
+import { handleSecretDemoTap } from '../../utils/demoHelperState'
 
 interface SellerPortalProps {
   user: any
@@ -433,13 +434,18 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
 
       {/* Top Navbar */}
       <header className="bg-white border-b border-slate-200/80 h-16 shrink-0 flex items-center justify-between px-6 z-40 sticky top-0 shadow-3xs">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
-          <ZeroMallLogoMark size="md" />
-          <span className="text-lg font-black tracking-tight text-slate-800">
-            Zero<span className="text-emerald-600">Mall</span> 
-            <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-sm ml-2.5">
-              SELLER CENTRE
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
+            <ZeroMallLogoMark size="md" />
+            <span className="text-lg font-black tracking-tight text-slate-800">
+              Zero<span className="text-emerald-600">Mall</span>
             </span>
+          </div>
+          <span
+            onClick={(e) => handleSecretDemoTap(e)}
+            className="bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-sm select-none"
+          >
+            SELLER CENTRE
           </span>
         </div>
 
