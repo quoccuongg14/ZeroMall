@@ -117,11 +117,11 @@ export class RouteAccountsService {
     const provNorm = this.normalizeText(provinceHint);
 
     const scored = drivers
-      .filter((d) => d.vehicleType !== 'TRUCK')
+      .filter((d) => d.vehicleType !== 'TRUCK' && Boolean(d.userId && userById.get(d.userId)?.email))
       .map((d) => {
         let score = 0;
         if (targetHubId && d.hubId === targetHubId) score += 80;
-        if (d.status === 'AVAILABLE' || d.status === 'ONLINE') score += 30;
+        if (d.status === 'AVAILABLE' || d.status === 'ONLINE') score += 50;
 
         if (d.assignedDistrict) {
           if (this.matchesAddress(distNorm || addrNorm, d.assignedDistrict) || this.matchesAddress(addrNorm, d.assignedDistrict)) {
@@ -141,7 +141,7 @@ export class RouteAccountsService {
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 4);
+      .slice(0, 1);
 
     return scored.map(({ d }) => this.toDriverAccount(d, userById, false));
   }
@@ -413,20 +413,17 @@ export class RouteAccountsService {
       allHubs.find((h) => h.type === 'ORIGIN_HUB') ||
       null;
 
-    // 2. Pickup Drivers
-    const pickupAccounts: RouteAccountInfo[] = [];
-    if (assignedPickup?.driver) {
-      pickupAccounts.push(this.toDriverAccount(assignedPickup.driver, userById, true));
-    }
-    const pickupCandidates = this.rankLocalDrivers(
-      allDrivers,
-      userById,
-      originHub?.id,
-      pickupAddressText,
-      pickupDistrict,
-      pickupProvince,
-    ).filter((c) => !pickupAccounts.some((a) => a.email === c.email && a.name === c.name));
-    pickupAccounts.push(...pickupCandidates);
+    // 2. Pickup Drivers (nếu đã gán Shipper thì chỉ hiện đúng Shipper đang giữ đơn)
+    const pickupAccounts: RouteAccountInfo[] = assignedPickup?.driver
+      ? [this.toDriverAccount(assignedPickup.driver, userById, true)]
+      : this.rankLocalDrivers(
+          allDrivers,
+          userById,
+          originHub?.id,
+          pickupAddressText,
+          pickupDistrict,
+          pickupProvince,
+        );
 
     // 3. Origin SOC
     const socHubs = allHubs.filter((h) => h.type === 'SORTING_CENTER');
@@ -458,18 +455,15 @@ export class RouteAccountsService {
 
     const isCrossSoc = Boolean(originSoc && destSoc && originSoc.id !== destSoc.id);
 
-    // 6. Delivery Drivers
-    const deliveryAccounts: RouteAccountInfo[] = [];
-    if (assignedDelivery?.driver) {
-      deliveryAccounts.push(this.toDriverAccount(assignedDelivery.driver, userById, true));
-    }
-    const deliveryCandidates = this.rankLocalDrivers(
-      allDrivers,
-      userById,
-      destHub?.id,
-      deliveryAddrText,
-    ).filter((c) => !deliveryAccounts.some((a) => a.email === c.email && a.name === c.name));
-    deliveryAccounts.push(...deliveryCandidates);
+    // 6. Delivery Drivers (nếu đã gán Shipper thì chỉ hiện đúng Shipper đang giữ đơn)
+    const deliveryAccounts: RouteAccountInfo[] = assignedDelivery?.driver
+      ? [this.toDriverAccount(assignedDelivery.driver, userById, true)]
+      : this.rankLocalDrivers(
+          allDrivers,
+          userById,
+          destHub?.id,
+          deliveryAddrText,
+        );
 
     // 7. Seller Accounts
     const sellerAccounts: RouteAccountInfo[] = [];
