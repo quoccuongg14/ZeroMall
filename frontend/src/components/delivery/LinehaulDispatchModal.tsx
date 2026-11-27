@@ -421,6 +421,18 @@ export const LinehaulDispatchModal: React.FC<LinehaulDispatchModalProps> = ({
     return `SEAL-${originCode}-${destCode}-${Math.floor(1000 + Math.random() * 9000)}`
   })
 
+  // Đồng bộ lại mã Seal mỗi khi mở modal hoặc targetHub thay đổi theo auto-detect
+  useEffect(() => {
+    if (!isOpen || isManualRoute) return
+    const destCode = targetHub?.code || 'DEST'
+    const originCode = currentHub?.code || 'HUB'
+    setSealNumber((prev) => {
+      const expectedPrefix = `SEAL-${originCode}-${destCode}-`
+      if (prev.startsWith(expectedPrefix)) return prev
+      return `${expectedPrefix}${Math.floor(1000 + Math.random() * 9000)}`
+    })
+  }, [isOpen, isManualRoute, currentHub?.code, targetHub?.code])
+
   // Cập nhật lại mã Seal khi đổi Hub đích
   const handleTargetHubChange = (newHubId: string) => {
     setTargetHubId(newHubId)

@@ -58,7 +58,12 @@ export const LinehaulInboundReconciliationModal: React.FC<LinehaulInboundReconci
     if (!trip) return []
     return trip.shipments.map((s) => ({
       ...s,
-      isScanned: localScannedIds.has(s.id) || s.status === 'AT_DESTINATION_HUB' || s.status === 'OUT_FOR_DELIVERY' || s.status === 'DELIVERED',
+      isScanned:
+        localScannedIds.has(s.id) ||
+        s.status === 'SORTING' ||
+        s.status === 'AT_DESTINATION_HUB' ||
+        s.status === 'OUT_FOR_DELIVERY' ||
+        s.status === 'DELIVERED',
     }))
   }, [trip, localScannedIds])
 

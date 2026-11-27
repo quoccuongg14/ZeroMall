@@ -538,6 +538,10 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
       const driver = info?.driver || 'Bác tài'
       const phone = info?.driverPhone || ''
       const key = `${truck}_${seal}`
+      const sealOriginCode = seal.toUpperCase().startsWith('SEAL-') ? seal.toUpperCase().split('-')[1] : ''
+      const matchedOriginHub =
+        (s.currentHubId && hubs.find((h) => h.id === s.currentHubId)) ||
+        (sealOriginCode ? hubs.find((h) => h.code?.toUpperCase() === sealOriginCode) : undefined)
 
       if (!map.has(key)) {
         map.set(key, {
@@ -546,7 +550,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
           sealNumber: seal,
           truckDriver: driver,
           truckDriverPhone: phone,
-          originHubName: s.currentHub?.name,
+          originHubName: s.currentHub?.name || matchedOriginHub?.name || sealOriginCode || 'Kho xuất phát',
           dispatchedAt: s.trackingLogs?.find((l) => l.description?.includes('Xe tải'))?.timestamp,
           shipments: [],
         })
@@ -604,25 +608,31 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
   // Trip Reconciliation Handlers (Tab 3)
   const handleReceiveShipmentFromTrip = async (shipmentId: string) => {
     const truck = reconcilingTrip?.truckNumber || 'Xe tải tuyến'
+    const nextStatus = isSoc ? 'SORTING' : 'AT_DESTINATION_HUB'
     await onUpdateStatus(
       shipmentId,
-      'AT_DESTINATION_HUB',
+      nextStatus,
       undefined,
       currentHub?.id,
-      `Xe tải [${truck}] đã đến. Nhân viên bưu cục [${currentUser.name}] đã đối soát & nhập bưu cục phát ${currentHub?.name}`
+      isSoc
+        ? `Xe tải [${truck}] đã cập bến. Nhân viên kho [${currentUser.name}] đã đối soát & nhập sàn phân loại ${currentHub?.name}`
+        : `Xe tải [${truck}] đã đến. Nhân viên bưu cục [${currentUser.name}] đã đối soát & nhập bưu cục phát ${currentHub?.name}`
     )
     onRefresh()
   }
 
   const handleReceiveAllShipmentsFromTrip = async (shipmentIds: string[]) => {
     const truck = reconcilingTrip?.truckNumber || 'Xe tải tuyến'
+    const nextStatus = isSoc ? 'SORTING' : 'AT_DESTINATION_HUB'
     for (const id of shipmentIds) {
       await onUpdateStatus(
         id,
-        'AT_DESTINATION_HUB',
+        nextStatus,
         undefined,
         currentHub?.id,
-        `Xe tải [${truck}] đã đến. Xác nhận nhập kho bưu cục phát ${currentHub?.name}`
+        isSoc
+          ? `Xe tải [${truck}] đã cập bến. Xác nhận nhập sàn phân loại ${currentHub?.name}`
+          : `Xe tải [${truck}] đã đến. Xác nhận nhập kho bưu cục phát ${currentHub?.name}`
       )
     }
     setScanMessage({
@@ -872,17 +882,21 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               />
             )}
 
-            {/* Banner Xe Tuyến Cập Bến (Tab 3) */}
+            {/* Banner & Danh Sách Theo Chuyến Xe Tuyến Cập Bến (Tab 3) */}
             {stationTab === 'INBOUND_RECEIVING' && (
               <HubLinehaulTripsBanner
                 linehaulTrips={linehaulTrips}
                 inTransitTotalCount={inTransitList.length}
+                currentHub={currentHub}
+                actionLoading={actionLoading}
                 onOpenReconciliation={(trip) => setReconcilingTrip(trip)}
+                onQuickReceiveTrip={handleReceiveAllShipmentsFromTrip}
                 onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
               />
             )}
 
-            {/* Main Parcel Table */}
+            {/* Main Parcel Table (Ẩn ở Tab 3 vì đã gom chuẩn theo từng Chuyến Xe ở trên) */}
+            {stationTab !== 'INBOUND_RECEIVING' && (
             <HubParcelTable
               stationTab={stationTab}
               activeList={activeList}
@@ -941,6 +955,7 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               onOpenTripHistory={() => setIsSocTripHistoryOpen(true)}
               onUpdateStatus={onUpdateStatus}
             />
+            )}
           </div>
         </>
       )}
