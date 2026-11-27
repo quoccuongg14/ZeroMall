@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { GeminiAiService } from './gemini-ai.service';
 import { LocalAiService } from './local-ai.service';
 
 export interface ChatMessage {
@@ -22,6 +21,7 @@ export interface AssistantChatResponse {
   suggestedProducts: any[];
   quickReplies?: string[];
   detectedIntent?: {
+    mode?: string;
     category?: string;
     targetGender?: string;
     priceRange?: { min?: number; max?: number };
@@ -29,84 +29,295 @@ export interface AssistantChatResponse {
   };
 }
 
+type ChatMode = 'CHITCHAT' | 'VOUCHER' | 'SIZE_ADVICE' | 'SUPPORT' | 'PRODUCT_SEARCH';
+
 @Injectable()
 export class AiAssistantService {
   private readonly logger = new Logger(AiAssistantService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly geminiAiService: GeminiAiService,
     private readonly localAiService: LocalAiService,
   ) {}
 
   /**
-   * Xử lý tin nhắn hỏi đáp tư vấn mua sắm của khách hàng
+   * Xử lý tin nhắn hội thoại bằng Ollama (mặc định qwen2.5:14b) + RAG dữ liệu thật từ Postgres
    */
   async processChat(dto: AssistantChatDto): Promise<AssistantChatResponse> {
     const rawMsg = (dto.message || '').trim();
     if (!rawMsg) {
       return {
-        reply: 'Chào bạn! Mình là ZeroAI - Trợ lý mua sắm của ZeroMall. Bạn đang cần tìm kiếm hoặc tư vấn món đồ gì hôm nay?',
+        reply: 'Chào bạn! Mình là ZeroAI - Trợ lý mua sắm của ZeroMall. Bạn đang muốn tìm sản phẩm, xem voucher hay cần mình tư vấn chọn size hôm nay?',
         suggestedProducts: [],
-        quickReplies: ['Gợi ý đồ hot hôm nay', 'Balo học sinh sinh viên', 'Ốp lưng iPhone 15 Pro Max', 'Quà tặng bạn gái'],
+        quickReplies: [
+          '🎫 Săn mã giảm giá hôm nay',
+          '📏 Cao 1m72 nặng 65kg mặc size gì?',
+          '🧥 Tìm áo khoác nam dưới 400k',
+        ],
       };
     }
 
-    // 1. Phân tích ngữ nghĩa & Intent người dùng (0ms Regex & Rule-based)
-    const intent = this.extractIntent(rawMsg, dto.userGender);
+    // Chuẩn hóa lịch sử chat trước lượt hiện tại (tránh lặp lại câu user cuối cùng)
+    const rawHistory = Array.isArray(dto.history) ? dto.history : [];
+    const lastHist = rawHistory[rawHistory.length - 1];
+    const priorHistory =
+      lastHist && lastHist.role === 'user' && (lastHist.content || '').trim() === rawMsg
+        ? rawHistory.slice(0, -1)
+        : rawHistory;
 
-    // 2. Truy vấn sản phẩm THỰC TẾ từ Database PostgreSQL (100% Dynamic)
-    const products = await this.queryRelevantProducts(intent, rawMsg);
+    // 1. Phân tích nhanh ý định bằng Rule 0ms + Ollama Router cho các câu phức tạp/hỏi tiếp theo ngữ cảnh
+    let intent = this.extractIntent(rawMsg, dto.userGender);
+    let mode = this.detectFastMode(rawMsg, intent);
+    let effectiveSearchQuery = rawMsg;
 
-    // 3. Chuẩn hóa sản phẩm trả về cho giao diện
-    const formattedProducts = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      originalPrice: p.originalPrice,
-      image: (Array.isArray(p.images) && p.images[0]) || p.image || '',
-      category: p.category,
-      sales: p.sales || 0,
-      stock: p.stock ?? 100,
-      rating: 4.9,
-      brand: p.brand || 'No Brand',
-      shopId: p.shopId,
-      recommendationReason: this.generateReasonForProduct(p, intent),
-    }));
-
-    // 4. Sinh câu trả lời qua Gemini RAG (với Fallback tự động khi offline)
-    let aiResponse: { reply: string; quickReplies: string[] } | null = null;
-    try {
-      const contextSummary = `Ý định tìm kiếm: Ngành hàng [${intent.category || 'Mọi ngành'}], Ngân sách tối đa [${intent.maxPrice ? intent.maxPrice.toLocaleString('vi-VN') + 'đ' : 'Không giới hạn'}], Đối tượng [${intent.targetGender || 'Mọi người'}].`;
-      aiResponse = await this.geminiAiService.generateShoppingChat(
-        rawMsg,
-        dto.history || [],
-        formattedProducts,
-        contextSummary,
-      );
-    } catch (e: any) {
-      this.logger.warn(`Gemini Chat RAG error: ${e.message}`);
+    if (mode === 'AMBIGUOUS') {
+      const routed = await this.localAiService.analyzeChatIntentWithOllama(rawMsg, priorHistory);
+      if (routed) {
+        mode = routed.mode;
+        effectiveSearchQuery = routed.searchQuery || rawMsg;
+        if (routed.keywords.length > 0 && intent.keywords.length === 0) {
+          intent.keywords = routed.keywords;
+        }
+        if (routed.minPrice && !intent.minPrice) intent.minPrice = routed.minPrice;
+        if (routed.maxPrice && !intent.maxPrice) intent.maxPrice = routed.maxPrice;
+        if (routed.targetGender && !intent.targetGender) intent.targetGender = routed.targetGender;
+      } else {
+        // Nếu không có manh mối sản phẩm nào -> ưu tiên trả lời trò chuyện/tư vấn tự nhiên, không ép ném bừa sản phẩm
+        mode = this.hasProductClues(rawMsg, intent) ? 'PRODUCT_SEARCH' : 'CHITCHAT';
+      }
     }
 
-    // Nếu Gemini phản hồi hợp lệ, dùng kết quả đó
-    if (aiResponse && aiResponse.reply) {
+    // 2. Truy xuất dữ liệu thật theo đúng mode
+    let formattedProducts: any[] = [];
+    if (mode === 'PRODUCT_SEARCH') {
+      const products = await this.queryRelevantProducts(intent, effectiveSearchQuery);
+      formattedProducts = products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        originalPrice: p.originalPrice,
+        image: (Array.isArray(p.images) && p.images[0]) || p.image || '',
+        category: p.category,
+        sales: p.sales || 0,
+        stock: p.stock ?? 100,
+        rating: 4.9,
+        brand: p.brand || 'No Brand',
+        shopId: p.shopId,
+        variationsText: p.variationsText || undefined,
+        recommendationReason: this.generateReasonForProduct(p, intent),
+      }));
+    }
+
+    const activeVouchers =
+      mode === 'VOUCHER' || mode === 'SUPPORT' ? await this.fetchPlatformVouchers() : [];
+
+    const sizeGuidance =
+      mode === 'SIZE_ADVICE' ? this.computeSizeGuidance(rawMsg, dto.userGender) : '';
+
+    // 3. Sinh câu trả lời tự nhiên bằng Ollama (qwen2.5:14b) kèm trí nhớ lịch sử chat
+    const contextParts = [
+      `Ý định: ${mode}`,
+      intent.category ? `Ngành hàng: ${intent.category}` : '',
+      intent.maxPrice ? `Ngân sách tối đa: ${intent.maxPrice.toLocaleString('vi-VN')}đ` : '',
+      intent.targetGender ? `Đối tượng: ${intent.targetGender}` : '',
+    ].filter(Boolean);
+
+    const ollamaReply = await this.localAiService.generateShoppingChatWithOllama({
+      userMessage: rawMsg,
+      mode,
+      history: priorHistory.map((m) => ({ role: m.role, content: m.content })),
+      retrievedProducts: formattedProducts,
+      activeVouchers,
+      sizeGuidance,
+      contextSummary: contextParts.join(' • '),
+    });
+
+    const allowProducts =
+      mode === 'PRODUCT_SEARCH' &&
+      formattedProducts.length > 0 &&
+      (ollamaReply?.showProducts ?? true);
+
+    if (ollamaReply?.reply) {
       return {
-        reply: aiResponse.reply,
-        suggestedProducts: formattedProducts,
-        quickReplies: aiResponse.quickReplies?.length ? aiResponse.quickReplies : this.getDefaultQuickReplies(intent),
-        detectedIntent: intent,
+        reply: ollamaReply.reply,
+        suggestedProducts: allowProducts ? formattedProducts : [],
+        quickReplies:
+          ollamaReply.quickReplies.length > 0
+            ? ollamaReply.quickReplies
+            : this.getDefaultQuickReplies(mode, intent),
+        detectedIntent: {
+          mode,
+          category: intent.category,
+          targetGender: intent.targetGender,
+          priceRange:
+            intent.minPrice || intent.maxPrice
+              ? { min: intent.minPrice, max: intent.maxPrice }
+              : undefined,
+          keywords: intent.keywords,
+        },
       };
     }
 
-    // 5. Fallback thông minh cục bộ khi không có mạng ngoại vi
-    const fallbackReply = this.generateLocalFallbackReply(rawMsg, intent, formattedProducts);
+    // 4. Fallback thông minh cục bộ khi Ollama chưa phản hồi kịp
+    const fallbackReply = this.generateLocalFallbackReply(
+      rawMsg,
+      mode,
+      intent,
+      formattedProducts,
+      activeVouchers,
+      sizeGuidance,
+    );
 
     return {
       reply: fallbackReply,
-      suggestedProducts: formattedProducts,
-      quickReplies: this.getDefaultQuickReplies(intent),
-      detectedIntent: intent,
+      suggestedProducts: mode === 'PRODUCT_SEARCH' ? formattedProducts : [],
+      quickReplies: this.getDefaultQuickReplies(mode, intent),
+      detectedIntent: {
+        mode,
+        category: intent.category,
+        targetGender: intent.targetGender,
+        priceRange:
+          intent.minPrice || intent.maxPrice
+            ? { min: intent.minPrice, max: intent.maxPrice }
+            : undefined,
+        keywords: intent.keywords,
+      },
     };
+  }
+
+  /**
+   * Bộ định tuyến nhanh 0ms cho các mẫu câu rõ ràng; câu mơ hồ/hỏi nối tiếp sẽ chuyển qua Ollama phân tích
+   */
+  private detectFastMode(msg: string, intent: any): ChatMode | 'AMBIGUOUS' {
+    const lower = msg.toLowerCase().trim();
+
+    // Lời chào / cảm ơn / tạm biệt / tán gẫu đơn thuần (không có từ khóa mua đồ & không chứa số đo/giá)
+    const pureChitchatRe =
+      /^(xin\s*chào|chào(\s+bạn|\s+ad|\s+shop|\s+zeroai)?|hello|hi+|hey+|cảm\s*ơn|thank(\s*you|s)?|tạm\s*biệt|bye+|ok+|oki+|oke|hay\s*quá|tuyệt\s*vời|bạn\s+là\s+ai|bạn\s+tên\s+gì|có\s+ai\s+ở\s+đó\s+không|test)[!.,?\s]*$/i;
+    if (pureChitchatRe.test(lower)) {
+      return 'CHITCHAT';
+    }
+
+    // Hỏi đáp về Voucher / Mã giảm giá / Freeship / Khung giờ vàng
+    if (/(voucher|mã giảm|khuyến mãi|giờ vàng|khung giờ|săn deal|ưu đãi|freeship|miễn phí vận chuyển)/i.test(lower)) {
+      return 'VOUCHER';
+    }
+
+    // Hỏi tư vấn Size theo chiều cao / cân nặng
+    const hasBodyStats = /(\d{2,3}\s*kg|\b1[.,m]\d{1,2}|cao\s+\d|nặng\s+\d|size\s*(gì|nào|bao nhiêu)|bảng size|chọn size|tư vấn size)/i.test(lower);
+    if (hasBodyStats && !/(mua|tìm|gợi ý|xem|giá|dưới|từ)\s+(áo|quần|váy|giày)/i.test(lower)) {
+      return 'SIZE_ADVICE';
+    }
+
+    // Hỏi chính sách sàn / vận hành / tính năng thử đồ AI
+    if (/(đổi trả|hoàn tiền|bảo hành|khiếu nại|cskh|hỗ trợ|thanh toán|sepay|zeropay|cod\b|thử đồ|try[\s-]?on|phòng thử|vận chuyển|zmx|zeroexpress|mở shop|bán hàng)/i.test(lower) && !intent.itemNoun) {
+      return 'SUPPORT';
+    }
+
+    // Yêu cầu tìm kiếm / gợi ý sản phẩm rõ ràng
+    if (
+      intent.itemNoun ||
+      intent.maxPrice ||
+      intent.minPrice ||
+      /(sản phẩm bán chạy|đồ hot|món hot|gợi ý đồ|tìm\s+|mua\s+)/i.test(lower)
+    ) {
+      // Nếu là câu hỏi nối tiếp mơ hồ kiểu "còn cái nào rẻ hơn", đưa sang Ollama để giữ mạch lịch sử
+      if (/(cái nào|mẫu nào|còn\s+nào|rẻ hơn|đắt hơn|khác không|vừa nói)/i.test(lower) && !intent.itemNoun) {
+        return 'AMBIGUOUS';
+      }
+      return 'PRODUCT_SEARCH';
+    }
+
+    return 'AMBIGUOUS';
+  }
+
+  private hasProductClues(msg: string, intent: any): boolean {
+    if (intent.itemNoun || intent.keywords?.length > 0 || intent.maxPrice || intent.minPrice) return true;
+    return /(mua|tìm|giá|bao nhiêu|bán chạy|quà|tặng|shop|sản phẩm)/i.test(msg);
+  }
+
+  /**
+   * Tính nhanh gợi ý số đo & size chuẩn khi khách hỏi theo chiều cao/cân nặng
+   */
+  private computeSizeGuidance(msg: string, defaultGender?: string): string {
+    const lower = msg.toLowerCase();
+    let heightCm = 170;
+    let weightKg = 62;
+
+    const mMatch = lower.match(/\b1\s*[m.,]\s*(\d{1,2})\b/);
+    const cmMatch = lower.match(/\b(1[4-9]\d|2[0-1]\d)\s*cm\b/);
+    if (mMatch) {
+      const dec = mMatch[1].length === 1 ? `${mMatch[1]}0` : mMatch[1];
+      heightCm = Number(`1${dec}`);
+    } else if (cmMatch) {
+      heightCm = Number(cmMatch[1]);
+    }
+
+    const kgMatch = lower.match(/\b(\d{2,3})\s*(?:kg|ký|cân)\b/);
+    if (kgMatch) {
+      weightKg = Number(kgMatch[1]);
+    }
+
+    let gender: 'NAM' | 'NU' = 'NAM';
+    if (/(nữ|chị|em gái|bạn gái|vợ)/i.test(lower)) gender = 'NU';
+    else if (/(nam|anh|bạn trai|chồng)/i.test(lower)) gender = 'NAM';
+    else if ((defaultGender || '').toUpperCase() === 'FEMALE' || (defaultGender || '').toUpperCase() === 'NU') {
+      gender = 'NU';
+    }
+
+    const chest = gender === 'NU' ? 0.48 * heightCm + 0.18 * weightKg : 0.53 * heightCm + 0.1 * weightKg;
+    const waist = gender === 'NU' ? 0.33 * heightCm + 0.25 * weightKg : 0.38 * heightCm + 0.22 * weightKg;
+
+    let topSize = 'M';
+    if (gender === 'NU') {
+      if (chest < 83 && weightKg < 47) topSize = 'S';
+      else if (chest < 88 && weightKg < 53) topSize = 'M';
+      else if (chest < 94 && weightKg < 60) topSize = 'L';
+      else topSize = 'XL';
+    } else {
+      if (chest < 92 && weightKg < 57) topSize = 'S';
+      else if (chest < 97 && weightKg < 65) topSize = 'M';
+      else if (chest < 103 && weightKg < 74) topSize = 'L';
+      else if (chest < 109 && weightKg < 84) topSize = 'XL';
+      else topSize = 'XXL';
+    }
+
+    const outerSizes = ['S', 'M', 'L', 'XL', 'XXL'];
+    const outerIdx = Math.min(outerSizes.length - 1, outerSizes.indexOf(topSize) + 1);
+    const outerSize = outerSizes[outerIdx];
+
+    let pantSize = '30';
+    if (gender === 'NU') {
+      pantSize = waist < 65 ? '26' : waist < 69 ? '27' : waist < 74 ? '28' : waist < 79 ? '29' : '30';
+    } else {
+      pantSize = waist < 74 ? '29' : waist < 79 ? '30' : waist < 84 ? '31' : waist < 89 ? '32' : '34';
+    }
+
+    return [
+      `Thông số khách: ${heightCm}cm, ${weightKg}kg, giới tính ${gender === 'NU' ? 'Nữ' : 'Nam'}.`,
+      `Ước tính vòng ngực ~${chest.toFixed(1)}cm, vòng eo ~${waist.toFixed(1)}cm.`,
+      `Áo thun/sơ mi vừa vặn: Size ${topSize}. Áo khoác/Blazer mặc ngoài thoải mái: Size ${outerSize}.`,
+      `Quần tây/jean: Size ${pantSize}. (Giày dép cần chọn theo chiều dài bàn chân cm thực tế).`,
+    ].join(' ');
+  }
+
+  private async fetchPlatformVouchers(): Promise<any[]> {
+    try {
+      const rows: any[] = await this.prisma.$queryRaw`
+        SELECT code, name, type, value, "minSpend", "maxDiscount", "usageLimit", "usedCount"
+        FROM discount."Voucher"
+        WHERE "shopId" = 'PLATFORM'
+          AND "startDate" <= NOW()
+          AND "endDate" >= NOW()
+          AND "usedCount" < "usageLimit"
+        ORDER BY "minSpend" ASC
+        LIMIT 8
+      `;
+      return rows || [];
+    } catch (e: any) {
+      this.logger.warn(`Could not read platform vouchers: ${e.message}`);
+      return [];
+    }
   }
 
   /**
@@ -144,65 +355,58 @@ export class AiAssistantService {
     const isUserMale = normUserGender === 'MALE' || normUserGender === 'NAM';
     const isUserFemale = normUserGender === 'FEMALE' || normUserGender === 'NU';
 
-    // 1. Kiểm tra nếu người dùng tìm áo đôi / đồ unisex
     if (lower.includes('áo đôi') || lower.includes('áo cặp') || lower.includes('đồ đôi') || lower.includes('unisex')) {
       targetGender = 'UNISEX';
       recipientNoun = 'cặp đôi';
       isGift = true;
-    }
-    // 2. Kiểm tra nếu người nhận là Nam (chồng, bạn trai, nam giới)
-    else if (
+    } else if (
       lower.includes('chồng') ||
       lower.includes('ông xã') ||
       lower.includes('anh xã') ||
       lower.includes('bạn trai') ||
       lower.includes('cho nam') ||
+      lower.includes('bạn nam') ||
       lower.includes('cho anh') ||
       lower.includes('anh ấy') ||
       lower.includes('bố') ||
       lower.includes('cho ba') ||
-      lower.includes('tặng bạn trai')
+      lower.includes('tặng bạn trai') ||
+      /(?:^|[\s,])nam(?:$|[\s,.!?])/i.test(lower.replace(/việt\s+nam/gi, ''))
     ) {
       targetGender = 'NAM';
       if (lower.includes('chồng') || lower.includes('ông xã') || lower.includes('anh xã')) recipientNoun = 'chồng';
       else if (lower.includes('bạn trai')) recipientNoun = 'bạn trai';
       else if (lower.includes('bố') || lower.includes('cho ba')) recipientNoun = 'bố';
       else recipientNoun = 'nam';
-    }
-    // 3. Kiểm tra nếu người nhận là Nữ (vợ, bạn gái, nữ giới)
-    else if (
+    } else if (
       lower.includes('vợ') ||
       lower.includes('bà xã') ||
       lower.includes('bạn gái') ||
+      lower.includes('bạn nữ') ||
       lower.includes('cho nữ') ||
       lower.includes('chị em') ||
       lower.includes('cho chị') ||
       lower.includes('cho mẹ') ||
       lower.includes('mẹ tôi') ||
-      lower.includes('tặng bạn gái')
+      lower.includes('tặng bạn gái') ||
+      /(?:^|[\s,])nữ(?:$|[\s,.!?])/i.test(lower)
     ) {
       targetGender = 'NU';
       if (lower.includes('vợ') || lower.includes('bà xã')) recipientNoun = 'vợ';
       else if (lower.includes('bạn gái')) recipientNoun = 'bạn gái';
       else if (lower.includes('cho mẹ') || lower.includes('mẹ tôi')) recipientNoun = 'mẹ';
       else recipientNoun = 'nữ';
-    }
-    // 4. Kiểm tra người nhận là "người yêu", "crush", "người thương", "bồ"
-    else if (lower.includes('người yêu') || lower.includes('crush') || lower.includes('người thương') || lower.includes('bồ')) {
+    } else if (lower.includes('người yêu') || lower.includes('crush') || lower.includes('người thương') || lower.includes('bồ')) {
       recipientNoun = 'người yêu';
       isGift = true;
 
-      // SUY LUẬN ĐẢO CHIỀU TỪ HỒ SƠ TÀI KHOẢN (User Profile):
       if (isUserMale) {
-        // Tài khoản đang đăng nhập là Nam -> Tặng người yêu thường là Nữ (bạn gái)
         targetGender = 'NU';
         recipientNoun = 'bạn gái';
       } else if (isUserFemale) {
-        // Tài khoản đang đăng nhập là Nữ -> Tặng người yêu thường là Nam (bạn trai)
         targetGender = 'NAM';
         recipientNoun = 'bạn trai';
       } else {
-        // Chưa có dữ liệu giới tính tài khoản -> Cần AI hỏi lại khéo léo và cung cấp Quick Replies
         isAmbiguousRecipient = true;
       }
     }
@@ -220,18 +424,28 @@ export class AiAssistantService {
     if (/balo|ba lô|cặp/i.test(lower)) {
       itemNoun = 'balo';
       keywords.push('balo', 'ba lô');
-      category = 'Túi Ví Nữ'; // Category tương ứng trong ZeroMall DB
+      category = 'Túi Ví Nữ';
       relatedCategories.push('Túi Ví Nữ', 'Thời Trang Nam');
     } else if (/túi|túi xách|túi đeo chéo|clutch/i.test(lower)) {
       itemNoun = 'túi xách';
       keywords.push('túi');
       category = 'Túi Ví Nữ';
       relatedCategories.push('Túi Ví Nữ', 'Phụ Kiện Nữ');
-    } else if (/ví|bóp/i.test(lower)) {
-      itemNoun = 'ví';
-      keywords.push('ví', 'bóp');
+    } else if (/ví|bóp|thắt lưng|dây nịt/i.test(lower)) {
+      itemNoun = /thắt lưng|dây nịt/i.test(lower) ? 'thắt lưng' : 'ví';
+      keywords.push(/thắt lưng|dây nịt/i.test(lower) ? 'thắt lưng' : 'ví');
       category = 'Túi Ví Nữ';
       relatedCategories.push('Túi Ví Nữ', 'Thời Trang Nam', 'Phụ Kiện Nữ');
+    } else if (/kính|mắt kính/i.test(lower)) {
+      itemNoun = 'kính mát';
+      keywords.push('kính');
+      category = 'Phụ Kiện Nữ';
+      relatedCategories.push('Phụ Kiện Nữ', 'Thời Trang Nam', 'Thời Trang Nữ');
+    } else if (/đồng hồ/i.test(lower)) {
+      itemNoun = 'đồng hồ';
+      keywords.push('đồng hồ');
+      category = 'Đồng Hồ';
+      relatedCategories.push('Đồng Hồ', 'Phụ Kiện Nữ', 'Thời Trang Nam');
     } else if (/tai nghe|bluetooth|airpods/i.test(lower)) {
       itemNoun = 'tai nghe';
       category = 'Thiết Bị Điện Tử';
@@ -240,21 +454,26 @@ export class AiAssistantService {
       itemNoun = 'ốp lưng';
       category = 'Điện Thoại & Phụ Kiện';
       keywords.push('ốp lưng', 'case');
-    } else if (/áo|bomber|hoodie|áo thun|áo khoác/i.test(lower)) {
-      itemNoun = 'áo';
+    } else if (/quần|jogger|kaki|jean/i.test(lower)) {
+      itemNoun = 'quần';
+      keywords.push('quần');
+      category = targetGender === 'NU' ? 'Thời Trang Nữ' : 'Thời Trang Nam';
+      relatedCategories.push('Thời Trang Nam', 'Thời Trang Nữ');
+    } else if (/áo|bomber|hoodie|áo thun|áo khoác|blazer|sơ mi|polo|cardigan/i.test(lower)) {
+      const specificWord = lower.match(/(blazer|bomber|hoodie|cardigan|polo|sơ mi|áo khoác|áo thun)/i)?.[1];
+      itemNoun = specificWord || 'áo';
       if (targetGender === 'NAM') {
         category = 'Thời Trang Nam';
         relatedCategories.push('Thời Trang Nam');
-        keywords.push('áo', 'bomber');
+        keywords.push(specificWord || 'áo');
       } else if (targetGender === 'NU') {
         category = 'Thời Trang Nữ';
         relatedCategories.push('Thời Trang Nữ', 'Phụ Kiện Nữ');
-        keywords.push('áo', 'váy', 'đầm');
+        keywords.push(specificWord || 'áo', 'váy');
       } else {
-        // UNISEX hoặc Chưa rõ -> Lấy Thời Trang Nam (chứa Áo Bomber Unisex) và Thời Trang Nữ
         category = 'Thời Trang Nam';
         relatedCategories.push('Thời Trang Nam', 'Thời Trang Nữ');
-        keywords.push('áo', 'bomber', 'unisex');
+        keywords.push(specificWord || 'áo');
       }
     } else if (/váy|đầm|chân váy/i.test(lower)) {
       itemNoun = 'váy đầm';
@@ -268,10 +487,11 @@ export class AiAssistantService {
       itemNoun = 'mũ nón';
       category = 'Phụ Kiện Nữ';
       keywords.push('nón', 'mũ');
-    } else if (/giày|dép|sneaker/i.test(lower)) {
+    } else if (/giày|dép|sneaker|boots/i.test(lower)) {
       itemNoun = 'giày dép';
-      category = targetGender === 'NAM' ? 'Giày Dép Nam' : 'Thời Trang Nữ';
-      keywords.push('giày', 'dép');
+      category = targetGender === 'NAM' ? 'Giày Dép Nam' : 'Giày Dép Nữ';
+      relatedCategories.push('Giày Dép Nam', 'Giày Dép Nữ', 'Thời Trang Nữ');
+      keywords.push('giày', 'sneaker', 'boots');
     }
 
     return {
@@ -282,7 +502,7 @@ export class AiAssistantService {
       targetGender,
       minPrice,
       maxPrice,
-      keywords,
+      keywords: Array.from(new Set(keywords)),
       isGift,
       isAmbiguousRecipient,
     };
@@ -294,12 +514,12 @@ export class AiAssistantService {
     const unit = (unitStr || '').toLowerCase();
     if (unit.startsWith('tr')) return num * 1000000;
     if (unit.startsWith('k') || unit.startsWith('ngh') || unit.startsWith('ngà')) return num * 1000;
-    if (num < 1000) return num * 1000; // Mặc định nếu người dùng gõ "dưới 200" tức là 200.000đ
+    if (num < 1000) return num * 1000;
     return num;
   }
 
   /**
-   * Truy vấn sản phẩm thực tế từ Database
+   * Truy vấn sản phẩm thực tế từ Database (chỉ trả bán chạy nhất khi người dùng chủ động hỏi gợi ý/bán chạy)
    */
   private async queryRelevantProducts(intent: any, rawQuery: string) {
     try {
@@ -307,16 +527,37 @@ export class AiAssistantService {
       if (intent.minPrice) priceFilter.gte = intent.minPrice;
       if (intent.maxPrice) priceFilter.lte = intent.maxPrice;
 
+      const genderExclusion: any =
+        intent.targetGender === 'NAM'
+          ? {
+              NOT: {
+                AND: [
+                  { name: { contains: 'nữ', mode: 'insensitive' as const } },
+                  { NOT: { name: { contains: 'nam', mode: 'insensitive' as const } } },
+                ],
+              },
+            }
+          : intent.targetGender === 'NU'
+          ? {
+              NOT: {
+                AND: [
+                  { name: { contains: 'nam', mode: 'insensitive' as const } },
+                  { NOT: { name: { contains: 'nữ', mode: 'insensitive' as const } } },
+                ],
+              },
+            }
+          : {};
+
       const baseWhere: any = {
         status: 'active',
         stock: { gt: 0 },
         name: { notIn: ['test', 'cuong', '2'] },
+        ...genderExclusion,
       };
       if (Object.keys(priceFilter).length > 0) {
         baseWhere.price = priceFilter;
       }
 
-      // ƯU TIÊN 1: Nếu người dùng có tìm từ khóa cụ thể (VD: "balo", "áo")
       if (intent.keywords && intent.keywords.length > 0) {
         const keywordOrConditions = intent.keywords.map((kw: string) => ({
           name: { contains: kw, mode: 'insensitive' },
@@ -337,17 +578,30 @@ export class AiAssistantService {
           orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
         });
 
-        // Nếu có lọc giá mà không có kết quả, nới lỏng giá để vẫn giữ đúng món đồ khách muốn tìm
         if (keywordList.length === 0) {
+          keywordList = await this.prisma.product.findMany({
+            where: {
+              ...baseWhere,
+              OR: keywordOrConditions,
+            },
+            take: 6,
+            orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
+          });
+        }
+
+        if (keywordList.length === 0 && Object.keys(priceFilter).length > 0) {
+          // Nới lỏng mức giá nhưng vẫn giữ bộ lọc giới tính & ưu tiên ngành hàng đúng
           keywordList = await this.prisma.product.findMany({
             where: {
               status: 'active',
               stock: { gt: 0 },
               name: { notIn: ['test', 'cuong', '2'] },
+              ...genderExclusion,
+              ...(catFilter ? { category: catFilter } : {}),
               OR: keywordOrConditions,
             },
             take: 6,
-            orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
+            orderBy: [{ price: 'asc' }, { sales: 'desc' }],
           });
         }
 
@@ -356,14 +610,12 @@ export class AiAssistantService {
         }
       }
 
-      // ƯU TIÊN 2: Tìm theo Category / Related Categories nếu không có keyword hoặc keyword không ra
-      const catList = Array.from(new Set([
-        ...(intent.category ? [intent.category] : []),
-        ...(intent.relatedCategories || []),
-      ]));
+      const catList = Array.from(
+        new Set([...(intent.category ? [intent.category] : []), ...(intent.relatedCategories || [])])
+      );
 
       if (catList.length > 0) {
-        let catListProducts = await this.prisma.product.findMany({
+        const catListProducts = await this.prisma.product.findMany({
           where: {
             ...baseWhere,
             category: { in: catList },
@@ -371,35 +623,24 @@ export class AiAssistantService {
           take: 6,
           orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
         });
-
-        if (catListProducts.length === 0 && Object.keys(priceFilter).length > 0) {
-          catListProducts = await this.prisma.product.findMany({
-            where: {
-              status: 'active',
-              stock: { gt: 0 },
-              name: { notIn: ['test', 'cuong', '2'] },
-              category: { in: catList },
-            },
-            take: 6,
-            orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
-          });
-        }
-
         if (catListProducts.length > 0) {
           return catListProducts;
         }
       }
 
-      // ƯU TIÊN 3: Tìm theo từ ngữ tự do trong câu chat
-      const stopWords = new Set(['tôi', 'muốn', 'tìm', '1', 'cái', 'để', 'tặng', 'cho', 'ở', 'với', 'các', 'những', 'một', 'mình', 'em', 'nhé', 'giúp', 'ạ']);
-      const words = rawQuery.split(/\s+/).filter((w) => w.length >= 2 && !stopWords.has(w.toLowerCase()));
+      const stopWords = new Set([
+        'tôi', 'muốn', 'tìm', '1', 'cái', 'để', 'tặng', 'cho', 'ở', 'với', 'các',
+        'những', 'một', 'mình', 'em', 'nhé', 'giúp', 'ạ', 'nào', 'rẻ', 'hơn',
+        'có', 'không', 'dưới', 'trên', 'tầm', 'khoảng', 'gợi', 'ý', 'xem', 'mua',
+      ]);
+      const words = rawQuery
+        .split(/\s+/)
+        .filter((w) => w.length >= 2 && !stopWords.has(w.toLowerCase()));
       if (words.length > 0) {
         const freeTextList = await this.prisma.product.findMany({
           where: {
-            status: 'active',
-            stock: { gt: 0 },
-            name: { notIn: ['test', 'cuong', '2'] },
-            OR: words.slice(0, 3).map((w) => ({
+            ...baseWhere,
+            OR: words.slice(0, 4).map((w) => ({
               name: { contains: w, mode: 'insensitive' },
             })),
           },
@@ -411,16 +652,19 @@ export class AiAssistantService {
         }
       }
 
-      // ƯU TIÊN 4: Fallback lấy các sản phẩm bán chạy nhất toàn sàn
-      return await this.prisma.product.findMany({
-        where: {
-          status: 'active',
-          stock: { gt: 0 },
-          name: { notIn: ['test', 'cuong', '2'] },
-        },
-        take: 6,
-        orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
-      });
+      // Chỉ lấy sản phẩm bán chạy/theo giá khi khách chủ động hỏi gợi ý hoặc lọc theo giá
+      if (
+        /(bán chạy|hot|nổi bật|gợi ý|phổ biến|đồ gì|món gì|quà tặng)/i.test(rawQuery) ||
+        Object.keys(priceFilter).length > 0
+      ) {
+        return await this.prisma.product.findMany({
+          where: baseWhere,
+          take: 6,
+          orderBy: [{ sales: 'desc' }, { createdAt: 'desc' }],
+        });
+      }
+
+      return [];
     } catch (e: any) {
       this.logger.error(`Error querying database for assistant: ${e.message}`);
       return [];
@@ -431,128 +675,78 @@ export class AiAssistantService {
     const pName = (product.name || '').toLowerCase();
     const pCat = product.category || '';
 
-    // 1. Áo khoác Bomber Unisex / Đồ cặp đôi
     if (pName.includes('unisex') || pName.includes('bomber') || intent.targetGender === 'UNISEX') {
-      return '👫 Áo khoác Unisex / Thích hợp cả nam & nữ';
+      return '👫 Phong cách Unisex dễ phối đồ';
     }
-
-    // 2. Món đồ tặng người yêu
     if (intent.recipientNoun === 'người yêu' || intent.isAmbiguousRecipient) {
-      if (pCat === 'Thời Trang Nam' || pName.includes('nam') || pName.includes('bomber')) {
-        return '👨 Quà tặng bạn trai phong cách';
-      }
-      if (pCat === 'Thời Trang Nữ' || pName.includes('váy') || pName.includes('nữ')) {
-        return '👩 Quà tặng bạn gái xinh xắn';
-      }
-      return '🎁 Quà tặng người yêu ý nghĩa';
+      if (pCat === 'Thời Trang Nam' || pName.includes('nam')) return '👨 Quà tặng bạn trai lịch lãm';
+      if (pCat === 'Thời Trang Nữ' || pName.includes('váy') || pName.includes('nữ')) return '👩 Quà tặng bạn gái tinh tế';
+      return '🎁 Quà tặng ý nghĩa';
     }
-
-    // 3. Phù hợp balo
-    if (intent.itemNoun === 'balo' || pName.includes('balo') || pName.includes('ba lô')) {
-      if (intent.recipientNoun === 'chồng' || intent.recipientNoun === 'bạn trai' || intent.targetGender === 'NAM') {
-        return '🎒 Balo nam / Unisex chống nước';
-      }
-      return '🎒 Balo học sinh / công sở hot';
-    }
-
-    // 4. Phù hợp túi xách
-    if (intent.itemNoun === 'túi xách' || pName.includes('túi')) {
-      if (intent.isGift) {
-        return '🎁 Quà tặng túi xách thanh lịch';
-      }
-      return '👜 Túi thời trang cao cấp';
-    }
-
-    // 5. Phù hợp quà tặng
-    if (intent.isGift && (intent.recipientNoun === 'chồng' || intent.recipientNoun === 'bạn trai' || intent.targetGender === 'NAM')) {
-      return `🎁 Quà tặng ${intent.recipientNoun || 'nam'} ý nghĩa`;
-    }
-    if (intent.isGift && (intent.recipientNoun === 'vợ' || intent.recipientNoun === 'bạn gái' || intent.targetGender === 'NU')) {
-      return `🎁 Quà tặng ${intent.recipientNoun || 'nàng'} tinh tế`;
-    }
-
-    // 6. Đúng ngân sách
     if (intent.maxPrice && product.price <= intent.maxPrice) {
-      return `💰 Đúng ngân sách < ${(intent.maxPrice).toLocaleString('vi-VN')}đ`;
+      return `💰 Phù hợp ngân sách ≤ ${intent.maxPrice.toLocaleString('vi-VN')}đ`;
     }
-
-    // 7. Bán chạy
     if (product.sales && product.sales > 10) {
       return `🔥 Đã bán ${product.sales} lượt`;
     }
-
     return '✨ ZeroAI tuyển chọn';
   }
 
-  private generateLocalFallbackReply(rawMsg: string, intent: any, products: any[]): string {
+  private generateLocalFallbackReply(
+    rawMsg: string,
+    mode: ChatMode,
+    intent: any,
+    products: any[],
+    activeVouchers: any[],
+    sizeGuidance: string,
+  ): string {
+    if (mode === 'CHITCHAT') {
+      return 'Chào bạn! Mình là ZeroAI Copilot của ZeroMall nè 😊 Bạn đang muốn tìm sản phẩm theo tầm giá, hỏi cách chọn size hay săn mã giảm giá hôm nay?';
+    }
+    if (mode === 'VOUCHER') {
+      if (activeVouchers.length > 0) {
+        const list = activeVouchers
+          .slice(0, 4)
+          .map((v) => `• ${v.code}: ${v.name} (đơn từ ${Number(v.minSpend || 0).toLocaleString('vi-VN')}đ)`)
+          .join('\n');
+        return `Hiện ZeroMall đang mở các mã giảm giá toàn sàn trong Khung Giờ Vàng nè:\n${list}\nBạn nhớ bấm "Lưu Vào Ví Ngay" ở trang chủ để giữ chỗ trước khi thanh toán nhé!`;
+      }
+      return 'Bạn có thể vào mục Khung Giờ Vàng Săn Voucher ngay trên trang chủ (các ca 00:00, 09:00, 12:00, 18:00, 21:00) để lưu mã giảm giá vào ví nhé!';
+    }
+    if (mode === 'SIZE_ADVICE') {
+      return `${sizeGuidance}\nMẹo nhỏ: Bạn có thể vào trang chi tiết sản phẩm bất kỳ hoặc mở Phòng Thử Đồ AI để hệ thống tự chọn sẵn size chuẩn nhất nhé!`;
+    }
+    if (mode === 'SUPPORT') {
+      return 'ZeroMall hỗ trợ giao hàng toàn quốc qua ZeroExpress (ZMX), thanh toán COD / Ví ZeroPay / QR SePay và đổi trả miễn phí trong 15 ngày (có Escrow bảo vệ). Ngoài ra bạn có thể dùng Phòng Thử Đồ AI để ướm thử và gợi ý size theo chiều cao, cân nặng nhé!';
+    }
+
     if (products.length === 0) {
-      return `Dạ ZeroAI đã tìm kiếm nhưng chưa thấy sản phẩm nào khớp với yêu cầu "${rawMsg}". Bạn có thể thử tìm bằng tên món đồ khác hoặc xem các gợi ý hot bên dưới nha!`;
+      return `Mình chưa tìm thấy sản phẩm nào khớp với "${rawMsg}" trong kho hiện tại. Bạn thử mô tả rõ hơn tên món đồ (ví dụ: áo khoác nam, quần tây, kính mát, đồng hồ...) để mình lọc giúp nhé!`;
     }
 
-    const count = products.length;
-    let priceText = '';
-    if (intent.maxPrice) {
-      priceText = ` trong tầm giá dưới ${intent.maxPrice.toLocaleString('vi-VN')}đ`;
-    }
-
-    // A. Nếu người dùng hỏi mua áo tặng người yêu
-    if (intent.itemNoun === 'áo' && (intent.recipientNoun === 'người yêu' || intent.isGift)) {
-      if (intent.isAmbiguousRecipient) {
-        return `Dạ, ZeroAI có rất nhiều mẫu áo đẹp thích hợp làm quà tặng người yêu nè ✨ Để mình gợi ý đúng form dáng và phong cách nhất, bạn đang muốn tìm áo tặng cho Bạn trai hay Bạn gái nè? Mời bạn chọn nhanh bên dưới hoặc tham khảo mẫu áo khoác Unisex cực chất này nhé:`;
-      }
-      if (intent.targetGender === 'NU') {
-        return `Dạ, ZeroAI gợi ý bạn các mẫu áo & thời trang xinh xắn rất thích hợp dành tặng bạn gái nè ✨ Bạn xem thử mẫu dưới đây có ưng ý không nhé:`;
-      }
-      if (intent.targetGender === 'NAM') {
-        return `Dạ, ZeroAI gợi ý bạn các mẫu áo phong cách, chuẩn form rất thích hợp dành tặng bạn trai nè ✨ Mời bạn tham khảo nhé:`;
-      }
-      if (intent.targetGender === 'UNISEX') {
-        return `Dạ, ZeroAI gợi ý bạn mẫu áo khoác Unisex cực chất mà cả bạn và người yêu đều có thể diện đôi cùng nhau nè ✨:`;
-      }
-    }
-
-    // B. Nếu người dùng tìm kiếm theo loại đồ cụ thể (balo, túi xách, áo, tai nghe...)
-    if (intent.itemNoun) {
-      if (intent.recipientNoun) {
-        return `Dạ, ZeroAI đã chọn lọc các mẫu ${intent.itemNoun}${priceText} rất phù hợp để làm quà tặng cho ${intent.recipientNoun} nè ✨ Mời bạn tham khảo các mẫu được đánh giá cao nhất trên ZeroMall nhé:`;
-      }
-      if (intent.targetGender === 'NAM') {
-        return `Dạ, ZeroAI gợi ý bạn các mẫu ${intent.itemNoun}${priceText} dành cho nam đang được ưa chuộng nhất trên ZeroMall nè. Mời bạn tham khảo nhé:`;
-      }
-      if (intent.targetGender === 'NU') {
-        return `Dạ, ZeroAI gợi ý bạn các mẫu ${intent.itemNoun}${priceText} dành cho nữ xinh xắn và phong cách nhất trên ZeroMall nè:`;
-      }
-      return `Dạ, mình đã tìm thấy ${count} mẫu ${intent.itemNoun}${priceText} đang được yêu thích nhất trên ZeroMall nè. Mời bạn tham khảo nhé:`;
-    }
-
-    // C. Nếu tìm quà tặng chung
-    if (intent.isGift && intent.recipientNoun) {
-      return `Dạ, ZeroAI đã chọn lọc các món quà tặng cho ${intent.recipientNoun}${priceText} ý nghĩa và bán chạy nhất trên ZeroMall nè ✨ Bạn xem thử các mẫu này nhé:`;
-    }
-
-    return `Dạ, ZeroAI gửi bạn ${count} sản phẩm phù hợp nhất với yêu cầu của bạn${priceText}. Bạn xem thử các mẫu này có ưng ý không nhé! ✨`;
+    const priceText = intent.maxPrice ? ` trong tầm giá dưới ${intent.maxPrice.toLocaleString('vi-VN')}đ` : '';
+    return `Mình tìm thấy ${products.length} sản phẩm phù hợp${priceText} đang có sẵn trên ZeroMall nè. Bạn bấm vào từng thẻ bên dưới để xem chi tiết và thử đồ AI nhé! ✨`;
   }
 
-  private getDefaultQuickReplies(intent: any): string[] {
-    // Nếu tìm áo tặng người yêu hoặc quà tặng chưa rõ giới tính
-    if (intent.itemNoun === 'áo' && (intent.recipientNoun === 'người yêu' || intent.isAmbiguousRecipient)) {
-      return ['👨 Áo tặng Bạn trai', '👩 Áo tặng Bạn gái', '👫 Áo đôi Unisex'];
+  private getDefaultQuickReplies(mode: ChatMode, intent: any): string[] {
+    if (mode === 'CHITCHAT') {
+      return ['🎫 Xem mã giảm giá', '📏 Tư vấn chọn size', '🧥 Tìm áo khoác đẹp'];
     }
-    if (intent.targetGender === 'UNISEX') {
-      return ['Áo bomber nỉ ngoại', 'Xem bảng size', 'Mã giảm giá hôm nay'];
+    if (mode === 'VOUCHER') {
+      return ['🧥 Tìm đồ áp dụng mã', '⚡ Cách săn giờ vàng', '🚚 Phí ship ZeroExpress'];
     }
-    if (intent.itemNoun === 'balo') {
-      return ['Balo chống nước', 'Balo đựng laptop 15.6 inch', 'Balo thời trang học sinh'];
+    if (mode === 'SIZE_ADVICE') {
+      return ['👔 Tìm áo sơ mi nam', '👖 Tìm quần tây công sở', '🧥 Tìm áo blazer'];
     }
-    if (intent.itemNoun === 'túi xách') {
-      return ['Túi đeo chéo nữ', 'Túi xách công sở', 'Túi đi chơi phong cách Hàn'];
+    if (mode === 'SUPPORT') {
+      return ['🎫 Săn voucher hôm nay', '✨ Thử đồ AI ở đâu?', '🔥 Sản phẩm bán chạy'];
     }
-    if (intent.recipientNoun === 'chồng' || intent.recipientNoun === 'bạn trai' || intent.targetGender === 'NAM') {
-      return ['Áo khoác bomber nam', 'Balo nam đa năng', 'Phụ kiện công nghệ cho nam'];
+    if (intent.targetGender === 'NAM') {
+      return ['Áo khoác nam dưới 400k', 'Quần tây công sở nam', 'Đồng hồ hoặc thắt lưng'];
     }
-    if (intent.recipientNoun === 'vợ' || intent.recipientNoun === 'bạn gái' || intent.targetGender === 'NU') {
-      return ['Váy đầm công chúa', 'Túi xách tặng bạn gái', 'Gợi ý quà sinh nhật'];
+    if (intent.targetGender === 'NU') {
+      return ['Váy đầm đi chơi', 'Túi xách nữ thanh lịch', 'Kính mát thời trang'];
     }
-    return ['Sản phẩm bán chạy nhất', 'Đồ công nghệ hot', 'Mã giảm giá hôm nay'];
+    return ['Cái nào rẻ hơn?', '📏 Tư vấn chọn size', '🎫 Săn mã giảm giá'];
   }
 }

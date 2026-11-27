@@ -10,10 +10,10 @@ interface ZeroAssistantModalProps {
 }
 
 const DEFAULT_QUICK_PROMPTS = [
-  '🎒 Tìm balo học sinh sinh viên đi học',
-  '📱 Ốp lưng iPhone 15 Pro Max < 200k',
+  '🎫 Săn mã giảm giá hôm nay',
+  '📏 Cao 1m72 nặng 65kg mặc size gì?',
+  '🧥 Tìm áo khoác nam dưới 400k',
   '🎁 Gợi ý quà tặng bạn nữ dưới 300k',
-  '👕 Áo khoác bomber thời trang nam',
 ];
 
 export const ZeroAssistantModal: React.FC<ZeroAssistantModalProps> = ({
@@ -177,7 +177,7 @@ export const ZeroAssistantModal: React.FC<ZeroAssistantModalProps> = ({
               <div className="flex items-center gap-1.5">
                 <h3 className="font-black text-sm tracking-wide">ZeroAI Copilot</h3>
                 <span className="bg-white/20 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
-                  RAG TMĐT
+                  Qwen 2.5 • 14B
                 </span>
                 {isExpanded && (
                   <span className="hidden sm:inline-block bg-emerald-500/30 text-emerald-200 text-[9px] font-bold px-1.5 py-0.2 rounded-full">
@@ -276,7 +276,7 @@ export const ZeroAssistantModal: React.FC<ZeroAssistantModalProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce [animation-delay:0.2s]"></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce [animation-delay:0.4s]"></span>
                 <span className="text-[11px] text-slate-400 font-medium ml-1">
-                  ZeroAI đang tìm kiếm kho hàng...
+                  ZeroAI đang suy nghĩ...
                 </span>
               </div>
             </div>

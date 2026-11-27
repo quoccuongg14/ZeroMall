@@ -466,4 +466,234 @@ Chỉ trả về JSON duy nhất:
     }
     return null;
   }
+
+  /**
+   * Phân loại ý định & trích xuất truy vấn hội thoại đa lượt bằng Ollama (nhanh bằng qwen2.5:1.5b)
+   */
+  async analyzeChatIntentWithOllama(
+    userMessage: string,
+    history: Array<{ role: string; content: string }> = [],
+  ): Promise<{
+    mode: 'CHITCHAT' | 'VOUCHER' | 'SIZE_ADVICE' | 'SUPPORT' | 'PRODUCT_SEARCH';
+    searchQuery: string;
+    keywords: string[];
+    minPrice?: number;
+    maxPrice?: number;
+    targetGender?: 'NAM' | 'NU' | 'UNISEX';
+  } | null> {
+    const routerModel = process.env.OLLAMA_ROUTER_MODEL || process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:14b';
+    const historyBrief = history
+      .slice(-4)
+      .map((m) => `${m.role === 'user' ? 'Khách' : 'ZeroAI'}: ${m.content.slice(0, 160)}`)
+      .join('\n');
+
+    const prompt = `Phân tích ý định câu nói mới nhất của khách trên sàn TMĐT ZeroMall.
+Lịch sử gần đây:
+${historyBrief || '(Bắt đầu hội thoại)'}
+
+Câu mới của khách: "${userMessage}"
+
+Phân loại "mode" vào đúng 1 trong 5 giá trị:
+- "CHITCHAT": chào hỏi, cảm ơn, hỏi thăm, tán gẫu, hỏi bạn là ai, không hỏi mua món đồ cụ thể.
+- "VOUCHER": hỏi mã giảm giá, voucher, freeship, khung giờ vàng săn deal.
+- "SIZE_ADVICE": hỏi tư vấn chọn size theo chiều cao, cân nặng, số đo (không tìm mua sản phẩm khác).
+- "SUPPORT": hỏi chính sách đổi trả, hoàn tiền, giao hàng ZMX, thanh toán SePay/ZeroPay, thử đồ AI, mở shop, CSKH.
+- "PRODUCT_SEARCH": khách muốn tìm/mua/xem/so sánh sản phẩm hoặc hỏi tiếp về món đồ từ lịch sử (ví dụ "có cái nào rẻ hơn không?").
+
+Trả về JSON hợp lệ duy nhất:
+{
+  "mode": "CHITCHAT|VOUCHER|SIZE_ADVICE|SUPPORT|PRODUCT_SEARCH",
+  "searchQuery": "cụm tìm kiếm sản phẩm độc lập tiếng Việt (nếu mode=PRODUCT_SEARCH, kế thừa món đồ từ lịch sử nếu khách hỏi nối tiếp)",
+  "keywords": ["từ khóa sản phẩm tiếng Việt ngắn gọn nếu mode=PRODUCT_SEARCH, tối đa 5 từ"],
+  "minPrice": null,
+  "maxPrice": null,
+  "targetGender": null
+}`;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: routerModel,
+          prompt,
+          format: 'json',
+          stream: false,
+          keep_alive: '30m',
+          options: { temperature: 0.1, num_predict: 180 },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const parsed = JSON.parse(data.response);
+      const validModes = new Set(['CHITCHAT', 'VOUCHER', 'SIZE_ADVICE', 'SUPPORT', 'PRODUCT_SEARCH']);
+      const mode = validModes.has(parsed?.mode) ? parsed.mode : 'CHITCHAT';
+
+      return {
+        mode,
+        searchQuery: typeof parsed?.searchQuery === 'string' ? parsed.searchQuery : userMessage,
+        keywords: Array.isArray(parsed?.keywords)
+          ? parsed.keywords.map((k: any) => String(k).trim()).filter(Boolean)
+          : [],
+        minPrice: typeof parsed?.minPrice === 'number' && parsed.minPrice > 0 ? parsed.minPrice : undefined,
+        maxPrice: typeof parsed?.maxPrice === 'number' && parsed.maxPrice > 0 ? parsed.maxPrice : undefined,
+        targetGender:
+          parsed?.targetGender === 'NAM' || parsed?.targetGender === 'NU' || parsed?.targetGender === 'UNISEX'
+            ? parsed.targetGender
+            : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Sinh câu trả lời hội thoại thông minh đa lượt bằng Ollama (mặc định qwen2.5:14b)
+   */
+  async generateShoppingChatWithOllama(params: {
+    userMessage: string;
+    mode: 'CHITCHAT' | 'VOUCHER' | 'SIZE_ADVICE' | 'SUPPORT' | 'PRODUCT_SEARCH';
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    retrievedProducts?: any[];
+    activeVouchers?: any[];
+    sizeGuidance?: string;
+    contextSummary?: string;
+  }): Promise<{ reply: string; quickReplies: string[]; showProducts?: boolean } | null> {
+    const model = process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:14b';
+    const {
+      userMessage,
+      mode,
+      history = [],
+      retrievedProducts = [],
+      activeVouchers = [],
+      sizeGuidance = '',
+      contextSummary = '',
+    } = params;
+
+    const productContext =
+      retrievedProducts.length > 0
+        ? retrievedProducts
+            .slice(0, 6)
+            .map((p, idx) => {
+              const priceFmt = Number(p.price || 0).toLocaleString('vi-VN') + 'đ';
+              const origFmt = p.originalPrice ? ` (giá gốc ${Number(p.originalPrice).toLocaleString('vi-VN')}đ)` : '';
+              const variantsNote = p.variationsText ? ` | Phân loại: ${p.variationsText}` : '';
+              return `${idx + 1}. "${p.name}" - ${priceFmt}${origFmt} | Ngành: ${p.category || 'Khác'} | Đã bán: ${p.sales || 0} | Còn kho: ${p.stock ?? 0}${variantsNote}`;
+            })
+            .join('\n')
+        : '(Không có thẻ sản phẩm nào cần hiển thị ở lượt này)';
+
+    const voucherContext =
+      activeVouchers.length > 0
+        ? activeVouchers
+            .map((v) => {
+              const disc =
+                v.type === 'percentage'
+                  ? `Giảm ${v.value}%${v.maxDiscount ? ` (tối đa ${Number(v.maxDiscount).toLocaleString('vi-VN')}đ)` : ''}`
+                  : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
+              return `- Mã "${v.code}": ${disc}, đơn tối thiểu ${Number(v.minSpend || 0).toLocaleString('vi-VN')}đ, còn ${Math.max(0, (v.usageLimit || 0) - (v.usedCount || 0))}/${v.usageLimit} lượt`;
+            })
+            .join('\n')
+        : '';
+
+    const systemPrompt = `Bạn là "ZeroAI Copilot" - Trợ lý mua sắm & chăm sóc khách hàng thông minh của sàn thương mại điện tử ZeroMall (zeromall.id.vn).
+
+KIẾN THỨC SÀN ZEROMALL (CHỈ NÓI ĐÚNG SỰ THẬT):
+- Tính năng nổi bật: Phòng Thử Đồ AI (Virtual Try-On ướm trang phục + tự dự đoán size theo chiều cao/cân nặng/giới tính), Tìm kiếm sản phẩm bằng hình ảnh, Khung Giờ Vàng Săn Voucher FCFS (5 ca: 00:00, 09:00, 12:00, 18:00, 21:00).
+- Vận chuyển & thanh toán: Giao hàng toàn quốc ZeroExpress (ZMX), thanh toán COD / Ví ZeroPay / chuyển khoản QR tự động SePay, đổi trả trong 15 ngày có Escrow bảo vệ người mua.
+
+NGUYÊN TẮC BẮT BUỘC:
+1. Trả lời tiếng Việt tự nhiên, thông minh, thân thiện, xưng "mình" hoặc "ZeroAI", gọi khách là "bạn". Không cứng nhắc rập khuôn.
+2. Dựa vào ngữ cảnh phân loại mode = "${mode}":
+   - Nếu mode là "CHITCHAT", "SUPPORT", "VOUCHER", "SIZE_ADVICE": KHÔNG tự ý gợi ý hay gán sản phẩm nếu khách không hỏi tìm mua món đồ cụ thể, và đặt "showProducts": false.
+   - Nếu mode là "PRODUCT_SEARCH": chỉ giới thiệu sản phẩm có thật trong DANH SÁCH SẢN PHẨM KHO HÀNG dưới đây, biết so sánh giá rẻ nhất / bán chạy / công dụng nổi bật, đặt "showProducts": ${retrievedProducts.length > 0 ? 'true' : 'false'}. Nếu danh sách trống thì thành thật xin lỗi và gợi ý hướng tìm khác, TUYỆT ĐỐI KHÔNG BỊA SẢN PHẨM KHÔNG CÓ.
+3. Không nhắc các từ khóa kỹ thuật nội bộ như "SQL", "Postgres", "database", "mode", "JSON", hay tên danh mục thô khi không hợp ngữ cảnh (VD balo nam đừng gọi là "Túi Ví Nữ").
+4. Câu trả lời ngắn gọn, súc tích (2-5 câu), dễ đọc.
+5. Luôn trả về DUY NHẤT 1 đối tượng JSON hợp lệ theo cấu trúc:
+{
+  "reply": "Nội dung trả lời tự nhiên gửi tới khách",
+  "quickReplies": ["3 gợi ý câu hỏi/hành động tiếp theo ngắn gọn dưới 6 từ"],
+  "showProducts": ${mode === 'PRODUCT_SEARCH' && retrievedProducts.length > 0 ? 'true' : 'false'}
+}`;
+
+    const chatMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    for (const h of history.slice(-6)) {
+      if (h?.content?.trim()) {
+        chatMessages.push({
+          role: h.role === 'assistant' ? 'assistant' : 'user',
+          content: h.content.trim().slice(0, 600),
+        });
+      }
+    }
+
+    const extraBlocks: string[] = [];
+    if (contextSummary) extraBlocks.push(`Ngữ cảnh hệ thống: ${contextSummary}`);
+    if (sizeGuidance) extraBlocks.push(`Gợi ý số đo/Size tính sẵn cho khách:\n${sizeGuidance}`);
+    if (voucherContext) extraBlocks.push(`Voucher sàn đang mở hiện tại:\n${voucherContext}`);
+    if (mode === 'PRODUCT_SEARCH') {
+      extraBlocks.push(`DANH SÁCH SẢN PHẨM KHO HÀNG:\n${productContext}`);
+    }
+
+    const finalUserTurn = extraBlocks.length
+      ? `${extraBlocks.join('\n\n')}\n\nTin nhắn mới nhất của khách: "${userMessage}"`
+      : userMessage;
+
+    chatMessages.push({ role: 'user', content: finalUserTurn });
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      const res = await fetch(`${this.ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: chatMessages,
+          format: 'json',
+          stream: false,
+          keep_alive: '30m',
+          options: {
+            temperature: 0.4,
+            num_ctx: 2560,
+            num_predict: 350,
+          },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        this.logger.warn(`Ollama chat HTTP ${res.status}`);
+        return null;
+      }
+
+      const data: any = await res.json();
+      const rawText = data?.message?.content;
+      if (!rawText) return null;
+
+      const parsed = JSON.parse(rawText.trim());
+      if (typeof parsed?.reply === 'string' && parsed.reply.trim()) {
+        return {
+          reply: parsed.reply.trim(),
+          quickReplies: Array.isArray(parsed.quickReplies)
+            ? parsed.quickReplies.map((q: any) => String(q).trim()).filter(Boolean).slice(0, 3)
+            : [],
+          showProducts: typeof parsed.showProducts === 'boolean' ? parsed.showProducts : undefined,
+        };
+      }
+    } catch (e: any) {
+      this.logger.warn(`Ollama chat (${model}) error: ${e.message}`);
+    }
+
+    return null;
+  }
 }
