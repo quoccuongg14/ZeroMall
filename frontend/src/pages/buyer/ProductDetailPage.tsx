@@ -396,8 +396,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       }
     }
 
-    if (stockAvailable <= 0 || product.status === 'hidden') {
-      alert('Sản phẩm với phân loại đã chọn hiện đã hết hàng, quý khách vui lòng chọn phân loại khác!')
+    if (stockAvailable <= 0 || product.status !== 'active' || (product as any).isViolated) {
+      alert('Sản phẩm hiện đang tạm ngừng kinh doanh hoặc đã hết hàng, quý khách vui lòng chọn sản phẩm khác!')
       return
     }
 
@@ -450,8 +450,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const handleBuyNowClick = (prod: any, qty: number, variant: string) => {
     const stockVal = prod?.stock !== undefined ? prod.stock : (prod?.total !== undefined ? prod.total - (prod?.sold || 0) : 0)
-    if (stockVal <= 0 || prod?.status === 'hidden') {
-      alert('Sản phẩm này hiện đã hết hàng, quý khách vui lòng chọn sản phẩm khác!')
+    if (stockVal <= 0 || prod?.status !== 'active' || prod?.isViolated) {
+      alert('Sản phẩm này hiện đang tạm ngừng kinh doanh hoặc đã hết hàng, quý khách vui lòng chọn sản phẩm khác!')
       return
     }
 
@@ -791,11 +791,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     )
   }
 
-  const isTombstone = !product || product.status === 'deleted' || product.status === 'hidden'
+  const isTombstone =
+    !product ||
+    product.status === 'deleted' ||
+    product.status === 'hidden' ||
+    Boolean((product as any).isViolated)
 
   if (isTombstone) {
     const isDeleted = !product || product.status === 'deleted'
-    const isHidden = product?.status === 'hidden'
+    const isHidden = product?.status === 'hidden' || Boolean((product as any)?.isViolated)
 
     return (
       <div className="text-slate-800 text-left py-4 space-y-6">

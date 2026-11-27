@@ -18,6 +18,7 @@ export class ProductController {
     @Query('search') search?: string,
     @Query('q') q?: string,
     @Query('inStockOnly') inStockOnly?: string,
+    @Query('includeViolated') includeViolated?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -34,7 +35,7 @@ export class ProductController {
       );
     }
     // Không có page hoặc có shopId/search → load có limit an toàn
-    return this.productService.findAll(shopId, category, search || q, inStockOnly, limitNum, pageNum);
+    return this.productService.findAll(shopId, category, search || q, inStockOnly, limitNum, pageNum, includeViolated);
   }
 
   // --- STATIC ROUTES (Must be before wildcard :id routes) ---

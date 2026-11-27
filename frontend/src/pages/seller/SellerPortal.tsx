@@ -119,7 +119,7 @@ export const SellerPortal: React.FC<SellerPortalProps> = ({
     if (!user?.shopId) return
     setProductsLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/products?shopId=${user.shopId}`)
+      const response = await fetch(`${API_BASE_URL}/products?shopId=${user.shopId}&includeViolated=true`)
       if (!response.ok) throw new Error('Không thể tải danh sách sản phẩm')
       const data = await response.json()
       

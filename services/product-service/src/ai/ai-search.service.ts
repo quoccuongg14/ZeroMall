@@ -505,6 +505,7 @@ export class AiSearchService {
 
     const where: any = {
       status: 'active',
+      isViolated: false,
       stock: { gt: 0 },
     };
 
@@ -669,6 +670,7 @@ export class AiSearchService {
       const fallbackProducts = await this.prisma.product.findMany({
         where: {
           status: 'active',
+          isViolated: false,
           stock: { gt: 0 },
           category: { contains: suggestedCategory, mode: 'insensitive' },
           id: { notIn: Array.from(existingIds) },

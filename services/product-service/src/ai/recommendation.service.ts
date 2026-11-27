@@ -192,6 +192,7 @@ export class RecommendationService {
           const relatedItems = await this.prisma.product.findMany({
             where: {
               status: 'active',
+              isViolated: false,
               stock: { gt: 0 },
               id: { notIn: Array.from(usedProductIds) },
               category: targetCategory,
@@ -224,6 +225,7 @@ export class RecommendationService {
     const totalActive = await this.prisma.product.count({
       where: {
         status: 'active',
+        isViolated: false,
         stock: { gt: 0 },
       },
     });
@@ -234,6 +236,7 @@ export class RecommendationService {
     const exploreItems = await this.prisma.product.findMany({
       where: {
         status: 'active',
+        isViolated: false,
         stock: { gt: 0 },
         id: { notIn: Array.from(usedProductIds) },
       },

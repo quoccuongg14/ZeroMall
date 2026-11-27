@@ -568,6 +568,7 @@ export class AiAssistantService {
 
       const baseWhere: any = {
         status: 'active',
+        isViolated: false,
         stock: { gt: 0 },
         name: { notIn: ['test', 'cuong', '2'] },
         ...genderExclusion,
@@ -612,6 +613,7 @@ export class AiAssistantService {
           keywordList = await this.prisma.product.findMany({
             where: {
               status: 'active',
+              isViolated: false,
               stock: { gt: 0 },
               name: { notIn: ['test', 'cuong', '2'] },
               ...genderExclusion,

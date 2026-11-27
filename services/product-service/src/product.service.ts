@@ -212,15 +212,17 @@ export class ProductService {
     inStockOnly?: string,
     limit?: number,
     page?: number,
+    includeViolated?: string,
   ) {
     const safeLimit = limit !== undefined && !isNaN(limit)
       ? Math.min(Math.max(1, limit), shopId ? 200 : 100)
       : (shopId ? 100 : 60);
     const safePage = page !== undefined && !isNaN(page) ? Math.max(1, page) : 1;
     const skip = (safePage - 1) * safeLimit;
+    const allowViolatedForSeller = Boolean(shopId && includeViolated === 'true');
 
     // 1. Kiểm tra trong Redis Cache trước (0-1ms)
-    const cacheKey = `products:list:${shopId || 'all'}:${category || 'all'}:${search || 'all'}:${inStockOnly || 'default'}:${safePage}:${safeLimit}`;
+    const cacheKey = `products:list:${shopId || 'all'}:${category || 'all'}:${search || 'all'}:${inStockOnly || 'default'}:${allowViolatedForSeller ? 'seller' : 'public'}:${safePage}:${safeLimit}`;
     const cached = await this.redis.get<any[]>(cacheKey);
     if (cached) {
       return cached;
@@ -228,11 +230,12 @@ export class ProductService {
 
     const andConditions: any[] = [];
 
-    // Luôn loại trừ các sản phẩm đã xóa (Soft Delete) hoặc bị khóa do vi phạm (violated) khỏi danh sách mua sắm
-    andConditions.push({
-      status: { notIn: ['deleted', 'violated'] },
-      isViolated: false,
-    });
+    // Luôn loại trừ sản phẩm đã xóa mềm; chỉ Seller quản lý shop mới xem được sản phẩm vi phạm để sửa lại
+    andConditions.push(
+      allowViolatedForSeller
+        ? { status: { notIn: ['deleted'] } }
+        : { status: { notIn: ['deleted', 'violated'] }, isViolated: false },
+    );
 
     if (inStockOnly === 'true' || (!shopId && inStockOnly !== 'false')) {
       andConditions.push({
@@ -536,7 +539,7 @@ export class ProductService {
       for (const item of sortedItems) {
         // Khóa dòng cấp cơ sở dữ liệu ngăn chặn hoàn toàn Race Condition / Overselling
         const lockedRows: any[] = await tx.$queryRaw`
-          SELECT id, name, stock
+          SELECT id, name, stock, status, "isViolated"
           FROM product."Product"
           WHERE id = ${item.productId}
           FOR UPDATE
@@ -547,6 +550,11 @@ export class ProductService {
         }
 
         const prod = lockedRows[0];
+        if (prod.status !== 'active' || prod.isViolated) {
+          throw new BadRequestException(
+            `Sản phẩm "${prod.name}" hiện đang tạm ẩn hoặc bị khóa do vi phạm quy chuẩn sàn, không thể đặt hàng.`,
+          );
+        }
         if (prod.stock < item.quantity) {
           throw new BadRequestException(
             `Sản phẩm "${prod.name}" không đủ số lượng trong kho (Còn: ${prod.stock}, Yêu cầu: ${item.quantity})`,
@@ -1618,7 +1626,7 @@ export class ProductService {
 
     // Map registered items
     const flashProducts = (activeSlot.items || [])
-      .filter(item => item.product && item.product.stock > 0 && item.product.status !== 'hidden')
+      .filter(item => item.product && item.product.stock > 0 && item.product.status === 'active' && !item.product.isViolated)
       .map(item => {
         const orig = item.originalPrice || parseFloat(String(item.product?.price || 0)) || 0;
         const flash = item.flashPrice;
