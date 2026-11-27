@@ -108,6 +108,103 @@ const COMMON_TYPOS: Record<string, string> = {
 export class LocalAiService {
   private readonly logger = new Logger(LocalAiService.name);
   private readonly ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434';
+  private readonly groqApiKey = (process.env.GROQ_API_KEY || '').trim();
+  private readonly groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
+
+  private extractJsonObject(raw: string): any | null {
+    const cleaned = (raw || '')
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+    if (!cleaned) return null;
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start !== -1 && end > start) {
+        try {
+          return JSON.parse(cleaned.slice(start, end + 1));
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  private getGroqModelChain(): string[] {
+    const primary = (process.env.GROQ_CHAT_MODEL || 'qwen/qwen3.8-27b').trim();
+    const fallbacks = (process.env.GROQ_FALLBACK_MODELS || 'openai/gpt-oss-120b,openai/gpt-oss-20b')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return Array.from(new Set([primary, ...fallbacks]));
+  }
+
+  private async callGroqChat(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    opts: { temperature: number; maxTokens: number; timeoutMs?: number; jsonMode?: boolean },
+  ): Promise<{ content: string; model: string } | null> {
+    if (!this.groqApiKey) return null;
+
+    const models = this.getGroqModelChain();
+    for (const model of models) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 12000);
+        const isQwen3 = model.startsWith('qwen/qwen3');
+        const isGptOss = model.includes('gpt-oss');
+
+        const payload: any = {
+          model,
+          messages,
+          temperature: opts.temperature,
+          max_completion_tokens: isGptOss ? Math.max(opts.maxTokens, 520) : opts.maxTokens,
+        };
+
+        if (isQwen3) {
+          payload.reasoning_effort = 'none';
+          if (opts.jsonMode) {
+            payload.response_format = { type: 'json_object' };
+          }
+        } else if (isGptOss) {
+          payload.reasoning_effort = 'low';
+        } else if (opts.jsonMode) {
+          payload.response_format = { type: 'json_object' };
+        }
+
+        const res = await fetch(this.groqUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.groqApiKey}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'ZeroMall/1.0',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          this.logger.warn(`Groq [${model}] HTTP ${res.status}: ${errText.slice(0, 160)}`);
+          continue;
+        }
+
+        const data: any = await res.json();
+        const content = data?.choices?.[0]?.message?.content;
+        if (typeof content === 'string' && content.trim()) {
+          return { content: content.trim(), model };
+        }
+      } catch (e: any) {
+        this.logger.warn(`Groq [${model}] failed: ${e.message}`);
+      }
+    }
+    return null;
+  }
 
   /**
    * Phân tích ý định & chuẩn hóa từ khóa cục bộ (Local NLP sẵn có, 0ms)
@@ -484,7 +581,7 @@ Chỉ trả về JSON duy nhất:
     const routerModel = process.env.OLLAMA_ROUTER_MODEL || process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:14b';
     const historyBrief = history
       .slice(-4)
-      .map((m) => `${m.role === 'user' ? 'Khách' : 'ZeroAI'}: ${m.content.slice(0, 160)}`)
+      .map((m) => `${m.role === 'user' ? 'Khách' : 'ZeroAI'}: ${m.content.slice(0, 180)}`)
       .join('\n');
 
     const prompt = `Phân tích ý định câu nói mới nhất của khách trên sàn TMĐT ZeroMall.
@@ -498,42 +595,23 @@ Phân loại "mode" vào đúng 1 trong 5 giá trị:
 - "VOUCHER": hỏi mã giảm giá, voucher, freeship, khung giờ vàng săn deal.
 - "SIZE_ADVICE": hỏi tư vấn chọn size theo chiều cao, cân nặng, số đo (không tìm mua sản phẩm khác).
 - "SUPPORT": hỏi chính sách đổi trả, hoàn tiền, giao hàng ZMX, thanh toán SePay/ZeroPay, thử đồ AI, mở shop, CSKH.
-- "PRODUCT_SEARCH": khách muốn tìm/mua/xem/so sánh sản phẩm hoặc hỏi tiếp về món đồ từ lịch sử (ví dụ "có cái nào rẻ hơn không?").
+- "PRODUCT_SEARCH": khách muốn tìm/mua/xem/so sánh sản phẩm hoặc hỏi tiếp về món đồ từ lịch sử.
 
 Trả về JSON hợp lệ duy nhất:
 {
   "mode": "CHITCHAT|VOUCHER|SIZE_ADVICE|SUPPORT|PRODUCT_SEARCH",
-  "searchQuery": "cụm tìm kiếm sản phẩm độc lập tiếng Việt (nếu mode=PRODUCT_SEARCH, kế thừa món đồ từ lịch sử nếu khách hỏi nối tiếp)",
+  "searchQuery": "cụm tìm kiếm sản phẩm độc lập tiếng Việt nếu mode=PRODUCT_SEARCH",
   "keywords": ["từ khóa sản phẩm tiếng Việt ngắn gọn nếu mode=PRODUCT_SEARCH, tối đa 5 từ"],
   "minPrice": null,
   "maxPrice": null,
   "targetGender": null
 }`;
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: routerModel,
-          prompt,
-          format: 'json',
-          stream: false,
-          keep_alive: '30m',
-          options: { temperature: 0.1, num_predict: 180 },
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (!res.ok) return null;
-      const data: any = await res.json();
-      const parsed = JSON.parse(data.response);
+    const parseRouted = (raw: string) => {
+      const parsed = this.extractJsonObject(raw);
+      if (!parsed) return null;
       const validModes = new Set(['CHITCHAT', 'VOUCHER', 'SIZE_ADVICE', 'SUPPORT', 'PRODUCT_SEARCH']);
       const mode = validModes.has(parsed?.mode) ? parsed.mode : 'CHITCHAT';
-
       return {
         mode,
         searchQuery: typeof parsed?.searchQuery === 'string' ? parsed.searchQuery : userMessage,
@@ -547,13 +625,47 @@ Trả về JSON hợp lệ duy nhất:
             ? parsed.targetGender
             : undefined,
       };
+    };
+
+    if (this.groqApiKey) {
+      const groqRes = await this.callGroqChat(
+        [{ role: 'user', content: prompt }],
+        { temperature: 0.1, maxTokens: 180, timeoutMs: 8000, jsonMode: true },
+      );
+      if (groqRes?.content) {
+        const routed = parseRouted(groqRes.content);
+        if (routed) return routed;
+      }
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: routerModel,
+          prompt,
+          format: 'json',
+          stream: false,
+          keep_alive: '30m',
+          options: { temperature: 0.1, num_ctx: 2560, num_predict: 180 },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      return parseRouted(data.response);
     } catch {
       return null;
     }
   }
 
   /**
-   * Sinh câu trả lời hội thoại thông minh đa lượt bằng Ollama (mặc định qwen2.5:14b)
+   * Sinh câu trả lời hội thoại thông minh đa lượt: ưu tiên Groq API (< 1s) -> tự động dự phòng Ollama local
    */
   async generateShoppingChatWithOllama(params: {
     userMessage: string;
@@ -564,7 +676,7 @@ Trả về JSON hợp lệ duy nhất:
     sizeGuidance?: string;
     contextSummary?: string;
   }): Promise<{ reply: string; quickReplies: string[]; showProducts?: boolean } | null> {
-    const model = process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:14b';
+    const ollamaModel = process.env.OLLAMA_CHAT_MODEL || 'qwen2.5:14b';
     const {
       userMessage,
       mode,
@@ -581,12 +693,12 @@ Trả về JSON hợp lệ duy nhất:
             .slice(0, 6)
             .map((p, idx) => {
               const priceFmt = Number(p.price || 0).toLocaleString('vi-VN') + 'đ';
-              const origFmt = p.originalPrice ? ` (giá gốc ${Number(p.originalPrice).toLocaleString('vi-VN')}đ)` : '';
-              const variantsNote = p.variationsText ? ` | Phân loại: ${p.variationsText}` : '';
-              return `${idx + 1}. "${p.name}" - ${priceFmt}${origFmt} | Ngành: ${p.category || 'Khác'} | Đã bán: ${p.sales || 0} | Còn kho: ${p.stock ?? 0}${variantsNote}`;
+              const origFmt = p.originalPrice ? ` (gốc ${Number(p.originalPrice).toLocaleString('vi-VN')}đ)` : '';
+              const variantsNote = p.variationsText ? ` | Loại: ${p.variationsText}` : '';
+              return `${idx + 1}. "${p.name}" - ${priceFmt}${origFmt} | Đã bán: ${p.sales || 0} | Kho: ${p.stock ?? 0}${variantsNote}`;
             })
             .join('\n')
-        : '(Không có thẻ sản phẩm nào cần hiển thị ở lượt này)';
+        : '(Kho hiện không có sản phẩm khớp trực tiếp)';
 
     const voucherContext =
       activeVouchers.length > 0
@@ -596,30 +708,22 @@ Trả về JSON hợp lệ duy nhất:
                 v.type === 'percentage'
                   ? `Giảm ${v.value}%${v.maxDiscount ? ` (tối đa ${Number(v.maxDiscount).toLocaleString('vi-VN')}đ)` : ''}`
                   : `Giảm ${Number(v.value).toLocaleString('vi-VN')}đ`;
-              return `- Mã "${v.code}": ${disc}, đơn tối thiểu ${Number(v.minSpend || 0).toLocaleString('vi-VN')}đ, còn ${Math.max(0, (v.usageLimit || 0) - (v.usedCount || 0))}/${v.usageLimit} lượt`;
+              return `- ${v.code}: ${disc}, đơn từ ${Number(v.minSpend || 0).toLocaleString('vi-VN')}đ (còn ${Math.max(0, (v.usageLimit || 0) - (v.usedCount || 0))}/${v.usageLimit} lượt)`;
             })
             .join('\n')
         : '';
 
-    const systemPrompt = `Bạn là "ZeroAI Copilot" - Trợ lý mua sắm & chăm sóc khách hàng thông minh của sàn thương mại điện tử ZeroMall (zeromall.id.vn).
+    const supportFacts =
+      mode === 'SUPPORT' || mode === 'VOUCHER' || mode === 'SIZE_ADVICE'
+        ? `\nKIẾN THỨC ZEROMALL: Phòng Thử Đồ AI (ướm đồ + gợi ý size), Tìm kiếm bằng ảnh, Giờ Vàng Voucher FCFS (00:00, 09:00, 12:00, 18:00, 21:00), Ship ZeroExpress (ZMX), COD/ZeroPay/QR SePay, đổi trả 15 ngày có Escrow.`
+        : '';
 
-KIẾN THỨC SÀN ZEROMALL (CHỈ NÓI ĐÚNG SỰ THẬT):
-- Tính năng nổi bật: Phòng Thử Đồ AI (Virtual Try-On ướm trang phục + tự dự đoán size theo chiều cao/cân nặng/giới tính), Tìm kiếm sản phẩm bằng hình ảnh, Khung Giờ Vàng Săn Voucher FCFS (5 ca: 00:00, 09:00, 12:00, 18:00, 21:00).
-- Vận chuyển & thanh toán: Giao hàng toàn quốc ZeroExpress (ZMX), thanh toán COD / Ví ZeroPay / chuyển khoản QR tự động SePay, đổi trả trong 15 ngày có Escrow bảo vệ người mua.
-
-NGUYÊN TẮC BẮT BUỘC:
-1. Trả lời tiếng Việt tự nhiên, thông minh, thân thiện, xưng "mình" hoặc "ZeroAI", gọi khách là "bạn". Không cứng nhắc rập khuôn.
-2. Dựa vào ngữ cảnh phân loại mode = "${mode}":
-   - Nếu mode là "CHITCHAT", "SUPPORT", "VOUCHER", "SIZE_ADVICE": KHÔNG tự ý gợi ý hay gán sản phẩm nếu khách không hỏi tìm mua món đồ cụ thể, và đặt "showProducts": false.
-   - Nếu mode là "PRODUCT_SEARCH": chỉ giới thiệu sản phẩm có thật trong DANH SÁCH SẢN PHẨM KHO HÀNG dưới đây, biết so sánh giá rẻ nhất / bán chạy / công dụng nổi bật, đặt "showProducts": ${retrievedProducts.length > 0 ? 'true' : 'false'}. Nếu danh sách trống thì thành thật xin lỗi và gợi ý hướng tìm khác, TUYỆT ĐỐI KHÔNG BỊA SẢN PHẨM KHÔNG CÓ.
-3. Không nhắc các từ khóa kỹ thuật nội bộ như "SQL", "Postgres", "database", "mode", "JSON", hay tên danh mục thô khi không hợp ngữ cảnh (VD balo nam đừng gọi là "Túi Ví Nữ").
-4. Câu trả lời ngắn gọn, súc tích (2-5 câu), dễ đọc.
-5. Luôn trả về DUY NHẤT 1 đối tượng JSON hợp lệ theo cấu trúc:
-{
-  "reply": "Nội dung trả lời tự nhiên gửi tới khách",
-  "quickReplies": ["3 gợi ý câu hỏi/hành động tiếp theo ngắn gọn dưới 6 từ"],
-  "showProducts": ${mode === 'PRODUCT_SEARCH' && retrievedProducts.length > 0 ? 'true' : 'false'}
-}`;
+    const systemPrompt = `Bạn là ZeroAI Copilot - trợ lý mua sắm sàn TMĐT ZeroMall (zeromall.id.vn).${supportFacts}
+QUY TẮC:
+1. Trả lời trực tiếp bằng tiếng Việt tự nhiên, thân thiện (xưng "mình", gọi khách "bạn"), ngắn gọn 2-4 câu, KHÔNG bọc JSON hay markdown rườm rà.
+2. Nếu mode="${mode}" là CHITCHAT/SUPPORT/VOUCHER/SIZE_ADVICE hoặc câu hỏi nối tiếp về sản phẩm đã gợi ý trước đó: trả lời đúng trọng tâm từ thông tin thực tế hoặc lịch sử hội thoại, không bịa thêm sản phẩm lạ.
+3. Nếu mode="PRODUCT_SEARCH": chỉ giới thiệu sản phẩm có thật trong DANH SÁCH KHO HÀNG bên dưới, tuyệt đối không bịa thêm sản phẩm hay giá ngoài danh sách.
+4. Không nhắc từ kỹ thuật nội bộ (SQL, database, JSON, mode).`;
 
     const chatMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
@@ -629,25 +733,61 @@ NGUYÊN TẮC BẮT BUỘC:
       if (h?.content?.trim()) {
         chatMessages.push({
           role: h.role === 'assistant' ? 'assistant' : 'user',
-          content: h.content.trim().slice(0, 600),
+          content: h.content.trim().slice(0, 650),
         });
       }
     }
 
     const extraBlocks: string[] = [];
-    if (contextSummary) extraBlocks.push(`Ngữ cảnh hệ thống: ${contextSummary}`);
-    if (sizeGuidance) extraBlocks.push(`Gợi ý số đo/Size tính sẵn cho khách:\n${sizeGuidance}`);
-    if (voucherContext) extraBlocks.push(`Voucher sàn đang mở hiện tại:\n${voucherContext}`);
+    if (contextSummary) extraBlocks.push(`Ngữ cảnh: ${contextSummary}`);
+    if (sizeGuidance) extraBlocks.push(`Số đo/Size:\n${sizeGuidance}`);
+    if (voucherContext) extraBlocks.push(`Voucher đang mở:\n${voucherContext}`);
     if (mode === 'PRODUCT_SEARCH') {
-      extraBlocks.push(`DANH SÁCH SẢN PHẨM KHO HÀNG:\n${productContext}`);
+      extraBlocks.push(`DANH SÁCH KHO HÀNG:\n${productContext}`);
     }
 
     const finalUserTurn = extraBlocks.length
-      ? `${extraBlocks.join('\n\n')}\n\nTin nhắn mới nhất của khách: "${userMessage}"`
+      ? `${extraBlocks.join('\n\n')}\n\nKhách hỏi: "${userMessage}"`
       : userMessage;
 
     chatMessages.push({ role: 'user', content: finalUserTurn });
 
+    const parseChatResponse = (rawText: string) => {
+      const trimmed = (rawText || '').trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith('{')) {
+        const parsed = this.extractJsonObject(trimmed);
+        if (typeof parsed?.reply === 'string' && parsed.reply.trim()) {
+          return {
+            reply: parsed.reply.trim(),
+            quickReplies: Array.isArray(parsed.quickReplies)
+              ? parsed.quickReplies.map((q: any) => String(q).trim()).filter(Boolean).slice(0, 3)
+              : [],
+            showProducts: typeof parsed.showProducts === 'boolean' ? parsed.showProducts : undefined,
+          };
+        }
+      }
+      return { reply: trimmed, quickReplies: [] };
+    };
+
+    // 1. Ưu tiên Groq Cloud API (phản hồi < 1s, tự fallback giữa các model Groq khi gặp 429)
+    if (this.groqApiKey) {
+      const groqRes = await this.callGroqChat(chatMessages, {
+        temperature: 0.35,
+        maxTokens: 280,
+        timeoutMs: 12000,
+        jsonMode: false,
+      });
+      if (groqRes?.content) {
+        const formatted = parseChatResponse(groqRes.content);
+        if (formatted) {
+          this.logger.log(`⚡ ZeroAI replied via Groq [${groqRes.model}]`);
+          return formatted;
+        }
+      }
+    }
+
+    // 2. Dự phòng về Ollama local khi Groq hết hạn mức hoặc chưa cấu hình key
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
@@ -656,15 +796,14 @@ NGUYÊN TẮC BẮT BUỘC:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model,
+          model: ollamaModel,
           messages: chatMessages,
-          format: 'json',
           stream: false,
           keep_alive: '30m',
           options: {
-            temperature: 0.4,
+            temperature: 0.35,
             num_ctx: 2560,
-            num_predict: 350,
+            num_predict: 260,
           },
         }),
         signal: controller.signal,
@@ -680,18 +819,9 @@ NGUYÊN TẮC BẮT BUỘC:
       const rawText = data?.message?.content;
       if (!rawText) return null;
 
-      const parsed = JSON.parse(rawText.trim());
-      if (typeof parsed?.reply === 'string' && parsed.reply.trim()) {
-        return {
-          reply: parsed.reply.trim(),
-          quickReplies: Array.isArray(parsed.quickReplies)
-            ? parsed.quickReplies.map((q: any) => String(q).trim()).filter(Boolean).slice(0, 3)
-            : [],
-          showProducts: typeof parsed.showProducts === 'boolean' ? parsed.showProducts : undefined,
-        };
-      }
+      return parseChatResponse(rawText);
     } catch (e: any) {
-      this.logger.warn(`Ollama chat (${model}) error: ${e.message}`);
+      this.logger.warn(`Ollama chat (${ollamaModel}) error: ${e.message}`);
     }
 
     return null;

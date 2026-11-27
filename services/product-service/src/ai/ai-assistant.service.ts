@@ -57,20 +57,41 @@ export class AiAssistantService {
       };
     }
 
-    // Chuẩn hóa lịch sử chat trước lượt hiện tại (tránh lặp lại câu user cuối cùng)
+    // Chuẩn hóa lịch sử chat trước lượt hiện tại (kèm tóm tắt sản phẩm từng gợi ý để giữ trí nhớ đa lượt)
     const rawHistory = Array.isArray(dto.history) ? dto.history : [];
     const lastHist = rawHistory[rawHistory.length - 1];
-    const priorHistory =
+    const priorHistory = (
       lastHist && lastHist.role === 'user' && (lastHist.content || '').trim() === rawMsg
         ? rawHistory.slice(0, -1)
-        : rawHistory;
+        : rawHistory
+    ).map((m) => {
+      let content = (m.content || '').trim();
+      if (m.role === 'assistant' && Array.isArray(m.products) && m.products.length > 0 && !content.includes('[Sản phẩm đã gợi ý:')) {
+        const prodsSummary = m.products
+          .slice(0, 6)
+          .map((p: any) => `${p.name} (${Number(p.price || 0).toLocaleString('vi-VN')}đ)`)
+          .join('; ');
+        content += `\n[Sản phẩm đã gợi ý: ${prodsSummary}]`;
+      }
+      return { role: m.role, content };
+    });
 
-    // 1. Phân tích nhanh ý định bằng Rule 0ms + Ollama Router cho các câu phức tạp/hỏi tiếp theo ngữ cảnh
+    // 1. Phân tích nhanh ý định bằng Rule 0ms + AI Router cho các câu phức tạp/hỏi tiếp theo ngữ cảnh
     let intent = this.extractIntent(rawMsg, dto.userGender);
     let mode = this.detectFastMode(rawMsg, intent);
     let effectiveSearchQuery = rawMsg;
 
-    if (mode === 'AMBIGUOUS') {
+    const hasSuggestedProductsInHistory = priorHistory.some(
+      (m) => m.role === 'assistant' && m.content.includes('[Sản phẩm đã gợi ý:'),
+    );
+    const isFollowUpCompare =
+      hasSuggestedProductsInHistory &&
+      /(cái nào|mẫu nào|sản phẩm nào|trong số|vừa rồi|trên kia|mấy mẫu)/i.test(rawMsg) &&
+      /(rẻ nhất|đắt nhất|tốt nhất|bán chạy|nên mua|phù hợp nhất)/i.test(rawMsg);
+
+    if (isFollowUpCompare) {
+      mode = 'CHITCHAT';
+    } else if (mode === 'AMBIGUOUS') {
       const routed = await this.localAiService.analyzeChatIntentWithOllama(rawMsg, priorHistory);
       if (routed) {
         mode = routed.mode;
@@ -132,10 +153,7 @@ export class AiAssistantService {
       contextSummary: contextParts.join(' • '),
     });
 
-    const allowProducts =
-      mode === 'PRODUCT_SEARCH' &&
-      formattedProducts.length > 0 &&
-      (ollamaReply?.showProducts ?? true);
+    const allowProducts = mode === 'PRODUCT_SEARCH' && formattedProducts.length > 0;
 
     if (ollamaReply?.reply) {
       return {

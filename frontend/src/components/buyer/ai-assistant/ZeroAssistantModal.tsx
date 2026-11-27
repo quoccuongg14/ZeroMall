@@ -177,7 +177,7 @@ export const ZeroAssistantModal: React.FC<ZeroAssistantModalProps> = ({
               <div className="flex items-center gap-1.5">
                 <h3 className="font-black text-sm tracking-wide">ZeroAI Copilot</h3>
                 <span className="bg-white/20 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
-                  Qwen 2.5 • 14B
+                  Groq AI • Fast
                 </span>
                 {isExpanded && (
                   <span className="hidden sm:inline-block bg-emerald-500/30 text-emerald-200 text-[9px] font-bold px-1.5 py-0.2 rounded-full">
