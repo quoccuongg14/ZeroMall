@@ -25,8 +25,13 @@ interface TryOnMirrorStudioProps {
   predictedSizes: Record<string, SizePredictionResult>
   selectedItemSizes: Record<string, string>
   onSelectItemSize: (productId: string, size: string) => void
+  isSizeGuideOpen: boolean
+  onToggleSizeGuide: () => void
+  onAddSingleItemToCart: (item: Product) => void
+  onBuySingleItem: (item: Product) => void
   totalOutfitPrice: number
   onAddWholeOutfitToCart: () => void
+  onBuyWholeOutfit: () => void
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onPhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
   onClearUserPhoto: () => void
@@ -58,8 +63,13 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
   predictedSizes,
   selectedItemSizes,
   onSelectItemSize,
+  isSizeGuideOpen,
+  onToggleSizeGuide,
+  onAddSingleItemToCart,
+  onBuySingleItem,
   totalOutfitPrice,
   onAddWholeOutfitToCart,
+  onBuyWholeOutfit,
   fileInputRef,
   onPhotoUpload,
   onClearUserPhoto,
@@ -536,69 +546,140 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
         </div>
       </div>
 
-      {/* KHỐI 3: GỢI Ý SIZE THEO CHIỀU CAO & CÂN NẶNG CHO TỪNG MÓN */}
-      {outfitItems.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2.5 shadow-2xs text-slate-800">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-              <span>📏</span> Gợi Ý Size Chuẩn Cho Từng Món
-            </h4>
-            <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-              {height || '--'}cm • {weight || '--'}kg • {gender === 'male' ? 'Nam' : 'Nữ'}
+      {/* KHỐI 3: NÚT & BẢNG GỢI Ý SIZE SAU KHI THỬ ĐỒ XONG */}
+      {outfitItems.length > 0 && Boolean(compositeTryOnImage) && !isLoadingAi && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3 shadow-2xs text-slate-800">
+          <button
+            type="button"
+            onClick={onToggleSizeGuide}
+            className={`w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition flex items-center justify-between gap-2 cursor-pointer ${
+              isSizeGuideOpen
+                ? 'bg-orange-50 text-[#ee4d2d] border border-orange-200'
+                : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span>📏</span>
+              {isSizeGuideOpen
+                ? 'Gợi Ý Size Chuẩn Cho Từng Món'
+                : `Gợi Ý Chọn Size Chuẩn (${outfitItems.length} Món)`}
             </span>
-          </div>
-          <div className="space-y-2">
-            {outfitItems.map((item) => {
-              const pred = predictedSizes[item.id]
-              const activeSize = selectedItemSizes[item.id] || pred?.recommendedSize || ''
-              const options = pred?.availableOptions || []
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100"
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {item.image && (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold text-slate-800 truncate">{item.name}</p>
-                      <p className="text-[10px] text-slate-500 truncate">
-                        {pred?.applicable ? (
-                          <>
-                            <span className="text-emerald-700 font-semibold">
-                              Gợi ý: {pred.recommendedSize}
-                            </span>
-                            {pred.note ? ` • ${pred.note}` : ''}
-                          </>
-                        ) : (
-                          <span>{pred?.note || 'Chọn kích cỡ phù hợp trước khi thêm giỏ'}</span>
+            <span className="text-[11px] font-semibold opacity-90 flex items-center gap-1.5">
+              <span>{height || '--'}cm • {weight || '--'}kg</span>
+              <span>{isSizeGuideOpen ? '▲' : '▼'}</span>
+            </span>
+          </button>
+
+          {isSizeGuideOpen && (
+            <div className="space-y-2.5 pt-1 animate-in fade-in duration-150">
+              {outfitItems.map((item) => {
+                const pred = predictedSizes[item.id]
+                const activeSize = selectedItemSizes[item.id] || pred?.recommendedSize || 'Freesize'
+                const options = pred?.availableOptions || []
+                const rawPrice = item.price || item.flashPrice || 0
+                const numPrice = typeof rawPrice === 'number'
+                  ? rawPrice
+                  : (parseFloat(String(rawPrice).replace(/[^0-9]/g, '')) || 0)
+
+                return (
+                  <div
+                    key={item.id}
+                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        {item.image && (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                          />
                         )}
-                      </p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-slate-900 line-clamp-1">{item.name}</p>
+                          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                            <span className="text-xs font-bold text-[#ee4d2d]">
+                              {formatCurrencyVND(numPrice)}
+                            </span>
+                            {pred?.applicable ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                                Nên chọn: {pred.recommendedSize}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-1.5 py-0.5 rounded-md">
+                                {activeSize}
+                              </span>
+                            )}
+                          </div>
+                          {pred?.note && (
+                            <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                              {pred.note}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {options.length > 0 && (
+                        <select
+                          aria-label={`Chọn size cho ${item.name}`}
+                          value={activeSize}
+                          onChange={(e) => onSelectItemSize(item.id, e.target.value)}
+                          className="text-[11px] font-bold text-[#ee4d2d] bg-white border border-orange-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#ee4d2d] cursor-pointer shrink-0 max-w-[115px]"
+                        >
+                          {options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/70">
+                      <button
+                        type="button"
+                        onClick={() => onAddSingleItemToCart(item)}
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white hover:bg-orange-50 text-[#ee4d2d] border border-orange-200 transition cursor-pointer flex items-center gap-1"
+                      >
+                        <span>🛒</span> Thêm Vào Giỏ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onBuySingleItem(item)}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        Mua Ngay
+                      </button>
                     </div>
                   </div>
-                  {options.length > 0 && (
-                    <select
-                      aria-label={`Chọn size cho ${item.name}`}
-                      value={activeSize}
-                      onChange={(e) => onSelectItemSize(item.id, e.target.value)}
-                      className="text-[11px] font-bold text-[#ee4d2d] bg-white border border-orange-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#ee4d2d] cursor-pointer shrink-0 max-w-[110px]"
-                    >
-                      {options.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                )
+              })}
+
+              {/* Thanh Mua Cả Bộ / Thêm Cả Bộ cuối bảng Size */}
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Tổng {outfitItems.length} món theo size đã chọn</span>
+                  <span className="text-sm font-bold text-[#ee4d2d]">{formatCurrencyVND(totalOutfitPrice)}</span>
                 </div>
-              )
-            })}
-          </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onAddWholeOutfitToCart}
+                    className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-[#ee4d2d] border border-orange-200 transition cursor-pointer"
+                  >
+                    🛒 Thêm Cả Bộ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onBuyWholeOutfit}
+                    className="px-3.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-white transition cursor-pointer shadow-xs"
+                  >
+                    Mua Cả Bộ ➔
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

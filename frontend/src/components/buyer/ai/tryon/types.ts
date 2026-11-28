@@ -102,5 +102,6 @@ export interface VirtualTryOnModalProps {
   product?: Product | null
   cart?: CartItem[]
   onAddToCart?: (product: Product, quantity: number, variant: string) => void
+  onBuyNow?: (product: Product, quantity: number, variant: string) => void
   initialBundle?: ScoredOutfitBundle | null
 }

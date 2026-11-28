@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL, TRYON_SERVICE_URL } from '../../../../config/api.config'
 import type { Product } from '../../FlashSale'
 import type {
@@ -25,11 +26,14 @@ import { predictProductSize, type SizePredictionResult } from '../../../../utils
 
 export const useTryOnLogic = ({
   isOpen,
+  onClose,
   product,
   cart,
   onAddToCart,
+  onBuyNow,
   initialBundle,
 }: VirtualTryOnModalProps) => {
+  const navigate = useNavigate()
   // 1. Ảnh người dùng & Thông số thể hình
   const [userPhoto, setUserPhoto] = useState<string>(() => {
     const saved = localStorage.getItem('zeromall_tryon_user_photo')
@@ -218,6 +222,7 @@ export const useTryOnLogic = ({
   const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
   const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
   const [slotPickerTarget, setSlotPickerTarget] = useState<OutfitSlotKey | null>(null)
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState<boolean>(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -719,6 +724,7 @@ export const useTryOnLogic = ({
     }
 
     setIsLoadingAi(true)
+    setIsSizeGuideOpen(false)
     const effectiveH = overrideHeight !== undefined ? overrideHeight : height
     const effectiveW = overrideWeight !== undefined ? overrideWeight : weight
     const effectiveG = overrideGender || gender
@@ -754,13 +760,8 @@ export const useTryOnLogic = ({
             setTopScoredOutfits(data.outfits)
           }
           const activeCount = activeItems.length
-          const passesUsed = data.preview?.passes_used || (activeCount >= 5 ? 2 : 1)
           if (activeCount > 1) {
-            triggerToast(
-              passesUsed >= 2
-                ? `✨ Đã phối trọn bộ ${activeCount} món qua 2 chặng AI thành công!`
-                : `⚡ Đã phối trọn bộ ${activeCount} món (1 lượt AI tiết kiệm) thành công!`
-            )
+            triggerToast(`✨ Đã ướm thử trọn bộ ${activeCount} món thành công!`)
           } else {
             triggerToast(`Đã ướm thử theo khung người ${effectiveH}cm • ${effectiveW}kg thành công!`)
           }
@@ -912,6 +913,62 @@ export const useTryOnLogic = ({
     }
   }
 
+  const resolveVariantForItem = (item: Product): string => {
+    const pred = predictedSizes[item.id]
+    return resolvedItemSizes[item.id] || pred?.recommendedSize || 'Freesize'
+  }
+
+  const handleAddSingleItemToCart = (item: Product) => {
+    const stockVal =
+      item.stock !== undefined
+        ? item.stock
+        : item.total !== undefined
+        ? item.total - (item.sold || 0)
+        : 99
+    if (stockVal <= 0 || item.status === 'hidden') {
+      triggerToast('⚠️ Sản phẩm này hiện đã hết hàng!')
+      return
+    }
+    const chosenVariant = resolveVariantForItem(item)
+    if (onAddToCart) {
+      onAddToCart(item, 1, chosenVariant)
+      triggerToast(`🛒 Đã thêm "${item.name.slice(0, 28)}..." (${chosenVariant}) vào giỏ hàng!`)
+      setTimeout(() => {
+        loadCartFashionItems()
+      }, 350)
+    } else {
+      triggerToast('Chức năng thêm giỏ hàng chưa sẵn sàng ở trang này!')
+    }
+  }
+
+  const handleBuySingleItem = (item: Product) => {
+    const stockVal =
+      item.stock !== undefined
+        ? item.stock
+        : item.total !== undefined
+        ? item.total - (item.sold || 0)
+        : 99
+    if (stockVal <= 0 || item.status === 'hidden') {
+      triggerToast('⚠️ Sản phẩm này hiện đã hết hàng!')
+      return
+    }
+    const chosenVariant = resolveVariantForItem(item)
+    if (onBuyNow) {
+      onClose()
+      onBuyNow(item, 1, chosenVariant)
+      return
+    }
+    if (onAddToCart) {
+      onAddToCart(item, 1, chosenVariant)
+      try {
+        localStorage.setItem('zm_selected_keys', JSON.stringify([`${item.id}#${chosenVariant}`]))
+        localStorage.setItem('zm_checkout_step', 'checkout')
+      } catch (_) {}
+      onClose()
+      navigate('/checkout')
+    }
+  }
+
   const handleAddWholeOutfitToCart = () => {
     const items = flattenOutfitItems(selectedOutfit)
     if (items.length === 0) {
@@ -933,6 +990,38 @@ export const useTryOnLogic = ({
       setTimeout(() => {
         loadCartFashionItems()
       }, 350)
+    }
+  }
+
+  const handleBuyWholeOutfit = () => {
+    const items = flattenOutfitItems(selectedOutfit)
+    if (items.length === 0) {
+      triggerToast('Chưa có món đồ nào được chọn trong bộ phối!')
+      return
+    }
+    const hasLoggedUser = Boolean(localStorage.getItem('zm_user'))
+    if (!hasLoggedUser && onBuyNow) {
+      const firstValid = items.find((p) => (p.stock ?? 99) > 0 && p.status !== 'hidden') || items[0]
+      onClose()
+      onBuyNow(firstValid, 1, resolveVariantForItem(firstValid))
+      return
+    }
+    if (onAddToCart) {
+      const variant = `Size ${fitResult?.recommended_size || 'L'}`
+      const { addedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedItemSizes)
+      if (addedCount === 0) {
+        triggerToast('⚠️ Các món trong bộ phối hiện đã hết hàng!')
+        return
+      }
+      try {
+        localStorage.setItem('zm_checkout_step', 'checkout')
+      } catch (_) {}
+      onClose()
+      navigate('/checkout')
+    } else if (onBuyNow) {
+      const firstValid = items[0]
+      onClose()
+      onBuyNow(firstValid, 1, resolveVariantForItem(firstValid))
     }
   }
 
@@ -1195,6 +1284,8 @@ export const useTryOnLogic = ({
     setIsSlotPickerOpen,
     slotPickerTarget,
     setSlotPickerTarget,
+    isSizeGuideOpen,
+    setIsSizeGuideOpen,
     handleSelectSlotItem,
     fileInputRef,
     customGarmentInputRef,
@@ -1214,7 +1305,10 @@ export const useTryOnLogic = ({
     handleRemoveSlot,
     handleSelectSlot,
     handleApplyPreset,
+    handleAddSingleItemToCart,
+    handleBuySingleItem,
     handleAddWholeOutfitToCart,
+    handleBuyWholeOutfit,
     fetchTopScoredOutfits,
     handleAnchorItemTo100Sets,
     handleSelectBundlePreview,

@@ -133,6 +133,7 @@ export function predictProductSize(params: {
   const effectiveGender: 'male' | 'female' = (() => {
     const nl = (product.name || '').toLowerCase()
     const cl = (product.category || '').toLowerCase()
+    if (/(unisex|nam nữ|nam & nữ)/.test(nl)) return gender
     if ((nl.includes('nữ') || cl.includes('nữ')) && !nl.includes('nam')) return 'female'
     if ((nl.includes('nam') || cl.includes('nam')) && !nl.includes('nữ')) return 'male'
     return gender
@@ -141,24 +142,30 @@ export function predictProductSize(params: {
   const { bmi, chestCm, waistCm, hipCm } = estimateMeasurements(h, w, effectiveGender)
   const { groups, rows } = parseProductVariations(product)
 
+  const nameLower = (product.name || '').toLowerCase()
+  const catLower = (product.category || '').toLowerCase()
+  const isClothing = /(áo|quần|đầm|váy|blazer|vest|bomber|hoodie|cardigan|sơ mi|polo|thun|jogger|short)/.test(nameLower)
+    || catLower.includes('thời trang')
+
   let groupIdx = 0
   let targetGroup: VariationGroup | undefined = groups[0]
+  let matchedSizeGroup = false
   for (let i = 0; i < groups.length; i++) {
     const gName = (groups[i]?.name || '').toLowerCase()
-    if (/(size|kích|dài|vòng|mặt)/.test(gName)) {
+    if (/(size|kích|dài|vòng|mặt|cỡ)/.test(gName)) {
       groupIdx = i
       targetGroup = groups[i]
+      matchedSizeGroup = true
       break
     }
   }
 
-  const availableOptions: string[] = Array.isArray(targetGroup?.options)
+  const targetGroupNameLower = (targetGroup?.name || '').toLowerCase()
+  const isColorOnlyGroup = !matchedSizeGroup && /(màu|color)/.test(targetGroupNameLower) && isClothing
+  const availableOptions: string[] = !isColorOnlyGroup && Array.isArray(targetGroup?.options)
     ? targetGroup!.options.map(String)
     : []
-  const groupName = targetGroup?.name || 'Kích thước'
-
-  const nameLower = (product.name || '').toLowerCase()
-  const catLower = (product.category || '').toLowerCase()
+  const groupName = !isColorOnlyGroup ? (targetGroup?.name || 'Kích thước') : 'Kích thước'
 
   // Giày dép: không đoán số giày từ cân nặng
   if (catLower.includes('giày') || catLower.includes('dép') || /(giày|sneaker|boots|loafer|dép|sandal)/.test(nameLower)) {
@@ -256,13 +263,12 @@ export function predictProductSize(params: {
     }
   }
 
-  // Phụ kiện khác / Túi / Ví / Mũ / Kính
-  const isClothing = /(áo|quần|đầm|váy|blazer|vest|bomber|hoodie|cardigan|sơ mi|polo|thun|jogger|short)/.test(nameLower)
-    || catLower.includes('thời trang')
+  // Phụ kiện khác / Túi / Ví / Mũ / Kính / Dây chuyền
   if (!isClothing) {
+    const defaultOpt = availableOptions[0] || 'Freesize'
     return {
       applicable: false,
-      recommendedSize: availableOptions[0] || '',
+      recommendedSize: defaultOpt,
       alternativeSize: null,
       groupName,
       groupIndex: groupIdx,
@@ -272,7 +278,9 @@ export function predictProductSize(params: {
       waistCm,
       hipCm,
       bmi,
-      note: 'Sản phẩm không cần chọn size theo chiều cao & cân nặng.',
+      note: defaultOpt === 'Freesize'
+        ? 'Phụ kiện Freesize — không cần chọn size theo chiều cao & cân nặng.'
+        : 'Chọn phân loại phù hợp trước khi thêm vào giỏ.',
     }
   }
 
@@ -285,20 +293,25 @@ export function predictProductSize(params: {
     letters = SIZE_LETTERS_FEMALE
     const hIdx = h < 156 ? 0 : h < 162 ? 1 : h < 168 ? 2 : 3
     const wIdx = w < 46 ? 0 : w < 53 ? 1 : w < 61 ? 2 : 3
-    baseIdx = Math.max(hIdx, wIdx)
-    nearUpper = wIdx === baseIdx && ((baseIdx === 0 && w >= 44) || (baseIdx === 1 && w >= 51) || (baseIdx === 2 && w >= 58))
+    baseIdx = hIdx > wIdx ? Math.floor((hIdx + wIdx) / 2) : wIdx
+    nearUpper =
+      (wIdx >= hIdx && ((baseIdx === 0 && w >= 44) || (baseIdx === 1 && w >= 51) || (baseIdx === 2 && w >= 58))) ||
+      hIdx > wIdx
   } else {
     letters = SIZE_LETTERS_MALE
     const hIdx = h < 164 ? 0 : h < 171 ? 1 : h < 177 ? 2 : h < 183 ? 3 : 4
     const wIdx = w < 56 ? 0 : w < 65 ? 1 : w < 74 ? 2 : w < 84 ? 3 : 4
-    baseIdx = Math.max(hIdx, wIdx)
+    baseIdx = hIdx > wIdx ? Math.floor((hIdx + wIdx) / 2) : wIdx
     nearUpper =
-      wIdx === baseIdx &&
-      ((baseIdx === 0 && w >= 54) || (baseIdx === 1 && w >= 63) || (baseIdx === 2 && w >= 71) || (baseIdx === 3 && w >= 80))
+      (wIdx >= hIdx &&
+        ((baseIdx === 0 && w >= 54) || (baseIdx === 1 && w >= 63) || (baseIdx === 2 && w >= 71) || (baseIdx === 3 && w >= 80))) ||
+      hIdx > wIdx
   }
 
+  const normalizeSizeOpt = (s: string) => s.replace(/^size\s+/i, '').trim()
+
   // Quần có size số (29..34 / 26..30)
-  const numericOpts = availableOptions.filter((o) => /^\d+$/.test(o.trim()))
+  const numericOpts = availableOptions.filter((o) => /^\d+$/.test(normalizeSizeOpt(o)))
   if (numericOpts.length > 0 || (/(quần jean|quần tây|quần âu|quần kaki)/.test(nameLower) && availableOptions.length === 0)) {
     const opts = numericOpts.length > 0
       ? numericOpts
@@ -322,7 +335,7 @@ export function predictProductSize(params: {
       bmi,
       note:
         `Vòng eo ~${waistCm}cm (${h}cm • ${w}kg) mặc đẹp size ${rec}` +
-        (alt && Number(alt) > Number(rec) ? ` • Muốn thoải mái chọn ${alt}.` : '.'),
+        (alt && Number(normalizeSizeOpt(alt)) > Number(normalizeSizeOpt(rec)) ? ` • Muốn thoải mái chọn ${alt}.` : '.'),
     }
   }
 
@@ -331,10 +344,16 @@ export function predictProductSize(params: {
   const effIdx = Math.min(letters.length - 1, baseIdx + (isOuter && nearUpper ? 1 : 0))
   let rec = letters[effIdx]
 
-  if (availableOptions.length > 0 && !availableOptions.includes(rec)) {
-    rec = rec === 'XXL' && availableOptions.includes('XL')
-      ? 'XL'
-      : availableOptions[Math.min(effIdx, availableOptions.length - 1)]
+  if (availableOptions.length > 0) {
+    const exactMatch = availableOptions.find((o) => normalizeSizeOpt(o).toUpperCase() === rec.toUpperCase())
+    if (exactMatch) {
+      rec = exactMatch
+    } else if (rec === 'XXL') {
+      const xlMatch = availableOptions.find((o) => normalizeSizeOpt(o).toUpperCase() === 'XL')
+      rec = xlMatch || availableOptions[Math.min(effIdx, availableOptions.length - 1)]
+    } else {
+      rec = availableOptions[Math.min(effIdx, availableOptions.length - 1)]
+    }
   }
 
   let alt: string | null = null

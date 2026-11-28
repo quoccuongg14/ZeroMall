@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Product } from '../../FlashSale'
-import type { OutfitSlots, OutfitSlotKey, ScoredOutfitBundle, TryonEngineMode } from './types'
+import type { OutfitSlots, OutfitSlotKey } from './types'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 
 interface TryOnMixMatchBuilderProps {
@@ -10,16 +10,10 @@ interface TryOnMixMatchBuilderProps {
   onRemoveSlot: (slot: OutfitSlotKey, e: React.MouseEvent, itemId?: string) => void
   onApplyPreset: (type: 'streetwear' | 'office' | 'sport') => void
   isLoadingAi: boolean
-  tryonEngineMode?: TryonEngineMode
   totalOutfitPrice: number
   outfitItems: Product[]
   onTryOnWholeOutfit: () => void
-  onAddWholeOutfitToCart: () => void
-  selectedOutfitBundleId: string | null
-  topScoredOutfits: ScoredOutfitBundle[]
-  height: number
-  weight: number
-  onOpen100SetsModal: () => void
+  onBuyWholeOutfit: () => void
 }
 
 export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
@@ -32,15 +26,9 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
   totalOutfitPrice,
   outfitItems,
   onTryOnWholeOutfit,
-  onAddWholeOutfitToCart,
-  selectedOutfitBundleId,
-  topScoredOutfits,
-  height,
-  weight,
-  onOpen100SetsModal,
+  onBuyWholeOutfit,
 }) => {
   const accessoriesList = selectedOutfit.accessories || (selectedOutfit.accessory ? [selectedOutfit.accessory] : [])
-  const isTwoPass = outfitItems.length >= 5
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 shadow-2xs space-y-3.5">
@@ -52,22 +40,6 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
           </h3>
         </div>
         <div className="flex items-center gap-1.5">
-          {outfitItems.length > 0 && (
-            <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                isTwoPass
-                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              }`}
-              title={
-                isTwoPass
-                  ? 'Từ 5 món trở lên, AI tự động chạy 2 chặng để mặc đồ chính rồi đeo thêm toàn bộ phụ kiện'
-                  : 'Từ 4 món trở xuống, AI chỉ chạy đúng 1 lượt duy nhất cho nhanh và tiết kiệm'
-              }
-            >
-              {isTwoPass ? '✨ Tự động 2 Chặng AI' : '⚡ 1 Lượt AI Tiết Kiệm'}
-            </span>
-          )}
           <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full">
             {outfitItems.length} Món Đã Chọn
           </span>
@@ -331,7 +303,7 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
             </button>
             <button
               type="button"
-              onClick={onAddWholeOutfitToCart}
+              onClick={onBuyWholeOutfit}
               className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-[0.98]"
             >
               <span>🛒</span> Mua Cả Bộ
@@ -339,31 +311,6 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
           </div>
         </div>
       )}
-
-      {/* Banner Gợi ý 100 Set Phối Đồ AI */}
-      <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border border-orange-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-900">100 Set Phối Đồ AI Stylist</span>
-            <span className="text-[10px] font-bold bg-orange-100 text-[#ee4d2d] px-2 py-0.2 rounded-full">
-              Giảm 8% Combo
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-600 mt-0.5">
-            {selectedOutfitBundleId
-              ? `Đang chọn: ${topScoredOutfits.find(o => o.id === selectedOutfitBundleId)?.title || 'Set AI'}`
-              : `Mô phỏng 100 bộ phối từ kho ZeroMall theo vóc dáng (${height}cm • ${weight}kg).`}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onOpen100SetsModal}
-          className="px-3.5 py-1.5 bg-[#ee4d2d] hover:bg-[#d93b1d] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 ml-auto sm:ml-0"
-        >
-          <span>✨</span> Xem 100 Set ➔
-        </button>
-      </div>
     </div>
   )
 }

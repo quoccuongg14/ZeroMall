@@ -65,6 +65,10 @@ function resolveBundleItemVariant(prod: Product, preferredVariant: string): stri
     if (picked.length > 0) return picked.join(' - ')
   }
 
+  const prodNameLower = (prod.name || '').toLowerCase()
+  const isFreeSizeAccessory = /(dây chuyền|vòng cổ|mũ|nón|kính|túi|ví|cài tóc|bông tai)/.test(prodNameLower)
+  if (isFreeSizeAccessory) return 'Freesize'
+
   return rawPreferred || 'Size Tiêu Chuẩn'
 }
 

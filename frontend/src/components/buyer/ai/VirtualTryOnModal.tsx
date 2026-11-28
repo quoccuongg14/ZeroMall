@@ -115,8 +115,13 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               predictedSizes={logic.predictedSizes}
               selectedItemSizes={logic.resolvedItemSizes}
               onSelectItemSize={logic.setItemSizeOverride}
+              isSizeGuideOpen={logic.isSizeGuideOpen}
+              onToggleSizeGuide={() => logic.setIsSizeGuideOpen((prev) => !prev)}
+              onAddSingleItemToCart={logic.handleAddSingleItemToCart}
+              onBuySingleItem={logic.handleBuySingleItem}
               totalOutfitPrice={logic.totalOutfitPrice}
               onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
+              onBuyWholeOutfit={logic.handleBuyWholeOutfit}
               fileInputRef={logic.fileInputRef}
               onPhotoUpload={logic.handlePhotoUpload}
               onClearUserPhoto={logic.handleClearUserPhoto}
@@ -149,7 +154,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 onRemoveSlot={logic.handleRemoveSlot}
                 onApplyPreset={logic.handleApplyPreset}
                 isLoadingAi={logic.isLoadingAi}
-                tryonEngineMode={logic.tryonEngineMode}
                 totalOutfitPrice={logic.totalOutfitPrice}
                 outfitItems={logic.outfitItems}
                 onTryOnWholeOutfit={() => {
@@ -160,15 +164,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                   }
                   logic.handleRunTryOn(undefined, undefined, undefined, undefined, undefined, logic.selectedOutfit)
                 }}
-                onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
-                selectedOutfitBundleId={logic.selectedOutfitBundleId}
-                topScoredOutfits={logic.topScoredOutfits}
-                height={logic.height}
-                weight={logic.weight}
-                onOpen100SetsModal={() => {
-                  logic.setIsOutfitModalOpen(true)
-                  if (logic.topScoredOutfits.length === 0) logic.fetchTopScoredOutfits()
-                }}
+                onBuyWholeOutfit={logic.handleBuyWholeOutfit}
               />
 
               {/* Bộ chuyển tab Cột 2 (Gọn gàng chỉ 2 tab trực quan) */}

@@ -392,7 +392,13 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
           />
           <Route
             path="/category/:categorySlug"
-            element={<CategoryProductsPage />}
+            element={
+              <CategoryProductsPage
+                cart={cart}
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyerBuyNow}
+              />
+            }
           />
           <Route
             path="/shop/:shopId"

@@ -61,9 +61,16 @@ const toSlug = (str: string) => {
 
 interface CategoryProductsPageProps {
   products?: any[]
+  cart?: import('../../models/cart.model').CartItem[]
+  onAddToCart?: (product: any, quantity: number, variant: string) => void
+  onBuyNow?: (product: any, quantity: number, variant: string) => void
 }
 
-export const CategoryProductsPage: React.FC<CategoryProductsPageProps> = () => {
+export const CategoryProductsPage: React.FC<CategoryProductsPageProps> = ({
+  cart,
+  onAddToCart,
+  onBuyNow,
+}) => {
   const { categorySlug } = useParams<{ categorySlug: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -589,6 +596,9 @@ export const CategoryProductsPage: React.FC<CategoryProductsPageProps> = () => {
       <VirtualTryOnModal
         isOpen={isTryOnModalOpen}
         onClose={() => setIsTryOnModalOpen(false)}
+        cart={cart}
+        onAddToCart={onAddToCart}
+        onBuyNow={onBuyNow}
       />
     </div>
   )

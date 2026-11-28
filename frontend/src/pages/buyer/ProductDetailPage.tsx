@@ -1043,6 +1043,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         initialBundle={selectedBundleForTryOn}
         cart={cart}
         onAddToCart={onAddToCart}
+        onBuyNow={onBuyNow}
       />
     </div>
   )
