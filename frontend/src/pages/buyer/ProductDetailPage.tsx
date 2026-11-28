@@ -964,6 +964,18 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       {product && (
         <ProductOutfitRecommendations
           product={product}
+          user={user}
+          onRequireLogin={() => {
+            if (onRequireLogin) {
+              onRequireLogin(
+                'Đăng nhập để xem Gợi Ý Phối Đồ AI',
+                'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để xem gợi ý phối cả set theo vóc dáng và nhận ưu đãi Combo -8%.',
+                '✨'
+              )
+            } else {
+              onOpenLogin()
+            }
+          }}
           onAddToCart={onAddToCart}
           onOpenTryOnModal={(bundle) => {
             if (!user) {

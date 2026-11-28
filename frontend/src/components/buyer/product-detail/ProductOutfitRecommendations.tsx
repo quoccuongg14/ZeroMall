@@ -9,12 +9,16 @@ export type { ScoredOutfitBundle, OutfitItem }
 
 interface ProductOutfitRecommendationsProps {
   product: Product
+  user?: any
+  onRequireLogin?: () => void
   onAddToCart?: (product: Product, quantity: number, variant: string) => void
   onOpenTryOnModal?: (bundle?: ScoredOutfitBundle) => void
 }
 
 export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendationsProps> = ({
   product,
+  user,
+  onRequireLogin,
   onAddToCart,
   onOpenTryOnModal
 }) => {
@@ -26,7 +30,7 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
   const isFashion = isFashionProduct(product)
 
   useEffect(() => {
-    if (!product || !isFashion) {
+    if (!product || !isFashion || !user) {
       setIsLoading(false)
       return
     }
@@ -82,17 +86,29 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
     }
 
     fetchTopOutfits()
-  }, [product?.id, isFashion])
+  }, [product?.id, isFashion, user?.id])
 
   if (!isFashion) {
     return null
+  }
+
+  const handleOpenOutfitModal = () => {
+    if (!user) {
+      if (onRequireLogin) {
+        onRequireLogin()
+      } else {
+        alert('Vui lòng đăng nhập để xem Gợi Ý Phối Cả Set!')
+      }
+      return
+    }
+    setIsModalOpen(true)
   }
 
   return (
     <>
       {/* Sleek, Compact Shopee-style Trigger Bar (Không làm giãn trang sản phẩm) */}
       <div
-        onClick={() => setIsModalOpen(true)}
+        onClick={handleOpenOutfitModal}
         className="bg-white hover:bg-slate-50/80 border border-indigo-200/80 hover:border-indigo-400/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs my-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all duration-200 group"
       >
         <div className="flex items-center gap-3">
@@ -125,11 +141,11 @@ export const ProductOutfitRecommendations: React.FC<ProductOutfitRecommendations
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setIsModalOpen(true)
+              handleOpenOutfitModal()
             }}
             className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold rounded-xl text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98]"
           >
-            <span>⚡</span> Xem 5 Set Phối Đồ ➔
+            <span>{user ? '⚡' : '🔒'}</span> {user ? 'Xem 5 Set Phối Đồ ➔' : 'Đăng Nhập Xem 5 Set ➔'}
           </button>
         </div>
       </div>

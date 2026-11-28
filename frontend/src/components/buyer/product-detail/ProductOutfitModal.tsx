@@ -57,7 +57,8 @@ export const ProductOutfitModal: React.FC<ProductOutfitModalProps> = ({
   const [toastMsg, setToastMsg] = useState<string>('')
   const [visibleCount, setVisibleCount] = useState<number>(5)
 
-  if (!isOpen) return null
+  const hasLoggedUser = Boolean(localStorage.getItem('zm_user'))
+  if (!isOpen || !hasLoggedUser) return null
 
   const bodyProfile = loadSavedBodyProfile()
 
