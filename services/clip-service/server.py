@@ -78,6 +78,13 @@ CANONICAL_CATEGORIES = {
         "zero_category": "Máy Tính & Laptop",
         "domain": "PC_PERIPHERALS"
     },
+    "Webcam / Thiết Bị Họp Trực Tuyến": {
+        "prompt": "webcam web camera usb streaming camera desktop monitor webcam conference camera webcam may tinh",
+        "label": "Webcam / Camera máy tính",
+        "suggestedTitle": "Webcam Máy Tính Full HD Họp Trực Tuyến",
+        "zero_category": "Máy Tính & Laptop",
+        "domain": "CAMERA"
+    },
 
     # 5. MÁY ẢNH & PHỤ KIỆN
     "Máy Ảnh / Ống Kính": {
@@ -111,13 +118,20 @@ CANONICAL_CATEGORIES = {
         "domain": "BEAUTY"
     },
 
-    # 7. SỨC KHỎE
+    # 7. SỨC KHỎE & Y TẾ
     "Sức Khỏe": {
         "prompt": "health vitamins dietary supplements nutritional capsules medicine thuoc bo vien uong vitamin thuc pham chuc nang",
         "label": "Thực phẩm chức năng / Vitamin sức khỏe",
         "suggestedTitle": "Thực Phẩm Bổ Sung Chăm Sóc Sức Khỏe",
         "zero_category": "Sức Khỏe",
         "domain": "HEALTH"
+    },
+    "Thiết Bị Y Tế / Máy Đo Huyết Áp": {
+        "prompt": "blood pressure monitor sphygmomanometer digital arm cuff thermometer pulse oximeter medical health monitor may do huyet ap thiet bi y te",
+        "label": "Thiết bị y tế / Máy đo huyết áp",
+        "suggestedTitle": "Máy Đo Huyết Áp Điện Tử Tự Động Tại Nhà",
+        "zero_category": "Sức Khỏe",
+        "domain": "MEDICAL_DEVICE"
     },
 
     # 8. NHÀ CỬA & GIA DỤNG
@@ -151,6 +165,20 @@ CANONICAL_CATEGORIES = {
         "zero_category": "Phụ Kiện Nữ",
         "domain": "ACCESSORIES"
     },
+    "Mũ Nón Thời Trang": {
+        "prompt": "baseball cap knitted beanie hat cap sun hat bucket hat snapback mu luoi trai non ket mu len",
+        "label": "Mũ / Nón thời trang",
+        "suggestedTitle": "Mũ Lưỡi Trai / Mũ Len Thời Trang Unisex",
+        "zero_category": "Phụ Kiện Nữ",
+        "domain": "HATS"
+    },
+    "Thắt Lưng / Dây Nịt Da": {
+        "prompt": "leather belt metal buckle mens waist belt dress belt pant belt that lung da day nit nam nu",
+        "label": "Thắt lưng / Dây nịt da",
+        "suggestedTitle": "Thắt Lưng Da Khóa Kim Loại Thời Trang",
+        "zero_category": "Phụ Kiện Nữ",
+        "domain": "BELTS"
+    },
     "Túi Ví Nữ": {
         "prompt": "backpack handbag wallet purse bag clutch cap ba lo tui xach vi cam tay",
         "label": "Balo / Túi xách / Ví",
@@ -166,6 +194,13 @@ CANONICAL_CATEGORIES = {
         "suggestedTitle": "Đồ Dùng Tiện Ích Mẹ & Bé An Toàn",
         "zero_category": "Mẹ & Bé",
         "domain": "MOM_BABY"
+    },
+    "Đồ Chơi Trẻ Em / Xếp Hình Gỗ": {
+        "prompt": "wooden building blocks kids educational wooden toys puzzle blocks bricks children playset bo do choi xep hinh go cho be",
+        "label": "Đồ chơi trẻ em / Xếp hình gỗ",
+        "suggestedTitle": "Bộ Đồ Chơi Xếp Hình Gỗ Thông Minh Cho Bé",
+        "zero_category": "Mẹ & Bé",
+        "domain": "TOYS"
     },
 
     # 11. SÁCH & VPP
@@ -193,9 +228,9 @@ CANONICAL_CATEGORIES = {
         "domain": "OUTERWEAR"
     },
     "Áo thun / Áo phông": {
-        "prompt": "graphic t-shirt casual tee cotton t-shirt streetwear tee shirt ao thun ao phong",
-        "label": "Áo thun / Áo phông",
-        "suggestedTitle": "Áo Thun Cổ Tròn Thời Trang Năng Động",
+        "prompt": "graphic t-shirt polo shirt collared t-shirt cotton tee streetwear shirt top ao thun ao phong ao polo nam nu",
+        "label": "Áo thun / Áo phông / Áo Polo",
+        "suggestedTitle": "Áo Thun Cổ Tròn / Áo Polo Thời Trang Năng Động",
         "zero_category": "Thời Trang Nam",
         "domain": "TSHIRT"
     },
@@ -228,14 +263,14 @@ CANONICAL_CATEGORIES = {
         "domain": "DRESS"
     },
     "Thể Thao": {
-        "prompt": "sports football soccer jersey athletic sportswear kit wika runner bo quan ao the thao",
+        "prompt": "sports football soccer jersey athletic sportswear kit tracksuit jersey bo quan ao the thao",
         "label": "Bộ quần áo thể thao / bóng đá",
         "suggestedTitle": "Bộ Quần Áo Bóng Đá Thể Thao Nam Nữ Thoáng Khí",
         "zero_category": "Thể Thao",
         "domain": "SPORTS"
     },
     "Dụng Cụ Thể Thao / Tập Gym / Tạ": {
-        "prompt": "gym equipment dumbbells weights barbells resistance bands jump rope fitness workout tạ tay ta tap gym dung cu the thao tap the hinh day khang luc",
+        "prompt": "dumbbells kettlebell weight plates barbell resistance bands yoga mat jump rope pull up bar ta tay tap gym dung cu tap the hinh",
         "label": "Dụng cụ tập gym / Tạ tay / Dây kháng lực",
         "suggestedTitle": "Bộ Tạ Tay Tập Gym Rèn Luyện Thể Lực Đa Năng",
         "zero_category": "Thể Thao",
@@ -405,13 +440,20 @@ def clean_title_for_entity_check(text):
     if not text:
         return ""
     t = text.lower()
-    # Loại bỏ các cụm từ mô tả phối đồ, ngữ cảnh mix & match trong tiêu đề TMĐT
-    t = re.sub(r'(dễ mix đồ|dễ phối đồ|mix đồ|phối đồ|mix cùng|phối cùng|mặc cùng|kết hợp cùng|diện cùng|phù hợp mix)\s+[\w\s]+', ' ', t)
+    # Loại bỏ các cụm từ mô tả phối đồ, ngữ cảnh mix & match trong tiêu đề TMĐT (VD: "Dễ Phối Chân Váy Quần Tây")
+    t = re.sub(r'(dễ mix đồ|dễ phối đồ|dễ phối|mix đồ|phối đồ|mix cùng|phối cùng|phối với|mặc cùng|kết hợp cùng|diện cùng|phù hợp mix)\s+[\w\s]+', ' ', t)
     t = re.sub(r'(bỏ túi quần|túi quần|bỏ túi|nhét túi|nhét vừa|bỏ vừa)', ' ', t)
     t = re.sub(r'(đựng vừa điện thoại|đựng điện thoại|bỏ vừa điện thoại|chứa điện thoại)', ' ', t)
     t = re.sub(r'(dành cho|dùng cho|thích hợp cho|tương thích với|phù hợp cho)\s+[\w\s]+', ' ', t)
     t = re.sub(r'(in hình|họa tiết|tặng kèm|kèm theo)\s+[\w\s]+', ' ', t)
     return " ".join(t.split())
+
+def has_kw(text, keywords):
+    if not text:
+        return False
+    norm = re.sub(r'[^\w]+', ' ', text.lower().replace('_', ' ')).strip()
+    padded = f" {norm} "
+    return any(f" {kw.lower()} " in padded for kw in keywords if kw)
 
 def audit_single_image_logic(pil_img, name, category, name_emb=None):
     """
@@ -477,13 +519,23 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     has_gym_equipment_title = any(k in cleaned_name for k in [
         "tạ", "ta tay", "tạ tay", "tạ đơn", "ta don", "dây kháng lực", "day khang luc", "thảm yoga", "tham yoga", "con lăn", "con lan", "xà đơn", "xa don", "ghế tập", "ghe tap", "tập gym", "tap gym", "dụng cụ tập", "dung cu the thao", "bình lắc shaker"
     ])
-    has_top_title = any(k in cleaned_name for k in [
-        "áo", "ao", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "blazer", "vest", "cardigan", "croptop"
+    has_top_title = has_kw(cleaned_name, [
+        "áo", "ao", "áo khoác", "khoác", "jacket", "hoodie", "sweater", "sơ mi", "polo", "áo thun", "áo phông", "áo polo", "blazer", "vest", "cardigan", "croptop"
     ])
-    has_bottom_title = any(k in cleaned_name for k in [
-        "quần", "quan", "jean", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu"
+    has_bottom_title = has_kw(cleaned_name, [
+        "quần", "quan", "jean", "quần jean", "quần bò", "short", "jogger", "trouser", "sweatpant", "kaki", "quần đùi", "quần dài", "quần âu", "quần tây"
     ])
-    has_dress_title = any(k in cleaned_name for k in ["váy", "đầm", "vay", "dam", "chân váy", "chan vay"])
+    has_dress_title = has_kw(cleaned_name, ["váy", "đầm", "vay", "dam", "chân váy", "chan vay", "váy yếm", "đầm maxi"])
+    has_hat_title = has_kw(cleaned_name, [
+        "mũ", "nón", "mu luoi trai", "mũ lưỡi trai", "mũ len", "beanie", "bucket", "snapback", "mũ bảo hiểm"
+    ])
+    has_belt_title = has_kw(cleaned_name, ["thắt lưng", "that lung", "dây nịt", "day nit"])
+    has_toy_title = has_kw(cleaned_name, [
+        "đồ chơi", "do choi", "xếp hình", "xep hinh", "lắp ghép", "lap ghep", "lego", "rubik", "gấu bông", "búp bê"
+    ])
+    has_medical_title = has_kw(cleaned_name, [
+        "huyết áp", "huyet ap", "máy đo", "may do", "nhiệt kế", "nhiet ke", "máy xông", "may xong", "spo2", "y tế", "y te", "đường huyết"
+    ])
     has_kitchen_title = any(k in cleaned_name for k in [
         "kệ", "ke", "nồi", "chảo", "bếp", "lò", "ấm", "máy xay", "gia vị", "đũa", "thớt", "dao", "bát", "đĩa", "hộp đựng", "gia dụng", "giá để"
     ])
@@ -505,7 +557,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     # 2. Phụ kiện thời trang nữ
     has_acc_title = any(k in cleaned_name for k in [
         "kẹp tóc", "khuyên tai", "bông tai", "vòng cổ", "dây chuyền", "nhẫn", "trang sức", "mắt kính", "kính mát", "phụ kiện"
-    ])
+    ]) or has_hat_title or has_belt_title
 
     # 3. Mỹ phẩm, sắc đẹp & hộp phấn (Geometric shape confusion prevention)
     has_compact_title = any(k in cleaned_name for k in [
@@ -515,10 +567,10 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         "son", "serum", "kem", "mỹ phẩm", "nước hoa", "sữa rửa mặt", "trang điểm", "mascara", "phấn", "toner", "kem chống nắng", "tẩy trang", "lotion", "sữa tắm", "dầu gội", "tẩy da chết", "mặt nạ", "lipstick"
     ]) or has_compact_title
 
-    # 4. Thực phẩm chức năng / Sức khỏe
+    # 4. Thực phẩm chức năng / Sức khỏe & Thiết bị y tế
     has_health_title = any(k in cleaned_name for k in [
         "vitamin", "viên uống", "thực phẩm chức năng", "thuốc", "collagen", "dầu cá", "omega", "canxi", "kẽm", "bổ não", "bổ gan", "men vi sinh", "whey", "protein"
-    ])
+    ]) or has_medical_title
 
     # 5. Điện thoại vs Pin sạc dự phòng vs Ốp lưng (Device vs Accessory anti bait-and-switch)
     has_powerbank_charger_title = any(k in cleaned_name for k in [
@@ -544,12 +596,12 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         "laptop", "máy tính xách tay", "macbook", "thinkpad", "asus zenbook"
     ]) and not has_pc_peripheral_title and not any(k in cleaned_name for k in ["balo", "túi chống sốc", "tui chong soc"])
 
-    # 8. Máy ảnh vs Phụ kiện máy ảnh
+    # 8. Máy ảnh vs Phụ kiện máy ảnh & Webcam
     has_camera_acc_title = any(k in cleaned_name for k in [
         "tripod", "chân máy", "chan may", "gimbal", "gậy selfie", "ngàm", "mount", "cap lens", "kính lọc", "filter", "dây đeo máy ảnh"
     ])
     has_camera_device_title = any(k in cleaned_name for k in [
-        "máy ảnh", "may anh", "camera", "dslr", "mirrorless", "gopro", "flycam"
+        "máy ảnh", "may anh", "camera", "webcam", "dslr", "mirrorless", "gopro", "flycam"
     ]) and not has_camera_acc_title
     has_camera_title = has_camera_device_title or has_camera_acc_title
 
@@ -566,15 +618,75 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
         "sách", "truyện", "vở", "bút", "tập", "sổ", "tiểu thuyết", "giáo trình", "từ điển", "thước", "văn phòng phẩm"
     ])
 
-    # 11. Mẹ & Bé
+    # 11. Mẹ & Bé & Đồ chơi trẻ em
     has_mom_baby_title = any(k in cleaned_name for k in [
         "yếm", "ăn dặm", "bình sữa", "tã", "bỉm", "xe đẩy", "núm ti", "máy hút sữa", "sơ sinh", "địu", "ti giả"
-    ])
+    ]) or has_toy_title
 
     # Tổng hợp các thiết bị điện tử chung
     has_electronics_title = has_smartphone_title or has_powerbank_charger_title or has_phonecase_title or has_audio_title or has_laptop_title or has_pc_peripheral_title or any(k in cleaned_name for k in [
-        "máy tính", "pc", "màn hình", "router", "wifi", "ipad", "tablet", "phụ kiện công nghệ"
+        "máy tính", "pc", "màn hình", "router", "wifi", "ipad", "tablet", "webcam", "phụ kiện công nghệ"
     ])
+
+    # 12. MULTI-OBJECT / FULL-OUTFIT TOLERANCE:
+    # Khi ảnh chụp cả bộ / toàn thân (VD: người mẫu mặc Quần Jean + Giày Sneaker, Vest + Quần Tây, Hoodie + Quần Jogger)
+    # không để một món đi kèm (như đôi giày ở chân quần) lấn át nhãn chính trong tiêu đề nếu điểm của nhóm tiêu đề cũng đạt cao sát ngưỡng!
+    expected_domains = set()
+    if has_bottom_title:
+        expected_domains.add("BOTTOMS")
+    if has_top_title:
+        expected_domains.update({"TSHIRT", "CARDIGAN_KNIT", "OUTERWEAR", "SHIRT", "SPORTS"})
+    if has_dress_title:
+        expected_domains.add("DRESS")
+    if has_footwear_title:
+        expected_domains.update({"SNEAKERS", "SLIDES", "SANDALS", "LEATHER_SHOES", "HEELS"})
+    if has_hat_title:
+        expected_domains.add("HATS")
+    if has_belt_title:
+        expected_domains.add("BELTS")
+    if has_toy_title:
+        expected_domains.add("TOYS")
+    if has_medical_title:
+        expected_domains.add("MEDICAL_DEVICE")
+    if has_camera_device_title:
+        expected_domains.add("CAMERA")
+
+    co_occurring_pairs = {
+        "SNEAKERS": {"BOTTOMS", "SPORTS"},
+        "SLIDES": {"BOTTOMS"},
+        "SANDALS": {"BOTTOMS"},
+        "LEATHER_SHOES": {"BOTTOMS"},
+        "HEELS": {"BOTTOMS", "DRESS"},
+        "OUTERWEAR": {"BOTTOMS", "SPORTS", "TSHIRT", "SHIRT"},
+        "SHIRT": {"BOTTOMS"},
+        "TSHIRT": {"BOTTOMS", "SPORTS"},
+        "CARDIGAN_KNIT": {"BOTTOMS"},
+        "BOTTOMS": {"TSHIRT", "CARDIGAN_KNIT", "OUTERWEAR", "SHIRT", "SPORTS"},
+        "GYM_EQUIPMENT": {"BOTTOMS", "SPORTS", "TSHIRT"},
+        "SPORTS": {"BOTTOMS", "TSHIRT", "OUTERWEAR"},
+    }
+
+    if not is_prohibited and expected_domains and domain not in expected_domains:
+        allowed_co = co_occurring_pairs.get(domain, set())
+        candidate_domains = expected_domains & allowed_co
+        if candidate_domains:
+            best_match_sim = -1.0
+            best_match_idx = -1
+            for i_cat, c_key in enumerate(CAT_KEYS):
+                c_dom = CANONICAL_CATEGORIES[c_key].get("domain", "")
+                if c_dom in candidate_domains:
+                    c_sim = float(sims[i_cat].item())
+                    if c_sim > best_match_sim:
+                        best_match_sim = c_sim
+                        best_match_idx = i_cat
+            if best_match_idx >= 0 and best_match_sim >= 0.20 and (max_cat_sim - best_match_sim) <= 0.040:
+                best_idx = best_match_idx
+                best_cat = CAT_KEYS[best_idx]
+                cat_info = CANONICAL_CATEGORIES[best_cat]
+                max_cat_sim = best_match_sim
+                visual_confidence = round(max_cat_sim * 100, 1)
+                domain = cat_info.get("domain", "")
+                pred_cat = cat_info.get("zero_category", pred_cat)
 
     if is_prohibited:
         is_mismatch = True
@@ -686,9 +798,30 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
                 reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "DRESS":
-            if any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam", "balo", "cặp", "đồng hồ", "laptop", "máy tính", "tạ"]):
+            is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và váy", "áo phối váy"])
+            if ((has_top_title or has_bottom_title) and not has_dress_title and not is_suit) or any(k in cleaned_name for k in ["quần nam", "áo nam", "quần jean nam", "giày nam", "balo", "cặp", "đồng hồ", "laptop", "máy tính", "tạ"]):
                 is_mismatch = True
-                reason = f"Ảnh là váy đầm thời trang nữ, không khớp với tên sản phẩm \"{name}\"."
+                reason = f"Ảnh là váy đầm thời trang nữ ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "HATS":
+            if not has_hat_title and (has_footwear_title or has_bottom_title or has_bag_title or has_watch_title or has_kitchen_title or has_electronics_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Mũ / Nón thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "BELTS":
+            if not has_belt_title and (has_watch_title or has_watchstrap_title or has_footwear_title or has_kitchen_title or has_electronics_title or has_beauty_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Thắt lưng / Dây nịt ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "TOYS":
+            if not has_toy_title and not has_mom_baby_title and (has_footwear_title or has_watch_title or has_electronics_title or has_beauty_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Đồ chơi trẻ em ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+
+        elif domain == "MEDICAL_DEVICE":
+            if not has_medical_title and not has_health_title and (has_top_title or has_bottom_title or has_dress_title or has_footwear_title or has_bag_title or has_watch_title):
+                is_mismatch = True
+                reason = f"Ảnh hiển thị Thiết bị y tế / Máy đo sức khỏe ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
 
         elif domain == "SPORTS":
             disallowed_themes = [
@@ -898,25 +1031,27 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
             w in cleaned_name for w in [
                 "đồng hồ", "dong ho", "watch", "smartwatch",
                 "blazer", "vest", "khoác", "jacket", "áo", "quần", "váy", "đầm",
-                "yếm", "ăn dặm", "bé", "sữa", "tã", "bỉm", "bình sữa",
+                "yếm", "ăn dặm", "bé", "sữa", "tã", "bỉm", "bình sữa", "đồ chơi", "xếp hình",
                 "son", "serum", "kem", "mỹ phẩm", "nước hoa", "sữa rửa mặt",
-                "vitamin", "viên uống", "thực phẩm chức năng", "thuốc bổ",
+                "vitamin", "viên uống", "thực phẩm chức năng", "thuốc bổ", "huyết áp", "máy đo",
                 "nồi", "chảo", "bếp", "ấm", "bình giữ nhiệt", "bát", "đĩa", "kệ",
                 "balo", "túi", "ví", "bóp", "giày", "dép", "sandal", "sneaker",
-                "điện thoại", "iphone", "samsung", "laptop", "máy tính", "tai nghe", "chuột", "bàn phím"
+                "mũ", "nón", "thắt lưng", "dây nịt",
+                "điện thoại", "iphone", "samsung", "laptop", "máy tính", "webcam", "tai nghe", "chuột", "bàn phím"
             ]
             if (
                 ("đồng hồ" in w and "đồng hồ" in cat_lower) or
-                ("bé" in w or "yếm" in w or "sữa" in w or "tã" in w or "bỉm" in w) and "mẹ & bé" in cat_lower or
+                ("bé" in w or "yếm" in w or "sữa" in w or "tã" in w or "bỉm" in w or "đồ chơi" in w or "xếp hình" in w) and "mẹ & bé" in cat_lower or
                 ("son" in w or "serum" in w or "kem" in w or "mỹ phẩm" in w) and "sắc đẹp" in cat_lower or
-                ("vitamin" in w or "viên uống" in w or "thuốc bổ" in w) and "sức khỏe" in cat_lower or
+                ("vitamin" in w or "viên uống" in w or "thuốc bổ" in w or "huyết áp" in w or "máy đo" in w) and "sức khỏe" in cat_lower or
                 ("nồi" in w or "chảo" in w or "bếp" in w or "ấm" in w) and ("gia dụng" in cat_lower or "nhà cửa" in cat_lower) or
                 ("bình giữ nhiệt" in w or "bát" in w or "đĩa" in w or "kệ" in w) and ("nhà cửa" in cat_lower or "gia dụng" in cat_lower) or
                 ("balo" in w or "túi" in w or "ví" in w) and "túi ví" in cat_lower or
+                ("mũ" in w or "nón" in w or "thắt lưng" in w or "dây nịt" in w) and "phụ kiện" in cat_lower or
                 ("áo" in w or "blazer" in w or "vest" in w or "khoác" in w or "quần" in w) and "thời trang" in cat_lower or
                 ("giày" in w or "dép" in w or "sandal" in w or "sneaker" in w) and "giày dép" in cat_lower or
                 ("điện thoại" in w or "tai nghe" in w) and "điện thoại" in cat_lower or
-                ("laptop" in w or "máy tính" in w or "chuột" in w or "bàn phím" in w) and ("máy tính" in cat_lower or "thiết bị điện tử" in cat_lower)
+                ("laptop" in w or "máy tính" in w or "webcam" in w or "chuột" in w or "bàn phím" in w) and ("máy tính" in cat_lower or "thiết bị điện tử" in cat_lower)
             )
         )
 

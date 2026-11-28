@@ -728,6 +728,7 @@ export class AiCategoryAuditorService {
   private cleanContextualModifiers(text: string): string {
     if (!text) return '';
     let t = text.toLowerCase();
+    t = t.replace(/(dễ\s+mix\s+đồ|dễ\s+phối\s+đồ|dễ\s+phối|mix\s+đồ|phối\s+đồ|mix\s+cùng|phối\s+cùng|phối\s+với|mặc\s+cùng|kết\s+hợp\s+cùng)\s+[\p{L}\p{N}\s]+/gu, ' ');
     t = t.replace(/(dễ\s+bỏ\s+túi\s+quần|bỏ\s+túi\s+quần|túi\s+quần|nhét\s+túi|bỏ\s+túi|bỏ\s+vừa\s+túi|bỏ\s+vừa)/gu, ' ');
     t = t.replace(/(đựng\s+vừa\s+điện\s+thoại|đựng\s+điện\s+thoại|bỏ\s+vừa\s+điện\s+thoại|chứa\s+điện\s+thoại)/gu, ' ');
     t = t.replace(/(dành\s+cho|dùng\s+cho|thích\s+hợp\s+cho|tương\s+thích\s+với|phù\s+hợp\s+cho)\s+[\p{L}\p{N}\s]+/gu, ' ');
@@ -759,7 +760,16 @@ export class AiCategoryAuditorService {
     if (/^\s*(ví|vi|bóp|túi xách|túi đeo|túi tote|túi bao tử|clutch|balo|ba lô|cặp sách|túi canvas)/i.test(cleaned)) {
       return 'Túi Ví Nữ';
     }
-    if (/^\s*(laptop|macbook|bàn phím|chuột|màn hình máy tính|pc|tai nghe gaming|ổ cứng|ram|cpu|vga)/i.test(cleaned)) {
+    if (/^\s*(tã|bỉm|sữa bột|bình sữa|xe đẩy|nôi em bé|đồ chơi|bộ đồ chơi|xếp hình)/i.test(cleaned)) {
+      return 'Mẹ & Bé';
+    }
+    if (/^\s*(máy đo huyết áp|máy đo đường huyết|nhiệt kế|máy xông|vitamin|viên uống|thực phẩm chức năng)/i.test(cleaned)) {
+      return 'Sức Khỏe';
+    }
+    if (/^\s*(thắt lưng|dây nịt|mũ lưỡi trai|nón lưỡi trai|mũ len|nón kết|kẹp tóc|vòng cổ|khuyên tai)/i.test(cleaned)) {
+      return 'Phụ Kiện Nữ';
+    }
+    if (/^\s*(webcam|màn hình|laptop|macbook|bàn phím|chuột|pc|tai nghe gaming|ổ cứng|ram|cpu|vga)/i.test(cleaned)) {
       return 'Máy Tính & Laptop';
     }
     if (/^\s*(sneaker|giày|giay|sandal|dép|dep|boots|guốc|cao gót)/i.test(cleaned)) {
@@ -774,9 +784,6 @@ export class AiCategoryAuditorService {
     }
     if (/^\s*(son|kem|serum|toner|nước hoa|sữa rửa mặt|mặt nạ|phấn)/i.test(cleaned)) {
       return 'Sắc Đẹp';
-    }
-    if (/^\s*(tã|bỉm|sữa bột|bình sữa|xe đẩy|nôi em bé)/i.test(cleaned)) {
-      return 'Mẹ & Bé';
     }
     if (/^\s*(áo|quần|đầm|váy|chân váy|set đồ|bộ đồ|đồ bộ|khoác|jacket|blazer|hoodie|sweater|polo|sơ mi)/i.test(cleaned)) {
       if (this.hasKeyword(cleaned, ['nữ', 'váy', 'đầm', 'croptop', 'chân váy', 'hai dây'])) return 'Thời Trang Nữ';
@@ -860,7 +867,7 @@ export class AiCategoryAuditorService {
     // 7. Máy tính & Laptop
     if (
       this.hasKeyword(cleaned, [
-        'laptop', 'macbook', 'bàn phím', 'chuột gaming', 'chuột máy tính', 'màn hình máy tính',
+        'webcam', 'laptop', 'macbook', 'bàn phím', 'chuột gaming', 'chuột máy tính', 'màn hình máy tính',
         'pc', 'tai nghe gaming', 'ổ cứng', 'ram', 'cpu', 'vga'
       ])
     ) {
@@ -887,13 +894,22 @@ export class AiCategoryAuditorService {
       return 'Sắc Đẹp';
     }
 
-    // 10. Mẹ & Bé
+    // 10. Mẹ & Bé & Đồ chơi trẻ em
     if (
       this.hasKeyword(cleaned, [
-        'tã', 'bỉm', 'sữa bột', 'bình sữa', 'xe đẩy', 'đồ chơi trẻ em', 'nôi em bé',
+        'tã', 'bỉm', 'sữa bột', 'bình sữa', 'xe đẩy', 'đồ chơi', 'đồ chơi trẻ em', 'xếp hình', 'nôi em bé',
       ])
     ) {
       return 'Mẹ & Bé';
+    }
+
+    // 10.1 Sức khỏe & Thiết bị y tế
+    if (
+      this.hasKeyword(cleaned, [
+        'huyết áp', 'máy đo huyết áp', 'đường huyết', 'nhiệt kế', 'vitamin', 'viên uống', 'thực phẩm chức năng', 'collagen',
+      ])
+    ) {
+      return 'Sức Khỏe';
     }
 
     // 11. Đồng hồ
@@ -934,8 +950,8 @@ export class AiCategoryAuditorService {
     // 14. Phụ kiện thời trang
     if (
       this.hasKeyword(cleaned, [
-        'nón lưỡi trai', 'mũ lưỡi trai', 'mũ len', 'vòng tay', 'dây chuyền',
-        'khuyên tai', 'mắt kính',
+        'nón lưỡi trai', 'mũ lưỡi trai', 'mũ len', 'mũ', 'nón', 'thắt lưng', 'dây nịt',
+        'vòng tay', 'dây chuyền', 'khuyên tai', 'mắt kính',
       ])
     ) {
       return 'Phụ Kiện Nữ';

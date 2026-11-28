@@ -1009,8 +1009,8 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
 
         {/* Tab Content Panels */}
         <div className="p-6 flex-1 text-left space-y-6">
-          {/* Violation Notice Banner when Editing Violated / Hidden Product */}
-          {(initialData?.status === 'hidden' || initialData?.isViolated) && (
+          {/* Violation Notice Banner when Editing Violated Product vs Shop-Hidden notice */}
+          {initialData?.isViolated ? (
             <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900 shadow-sm animate-in fade-in">
               <span className="text-2xl shrink-0">⚠️</span>
               <div className="space-y-1">
@@ -1018,14 +1018,26 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
                   Sản phẩm đang bị tạm khóa hiển thị do yêu cầu kiểm duyệt từ Sàn
                 </h4>
                 <p className="text-xs font-semibold text-rose-700">
-                  Lý do vi phạm: <span className="font-bold">{initialData.violationReason || 'Ảnh và tiêu đề hoặc ngành hàng chưa đồng nhất'}</span>
+                  Lý do vi phạm: <span className="font-bold">{initialData.violationReason || 'Sản phẩm bị đánh dấu vi phạm quy chuẩn sàn'}</span>
                 </p>
                 <p className="text-[11px] text-slate-600">
                   Vui lòng cập nhật hình ảnh đúng thực tế hoặc điều chỉnh tiêu đề/ngành hàng cho chính xác. Sau khi bạn bấm <b>Cập nhật sản phẩm</b>, hệ thống AI sẽ tự động rà soát lại và khôi phục hiển thị ngay lập tức nếu đạt chuẩn.
                 </p>
               </div>
             </div>
-          )}
+          ) : initialData?.status === 'hidden' ? (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900 shadow-sm">
+              <span className="text-xl shrink-0">⏸️</span>
+              <div className="space-y-1">
+                <h4 className="text-xs font-black uppercase text-amber-800 tracking-wide">
+                  Sản phẩm đang ở trạng thái Tạm ẩn
+                </h4>
+                <p className="text-[11px] text-amber-800/90">
+                  Sản phẩm này hiện không hiển thị với người mua do đang tạm ẩn (không phải lỗi vi phạm AI). Sau khi bấm <b>Cập nhật sản phẩm</b> hoặc bấm <b>Hiện</b> ở danh sách, sản phẩm có thể mở bán lại.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {activeTab === 'basic' && (
             <AddProductBasicTab

@@ -216,12 +216,14 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
                           </p>
                           <p className="text-[10px] text-slate-400 font-semibold">{p.category}</p>
 
-                          {/* Remediation Callout Box if hidden or violated */}
-                          {(p.status === 'hidden' || p.isViolated) && (
+                          {/* Remediation Callout Box if violated vs subtle notice if shop-hidden */}
+                          {p.isViolated ? (
                             <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 space-y-1 mt-1.5 shadow-2xs">
                               <p className="font-extrabold text-rose-700 flex items-start gap-1">
                                 <span className="shrink-0">⚠️ Sàn yêu cầu sửa:</span>
-                                <span className="font-semibold text-rose-900">{p.violationReason || 'Ảnh và tiêu đề hoặc ngành hàng chưa đồng nhất với quy chuẩn sàn'}</span>
+                                <span className="font-semibold text-rose-900">
+                                  {p.violationReason || 'Sản phẩm bị đánh dấu vi phạm quy chuẩn sàn'}
+                                </span>
                               </p>
                               <p className="text-[10px] text-slate-600">
                                 👉 Bấm{' '}
@@ -235,7 +237,13 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
                                 để cập nhật lại ảnh/thông tin đúng. Sau khi lưu, AI sẽ tự động duyệt lại và mở bán cho Shop!
                               </p>
                             </div>
-                          )}
+                          ) : p.status === 'hidden' ? (
+                            <div className="px-2.5 py-1.5 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-800 mt-1.5 flex items-center justify-between gap-2">
+                              <span>
+                                ⏸️ Sản phẩm đang ở trạng thái <strong>Tạm ẩn</strong> (không phải lỗi AI). Bấm <strong>Hiện</strong> để mở bán lại nếu cần.
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -266,20 +274,22 @@ export const ProductListTable: React.FC<ProductListTableProps> = ({
                     {/* Status Badge */}
                     <td className="p-4 text-center">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                        p.status === 'hidden' || p.isViolated
+                        p.isViolated
                           ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : p.stock <= 0
-                            ? 'bg-red-50 text-red-500 border border-red-200'
-                            : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                          : p.status === 'hidden'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : p.stock <= 0
+                              ? 'bg-red-50 text-red-500 border border-red-200'
+                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                       }`}>
-                        {p.status === 'hidden' || p.isViolated ? '🚫 Bị Tạm Khóa' : p.stock <= 0 ? 'Hết hàng' : 'Đang bán'}
+                        {p.isViolated ? '🚫 Vi Phạm' : p.status === 'hidden' ? '⏸️ Tạm Ẩn' : p.stock <= 0 ? 'Hết hàng' : 'Đang bán'}
                       </span>
                     </td>
 
                     {/* Action Buttons */}
                     <td className="p-4 text-right">
                       <div className="flex justify-end items-center gap-2">
-                        {p.status === 'hidden' || p.isViolated ? (
+                        {p.isViolated ? (
                           <button
                             type="button"
                             onClick={() => onEdit(p)}
