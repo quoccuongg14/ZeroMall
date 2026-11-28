@@ -5,6 +5,8 @@ export interface DriverHomeTabProps {
   driverProfile: any
   pickupCount: number
   holdingCount?: number
+  holdingPickupCount?: number
+  holdingDeliveryCount?: number
   deliveryCount: number
   completedCount: number
   codInWallet: number
@@ -26,6 +28,8 @@ export const DriverHomeTab: React.FC<DriverHomeTabProps> = ({
   driverProfile,
   pickupCount,
   holdingCount = 0,
+  holdingPickupCount,
+  holdingDeliveryCount = 0,
   deliveryCount,
   completedCount,
   codInWallet,
@@ -152,23 +156,41 @@ export const DriverHomeTab: React.FC<DriverHomeTabProps> = ({
         </div>
       )}
 
-      {/* 2.1 Banner Kiện hàng đang giữ trên xe chờ nhập kho */}
-      {isOnline && holdingCount > 0 && (
-        <div className="bg-teal-50 border-2 border-teal-500 rounded-2xl p-3.5 space-y-1 shadow-xs text-teal-900">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-black text-xs text-teal-800">
-              <span className="text-base">🚚</span>
-              <span>ĐANG GIỮ {holdingCount} KIỆN HÀNG TRÊN XE</span>
+      {/* 2.1 Banner Kiện hàng đang giữ trên xe (chờ nhập Hub & đang đi giao) */}
+      {isOnline && holdingCount > 0 && (() => {
+        const pickupOnBike = holdingPickupCount ?? Math.max(0, holdingCount - holdingDeliveryCount)
+        return (
+          <div className="bg-teal-50 border-2 border-teal-500 rounded-2xl p-3.5 space-y-1 shadow-xs text-teal-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-black text-xs text-teal-800">
+                <span className="text-base">🚚</span>
+                <span>ĐANG GIỮ {holdingCount} KIỆN HÀNG TRÊN XE</span>
+              </div>
+              <span className="px-2 py-0.5 bg-teal-600 text-white font-bold text-[10px] rounded-md shrink-0">
+                {pickupOnBike > 0 && holdingDeliveryCount > 0
+                  ? 'Nhận & Giao'
+                  : holdingDeliveryCount > 0
+                    ? 'Đang đi giao'
+                    : 'Chờ nhập Hub'}
+              </span>
             </div>
-            <span className="px-2 py-0.5 bg-teal-600 text-white font-bold text-[10px] rounded-md">
-              Chờ nhập Hub
-            </span>
+            <p className="text-xs text-teal-700 leading-relaxed">
+              {pickupOnBike > 0 && (
+                <span>
+                  • <strong>{pickupOnBike}</strong> đơn nhận (bàn giao về Bưu cục)
+                  {holdingDeliveryCount > 0 ? ' • ' : '.'}
+                </span>
+              )}
+              {holdingDeliveryCount > 0 && (
+                <span>
+                  • <strong>{holdingDeliveryCount}</strong> đơn giao hàng (đang phát tận nhà)
+                </span>
+              )}
+              {' '}Kiểm tra chi tiết tại mục <strong>"Đang Giữ Trên Xe"</strong>.
+            </p>
           </div>
-          <p className="text-xs text-teal-700 leading-relaxed">
-            Bạn đã lấy thành công {holdingCount} đơn hàng từ Shop. Hãy kiểm đếm tại tab <strong>"Lấy Hàng &gt; Đang Giữ Trên Xe"</strong> và mang về Bưu cục để bàn giao.
-          </p>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 3. Lưới 4 thẻ thống kê (Stat Cards: 2x2 grid) */}
       <div className="grid grid-cols-2 gap-2.5">

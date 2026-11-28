@@ -102,8 +102,9 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
   onOpenCheckIn,
 }) => {
   const [subTab, setSubTab] = useState<'PICKUP' | 'DELIVERY' | 'HISTORY'>(initialSubTab || 'PICKUP')
+  const holdingDeliveryTasks = deliveryTasks.filter((s) => s.status === 'OUT_FOR_DELIVERY')
   const totalPending = pickupTasks.length + returnTasks.length
-  const totalHolding = holdingTasks.length + holdingReturnTasks.length
+  const totalHolding = holdingTasks.length + holdingReturnTasks.length + holdingDeliveryTasks.length
   const [pickupFilter, setPickupFilter] = useState<'PENDING' | 'HOLDING' | 'RETURNS'>(
     totalPending === 0 && totalHolding > 0 ? 'HOLDING' : 'PENDING'
   )
@@ -128,6 +129,110 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
   }
 
   const totalHistoryCount = completedPickupTasks.length + completedDeliveryTasks.length + failedDeliveryTasks.length
+
+  const renderActiveDeliveryCard = (shipment: Shipment, keyPrefix = 'del') => (
+    <div
+      key={`${keyPrefix}-${shipment.id}`}
+      className="bg-white border-2 border-emerald-500/80 rounded-2xl p-4 space-y-3 shadow-xs"
+    >
+      {/* Header: Tracking & Role + Active Pulsing Status Badge */}
+      <div className="flex flex-wrap justify-between items-center gap-2 text-xs pb-2 border-b border-slate-100">
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-400 text-[10px]">Mã vận đơn:</span>
+          <span className="font-mono font-black text-emerald-700 text-xs">
+            {shipment.trackingNumber}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <DemoNextStepButton
+            identifier={shipment.trackingNumber || shipment.orderId}
+            portal="delivery"
+            compact
+          />
+          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200">
+            🛵 Đơn Giao Khách
+          </span>
+          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            💰 +8.000đ
+          </span>
+          <span className="px-2 py-0.5 bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold rounded-md animate-pulse">
+            Đang giao
+          </span>
+        </div>
+      </div>
+
+      {/* Customer Information & Address */}
+      <div className="space-y-2 text-xs">
+        <div>
+          <p className="font-bold text-slate-900 text-sm">
+            {shipment.buyerName} {shipment.buyerPhone && `• ${shipment.buyerPhone}`}
+          </p>
+        </div>
+
+        <div className="flex items-start gap-1.5 text-slate-700">
+          <span className="text-sm shrink-0">📍</span>
+          <p className="text-xs leading-relaxed text-slate-700 font-medium">
+            {shipment.deliveryAddress}
+          </p>
+        </div>
+
+        {/* Earning & COD Box */}
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 flex justify-between items-center">
+            <span className="flex items-center gap-1 text-[11px]">
+              <span>💰</span> Thù lao:
+            </span>
+            <span className="font-black text-emerald-700 text-xs">+8.000đ</span>
+          </div>
+          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 flex justify-between items-center">
+            <span className="flex items-center gap-1 text-[11px]">
+              <span>💵</span> Thu COD:
+            </span>
+            <span className="font-black text-amber-700 text-xs">
+              {formatMoney(shipment.codAmount)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+        <a
+          href={`tel:${shipment.buyerPhone}`}
+          className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center flex items-center justify-center gap-1 cursor-pointer"
+        >
+          📞 Gọi Khách
+        </a>
+
+        <a
+          href={`https://maps.google.com/?q=${encodeURIComponent(shipment.deliveryAddress)}`}
+          target="_blank"
+          rel="noreferrer"
+          className="py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-xl text-xs transition text-center flex items-center justify-center gap-1 cursor-pointer border border-sky-200/50"
+        >
+          🗺️ Dẫn Đường
+        </a>
+
+        <button
+          type="button"
+          onClick={() => setDeliveryConfirmShipment(shipment)}
+          disabled={actionLoading}
+          className="col-span-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+        >
+          <span>✅ Giao Thành Công & Thu COD</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onShowFailModal(shipment)}
+          disabled={actionLoading}
+          className="col-span-2 py-2 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 disabled:opacity-50 disabled:cursor-not-allowed text-rose-600 font-bold rounded-xl text-xs transition cursor-pointer border border-rose-200/80 flex items-center justify-center gap-1.5"
+        >
+          <span>❌ Giao Thất Bại</span>
+        </button>
+      </div>
+    </div>
+  )
 
   // Nếu tài xế chưa vào ca (OFFLINE): Khóa toàn bộ danh sách đơn hàng theo chuẩn SPX
   if (!isOnline) {
@@ -254,7 +359,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
                 pickupFilter === 'HOLDING' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-600'
               }`}>
-                {holdingTasks.length + holdingReturnTasks.length}
+                {totalHolding}
               </span>
             </button>
 
@@ -468,14 +573,14 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
             )
           )}
 
-          {/* CHẾ ĐỘ 2: ĐANG GIỮ TRÊN XE (ĐÃ LẤY TỪ SHOP HOẶC THU HỒI TỪ KHÁCH - CHỜ NHẬP KHO BƯU CỤC) */}
+          {/* CHẾ ĐỘ 2: ĐANG GIỮ TRÊN XE (BAO GỒM ĐƠN NHẬN BÀN GIAO VỀ HUB & ĐƠN ĐANG ĐI GIAO KHÁCH) */}
           {pickupFilter === 'HOLDING' && (
-            holdingTasks.length === 0 && holdingReturnTasks.length === 0 ? (
+            totalHolding === 0 ? (
               <div className="py-10 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-slate-400 space-y-2">
                 <span className="text-4xl block">🚚</span>
                 <p className="text-xs font-bold text-slate-600">Chưa có kiện hàng nào trên xe</p>
                 <p className="text-[11px] text-slate-400">
-                  Sau khi bạn bấm "Xác nhận đã lấy" tại Shop hoặc thu hồi từ Người Mua, kiện hàng sẽ chuyển vào đây để bạn kiểm đếm trước khi bàn giao về Bưu cục.
+                  Sau khi bạn bấm &ldquo;Xác nhận đã lấy&rdquo; tại Shop, thu hồi từ Người Mua, hoặc &ldquo;Quét Nhận Lên Xe&rdquo; đi giao từ Bưu cục, kiện hàng đang giữ trên xe sẽ hiển thị tại đây.
                 </p>
               </div>
             ) : (
@@ -483,19 +588,33 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                 <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3 flex items-center justify-between text-xs text-teal-900">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🚚</span>
-                    <div>
+                    <div className="space-y-1">
                       <p className="font-black">
-                        Đang giữ {holdingTasks.length + holdingReturnTasks.length} kiện hàng trên xe
-                        {holdingReturnTasks.length > 0 && (
-                          <span className="ml-1 text-teal-700 font-normal">
-                            ({holdingTasks.length} đơn Shop, {holdingReturnTasks.length} đơn thu hồi trả)
+                        Đang giữ {totalHolding} kiện hàng trên xe
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                        {holdingDeliveryTasks.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            🛵 {holdingDeliveryTasks.length} đơn giao khách
                           </span>
                         )}
-                      </p>
-                      <p className="text-[11px] text-teal-700">Hãy mang về Bưu cục để nhân viên quét nhập kho hoặc bấm bàn giao</p>
+                        {holdingTasks.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 border border-teal-300">
+                            🏪 {holdingTasks.length} đơn nhận (bàn giao về Hub)
+                          </span>
+                        )}
+                        {holdingReturnTasks.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200">
+                            🔄 {holdingReturnTasks.length} đơn thu hồi (bàn giao Hub)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* 0. Các đơn giao hàng đang giữ trên xe đi phát tận nhà (Last-Mile OUT_FOR_DELIVERY) */}
+                {holdingDeliveryTasks.map((shipment) => renderActiveDeliveryCard(shipment, 'holding-del'))}
 
                 {/* 1. Các đơn thu hồi hoàn trả đang giữ trên xe (Reverse Logistics) */}
                 {holdingReturnTasks.map((ret) => {
@@ -536,7 +655,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                             🚚 Trên Xe
                           </span>
                           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-orange-100 text-orange-800 border border-orange-200">
-                            🔄 Hàng Hoàn
+                            🔄 Đơn Thu Hồi • Bàn Giao Hub
                           </span>
                         </div>
                       </div>
@@ -683,8 +802,8 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
                             💰 +8.000đ
                           </span>
-                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-teal-100 text-teal-800 border border-teal-200">
-                            🚚 Đang Giữ Trên Xe
+                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-teal-100 text-teal-800 border border-teal-300">
+                            🏪 Đơn Nhận • Bàn Giao Về Hub
                           </span>
                         </div>
                       </div>
@@ -920,108 +1039,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
                   </p>
                 </div>
               ) : (
-                activeDeliveryTasks.map((shipment) => {
-                  return (
-                    <div
-                      key={shipment.id}
-                      className="bg-white border-2 border-emerald-500/80 rounded-2xl p-4 space-y-3 shadow-xs"
-                    >
-                      {/* Header: Tracking & Active Pulsing Status Badge */}
-                      <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-400 text-[10px]">Mã vận đơn:</span>
-                          <span className="font-mono font-black text-emerald-700 text-xs">
-                            {shipment.trackingNumber}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <DemoNextStepButton
-                            identifier={shipment.trackingNumber || shipment.orderId}
-                            portal="delivery"
-                            compact
-                          />
-                          <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            💰 +8.000đ
-                          </span>
-                          <span className="px-2 py-0.5 bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold rounded-md animate-pulse">
-                            Đang giao
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Customer Information & Address */}
-                      <div className="space-y-2 text-xs">
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">
-                            {shipment.buyerName} {shipment.buyerPhone && `• ${shipment.buyerPhone}`}
-                          </p>
-                        </div>
-
-                        <div className="flex items-start gap-1.5 text-slate-700">
-                          <span className="text-sm shrink-0">📍</span>
-                          <p className="text-xs leading-relaxed text-slate-700 font-medium">
-                            {shipment.deliveryAddress}
-                          </p>
-                        </div>
-
-                        {/* Earning & COD Box */}
-                        <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                          <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 flex justify-between items-center">
-                            <span className="flex items-center gap-1 text-[11px]">
-                              <span>💰</span> Thù lao:
-                            </span>
-                            <span className="font-black text-emerald-700 text-xs">+8.000đ</span>
-                          </div>
-                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 flex justify-between items-center">
-                            <span className="flex items-center gap-1 text-[11px]">
-                              <span>💵</span> Thu COD:
-                            </span>
-                            <span className="font-black text-amber-700 text-xs">
-                              {formatMoney(shipment.codAmount)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons: Gọi khách, Dẫn đường, Giao thành công, Giao thất bại */}
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                        <a
-                          href={`tel:${shipment.buyerPhone}`}
-                          className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          📞 Gọi Khách
-                        </a>
-
-                        <a
-                          href={`https://maps.google.com/?q=${encodeURIComponent(shipment.deliveryAddress)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-xl text-xs transition text-center flex items-center justify-center gap-1 cursor-pointer border border-sky-200/50"
-                        >
-                          🗺️ Dẫn Đường
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => setDeliveryConfirmShipment(shipment)}
-                          disabled={actionLoading}
-                          className="col-span-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
-                        >
-                          <span>✅ Giao Thành Công & Thu COD</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => onShowFailModal(shipment)}
-                          disabled={actionLoading}
-                          className="col-span-2 py-2 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 disabled:opacity-50 disabled:cursor-not-allowed text-rose-600 font-bold rounded-xl text-xs transition cursor-pointer border border-rose-200/80 flex items-center justify-center gap-1.5"
-                        >
-                          <span>❌ Giao Thất Bại</span>
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })
+                activeDeliveryTasks.map((shipment) => renderActiveDeliveryCard(shipment, 'del'))
               )}
             </div>
           </div>

@@ -509,6 +509,10 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
       )
   )
 
+  // 2.1 Đơn giao hàng đang giữ thực tế trên xe đi phát (OUT_FOR_DELIVERY)
+  const activeDeliveryOnBikeCount = deliveryTasks.filter((s) => s.status === 'OUT_FOR_DELIVERY').length
+  const holdingPickupCount = holdingTasks.length + holdingReturnTasks.length
+
   // 3. Đơn đã lấy hàng thành công bởi tài xế này (First-Mile: 8.000đ/đơn)
   const completedPickupTasks = shipments.filter(
     (s) =>
@@ -602,7 +606,9 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({
               currentUser={currentUser}
               driverProfile={effectiveProfile}
               pickupCount={pickupTasks.length + returnPickups.length}
-              holdingCount={holdingTasks.length + holdingReturnTasks.length}
+              holdingCount={holdingPickupCount + activeDeliveryOnBikeCount}
+              holdingPickupCount={holdingPickupCount}
+              holdingDeliveryCount={activeDeliveryOnBikeCount}
               deliveryCount={deliveryTasks.length}
               completedCount={completedTasks.length + completedPickupTasks.length}
               codInWallet={codInWallet}
