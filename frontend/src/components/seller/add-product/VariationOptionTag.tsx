@@ -52,7 +52,7 @@ export const VariationOptionTag: React.FC<VariationOptionTagProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.avif"
           className="hidden"
           onChange={handleFileSelect}
         />

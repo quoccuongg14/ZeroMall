@@ -10,6 +10,7 @@ import {
   flattenOutfitItems,
 } from './tryonUtils'
 import { formatCurrencyVND } from '../../../../utils/formatters'
+import { getProductColorVariants } from '../../../../utils/variantImageHelper'
 
 export interface SlotItemPickerModalProps {
   isOpen: boolean
@@ -455,6 +456,17 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
                           🛒 Trong Giỏ
                         </span>
                       )}
+
+                      {/* Nhãn số màu sắc biến thể nếu có >= 2 màu */}
+                      {(() => {
+                        const cVars = getProductColorVariants(item)
+                        if (cVars.length < 2) return null
+                        return (
+                          <span className="absolute bottom-2 right-2 text-[9px] font-bold bg-slate-900/80 text-white px-1.5 py-0.5 rounded-md shadow-2xs">
+                            🎨 {cVars.length} màu
+                          </span>
+                        )
+                      })()}
 
                       {/* Nhãn vùng phụ kiện (nếu là tab phụ kiện) */}
                       {slot === 'accessory' && itemZone && (

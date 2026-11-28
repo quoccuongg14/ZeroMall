@@ -72,7 +72,7 @@ export const VariationMatrixTable: React.FC<VariationMatrixTableProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.avif"
         className="hidden"
         onChange={handleFileChange}
       />

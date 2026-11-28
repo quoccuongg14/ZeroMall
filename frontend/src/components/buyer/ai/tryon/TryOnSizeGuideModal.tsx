@@ -2,6 +2,7 @@ import React from 'react'
 import type { Product } from '../../FlashSale'
 import type { SizePredictionResult } from '../../../../utils/sizePredictor'
 import { formatCurrencyVND } from '../../../../utils/formatters'
+import { getProductColorVariants } from '../../../../utils/variantImageHelper'
 
 interface TryOnSizeGuideModalProps {
   isOpen: boolean
@@ -13,6 +14,8 @@ interface TryOnSizeGuideModalProps {
   predictedSizes: Record<string, SizePredictionResult>
   selectedItemSizes: Record<string, string>
   onSelectItemSize: (productId: string, size: string) => void
+  selectedColorVariants?: Record<string, string>
+  onSelectItemColor?: (productId: string, colorName: string) => void
   onAddSingleItemToCart: (item: Product) => void
   onBuySingleItem: (item: Product) => void
   totalOutfitPrice: number
@@ -30,6 +33,8 @@ export const TryOnSizeGuideModal: React.FC<TryOnSizeGuideModalProps> = ({
   predictedSizes,
   selectedItemSizes,
   onSelectItemSize,
+  selectedColorVariants = {},
+  onSelectItemColor,
   onAddSingleItemToCart,
   onBuySingleItem,
   totalOutfitPrice,
@@ -127,25 +132,64 @@ export const TryOnSizeGuideModal: React.FC<TryOnSizeGuideModalProps> = ({
                     )}
                   </div>
 
-                  {options.length > 0 && (
-                    <div className="shrink-0">
-                      <span className="text-[10px] font-semibold text-slate-400 block mb-1 text-right">
-                        Chọn size
-                      </span>
-                      <select
-                        aria-label={`Chọn size cho ${item.name}`}
-                        value={activeSize}
-                        onChange={(e) => onSelectItemSize(item.id, e.target.value)}
-                        className="text-xs font-bold text-[#ee4d2d] bg-orange-50/50 border border-orange-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#ee4d2d] cursor-pointer max-w-[130px]"
-                      >
-                        {options.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  {(() => {
+                    const colorVariants = getProductColorVariants(item)
+                    const activeColor = selectedColorVariants[item.id] || (item as any).selectedVariant || colorVariants[0]?.name || ''
+                    if (colorVariants.length === 0 && options.length === 0) return null
+                    return (
+                      <div className="shrink-0 flex flex-col items-end gap-2">
+                        {colorVariants.length > 0 && onSelectItemColor && (
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 block mb-1 text-right">
+                              Màu sắc: <strong className="text-slate-700">{activeColor}</strong>
+                            </span>
+                            <div className="flex items-center justify-end gap-1 flex-wrap max-w-[160px]">
+                              {colorVariants.map((cv) => {
+                                const isSel = cv.name.toLowerCase() === activeColor.toLowerCase()
+                                return (
+                                  <button
+                                    key={cv.name}
+                                    type="button"
+                                    onClick={() => onSelectItemColor(item.id, cv.name)}
+                                    title={`Chọn màu ${cv.name}`}
+                                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[10px] font-semibold transition cursor-pointer ${
+                                      isSel
+                                        ? 'border-[#ee4d2d] bg-orange-50 text-[#ee4d2d]'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                    }`}
+                                  >
+                                    {cv.image && (
+                                      <img src={cv.image} alt={cv.name} className="w-4 h-4 rounded object-cover" />
+                                    )}
+                                    <span>{cv.name}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {options.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 block mb-1 text-right">
+                              Chọn size
+                            </span>
+                            <select
+                              aria-label={`Chọn size cho ${item.name}`}
+                              value={activeSize}
+                              onChange={(e) => onSelectItemSize(item.id, e.target.value)}
+                              className="text-xs font-bold text-[#ee4d2d] bg-orange-50/50 border border-orange-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#ee4d2d] cursor-pointer max-w-[130px]"
+                            >
+                              {options.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-100">

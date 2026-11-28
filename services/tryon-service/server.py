@@ -981,9 +981,12 @@ class TryOnSynthesizer:
             category = "tops"
             photo_type = "model" if "model" in garment_url else "flat-lay"
 
-        print(f"[*] composite_tryon requested: id='{garment_id}', name='{(garment_info or {}).get('name')}', category='{category}', use_mage={use_mage}, height={height_cm}cm, weight={weight_kg}kg")
+        variant_label = str((garment_info or {}).get("selectedVariant") or "").strip()
+        img_sig = hashlib.md5(garment_url.encode()).hexdigest()[:8] if garment_url else "noimg"
+        effective_garment_id = f"{garment_id}_{img_sig}" if garment_id else img_sig
+        print(f"[*] composite_tryon requested: id='{garment_id}', variant='{variant_label}', eff_id='{effective_garment_id}', name='{(garment_info or {}).get('name')}', category='{category}', use_mage={use_mage}, height={height_cm}cm, weight={weight_kg}kg")
 
-        # 2. Kiểm tra cache ảnh riêng cho từng mã sản phẩm (chỉ áp dụng cho người mẫu mặc định với vóc dáng chuẩn)
+        # 2. Kiểm tra cache ảnh riêng cho từng mã sản phẩm + biến thể màu (chỉ áp dụng cho người mẫu mặc định với vóc dáng chuẩn)
         is_default = (
             not user_image_data or
             user_image_data == "/models/tryon_master/tran_thanh_base.jpg" or
@@ -992,31 +995,31 @@ class TryOnSynthesizer:
         is_standard_body = (abs(float(height_cm) - 175) < 3 and abs(float(weight_kg) - 68) < 3)
         if is_default and is_standard_body:
             candidate_paths = [
-                os.path.join(STATIC_CACHE_DIR, f"sota_tryon_{garment_id}.jpg"),
-                os.path.join(TEMP_DIR, f"sota_vton_{garment_id}.jpg"),
-                os.path.join(TEMP_DIR, f"fashn_tryon_{garment_id}.jpg"),
+                os.path.join(STATIC_CACHE_DIR, f"sota_tryon_{effective_garment_id}.jpg"),
+                os.path.join(TEMP_DIR, f"sota_vton_{effective_garment_id}.jpg"),
+                os.path.join(TEMP_DIR, f"fashn_tryon_{effective_garment_id}.jpg"),
             ]
             for c_path in candidate_paths:
-                if garment_id and os.path.exists(c_path):
+                if effective_garment_id and os.path.exists(c_path):
                     try:
                         with open(c_path, "rb") as f_cached:
                             b64_f = base64.b64encode(f_cached.read()).decode()
-                            print(f"[+] Found cached SOTA tryon for {garment_id} ({category}) at {c_path} -> returning instant HD render!")
+                            print(f"[+] Found cached SOTA tryon for {effective_garment_id} ({category}) at {c_path} -> returning instant HD render!")
                             return f"data:image/jpeg;base64,{b64_f}"
                     except Exception as e_f:
                         print(f"[!] Read cache error: {e_f}")
 
         # 3. Thử gọi Live Mage.space Outfit Swap (Chỉ khi người dùng chủ động bật use_mage=True)
         if use_mage:
-            mage_res = cls.run_mage_outfit_swap(user_image_data, garment_url, garment_id, gender, garment_info, category=category, height_cm=height_cm, weight_kg=weight_kg)
+            mage_res = cls.run_mage_outfit_swap(user_image_data, garment_url, effective_garment_id, gender, garment_info, category=category, height_cm=height_cm, weight_kg=weight_kg)
             if mage_res:
                 return mage_res
         else:
-            print(f"[*] composite_tryon: use_mage is False. Running 0-Gem High-Speed Local Composite for {garment_id}!")
+            print(f"[*] composite_tryon: use_mage is False. Running 0-Gem High-Speed Local Composite for {effective_garment_id}!")
 
         # 4. Kích hoạt SOTA Cloud Diffusion VTON (Chỉ áp dụng cho trang phục quần áo)
         if category in ["tops", "bottoms", "one-pieces"]:
-            sota_diff = cls.run_sota_diffusion(user_image_data, garment_url, category, garment_id)
+            sota_diff = cls.run_sota_diffusion(user_image_data, garment_url, category, effective_garment_id)
             if sota_diff:
                 return sota_diff
 
@@ -1150,34 +1153,35 @@ class TryOnSynthesizer:
         return garment_url
 
     @classmethod
-    @classmethod
     def _describe_tagged_item(cls, role_key: str, item: dict) -> str:
         name = item.get("name", "item")
+        variant_color = str(item.get("selectedVariant") or "").strip()
+        label = f"{name} (Color/Variant: {variant_color})" if variant_color else name
         if role_key == "inner_top":
-            return f"inner base layer shirt/top '{name}' worn underneath"
+            return f"inner base layer shirt/top '{label}' worn underneath"
         if role_key == "top":
-            return f"top garment '{name}' worn on upper torso"
+            return f"top garment '{label}' worn on upper torso"
         if role_key == "outer_top":
-            return f"outer jacket/coat/layer '{name}' worn open over the inner shirt so both inner shirt and outer jacket are clearly visible"
+            return f"outer jacket/coat/layer '{label}' worn open over the inner shirt so both inner shirt and outer jacket are clearly visible"
         if role_key == "bottom":
-            return f"bottom trousers/skirt '{name}' worn on legs and waist"
+            return f"bottom trousers/skirt '{label}' worn on legs and waist"
         if role_key == "shoes":
-            return f"footwear/shoes '{name}' worn on feet"
+            return f"footwear/shoes '{label}' worn on feet"
 
         item_lower = name.lower()
         if any(k in item_lower for k in ["kính", "kinh", "gọng", "glasses", "sunglasses"]):
-            return f"eyewear/glasses '{name}' worn on eyes/face"
+            return f"eyewear/glasses '{label}' worn on eyes/face"
         if any(k in item_lower for k in ["mũ", "nón", "mu ", "non ", "cap", "hat", "beanie"]):
-            return f"headwear/hat '{name}' worn on head"
+            return f"headwear/hat '{label}' worn on head"
         if any(k in item_lower for k in ["dây chuyền", "vòng cổ", "kiềng", "necklace", "choker", "khăn"]):
-            return f"necklace/neckwear '{name}' worn around neck"
+            return f"necklace/neckwear '{label}' worn around neck"
         if any(k in item_lower for k in ["dây nịt", "thắt lưng", "belt", "day nit", "that lung"]):
-            return f"waist belt '{name}' worn around the trouser waist"
+            return f"waist belt '{label}' worn around the trouser waist"
         if any(k in item_lower for k in ["túi", "ví", "balo", "ba lô", "bag", "tote", "clutch"]):
-            return f"bag '{name}' carried in hand or over shoulder"
+            return f"bag '{label}' carried in hand or over shoulder"
         if any(k in item_lower for k in ["đồng hồ", "vòng tay", "lắc tay", "watch", "bracelet"]):
-            return f"wrist watch/bracelet '{name}' worn on wrist"
-        return f"fashion accessory '{name}'"
+            return f"wrist watch/bracelet '{label}' worn on wrist"
+        return f"fashion accessory '{label}'"
 
     @classmethod
     def _run_mage_outfit_pass(
@@ -1304,9 +1308,12 @@ class TryOnSynthesizer:
             single = tagged_items[0][1]
             return cls.composite_tryon(user_image_data, single.get("image", ""), single, gender, height_cm, weight_kg, use_mage=use_mage)
 
-        # 1. Tạo Outfit Signature phục vụ Caching (bao gồm tất cả layer áo & mọi phụ kiện)
+        # 1. Tạo Outfit Signature phục vụ Caching (bao gồm id, ảnh biến thể & tên màu)
         user_key = hashlib.md5(user_image_data[:5000].encode()).hexdigest()[:8] if user_image_data else "default"
-        item_ids = [f"{role}:{str(item.get('id') or item.get('name') or 'item')}" for role, item in tagged_items]
+        item_ids = [
+            f"{role}:{str(item.get('id') or item.get('name') or 'item')}@{hashlib.md5(str(item.get('image') or '').encode()).hexdigest()[:8]}:{str(item.get('selectedVariant') or '')}"
+            for role, item in tagged_items
+        ]
         outfit_sig = "_".join(item_ids)
         outfit_hash = hashlib.md5(outfit_sig.encode()).hexdigest()[:12]
         body_key = f"{int(height_cm)}_{int(weight_kg)}"

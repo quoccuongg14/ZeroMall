@@ -100,6 +100,7 @@ export interface VirtualTryOnModalProps {
   isOpen: boolean
   onClose: () => void
   product?: Product | null
+  initialVariant?: string
   cart?: CartItem[]
   onAddToCart?: (product: Product, quantity: number, variant: string) => void
   onBuyNow?: (product: Product, quantity: number, variant: string) => void

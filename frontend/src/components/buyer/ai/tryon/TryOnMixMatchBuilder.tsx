@@ -2,6 +2,63 @@ import React from 'react'
 import type { Product } from '../../FlashSale'
 import type { OutfitSlots, OutfitSlotKey } from './types'
 import { formatCurrencyVND } from '../../../../utils/formatters'
+import { getProductColorVariants } from '../../../../utils/variantImageHelper'
+
+interface InlineColorSwatchesProps {
+  item: Product
+  selectedColorVariants?: Record<string, string>
+  onSelectItemColor?: (productId: string, colorName: string) => void
+  compact?: boolean
+}
+
+const InlineColorSwatches: React.FC<InlineColorSwatchesProps> = ({
+  item,
+  selectedColorVariants = {},
+  onSelectItemColor,
+  compact = false,
+}) => {
+  const variants = getProductColorVariants(item)
+  if (variants.length < 2 || !onSelectItemColor) return null
+  const activeColor = selectedColorVariants[item.id] || (item as any).selectedVariant || variants[0]?.name || ''
+
+  return (
+    <div
+      className="flex items-center justify-center gap-1 flex-wrap mt-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {variants.slice(0, 4).map((v) => {
+        const isSel = v.name.toLowerCase() === activeColor.toLowerCase()
+        return (
+          <button
+            key={v.name}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelectItemColor(item.id, v.name)
+            }}
+            title={`Đổi màu: ${v.name}`}
+            className={`inline-flex items-center gap-0.5 rounded-md border transition cursor-pointer ${
+              compact ? 'px-1 py-0.5 text-[8px]' : 'px-1.5 py-0.5 text-[9px]'
+            } ${
+              isSel
+                ? 'border-[#ee4d2d] bg-orange-50 text-[#ee4d2d] font-bold shadow-2xs'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 font-medium'
+            }`}
+          >
+            {v.image && (
+              <img
+                src={v.image}
+                alt={v.name}
+                className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} rounded-xs object-cover shrink-0`}
+              />
+            )}
+            <span className="max-w-[38px] truncate">{v.name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 interface TryOnMixMatchBuilderProps {
   selectedOutfit: OutfitSlots
@@ -12,6 +69,8 @@ interface TryOnMixMatchBuilderProps {
   isLoadingAi: boolean
   totalOutfitPrice: number
   outfitItems: Product[]
+  selectedColorVariants?: Record<string, string>
+  onSelectItemColor?: (productId: string, colorName: string) => void
   onTryOnWholeOutfit: () => void
   onBuyWholeOutfit: () => void
 }
@@ -25,6 +84,8 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
   isLoadingAi,
   totalOutfitPrice,
   outfitItems,
+  selectedColorVariants = {},
+  onSelectItemColor,
   onTryOnWholeOutfit,
   onBuyWholeOutfit,
 }) => {
@@ -83,6 +144,11 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
                   </button>
                 </div>
                 <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[90px] mx-auto">{selectedOutfit.top.name}</p>
+                <InlineColorSwatches
+                  item={selectedOutfit.top}
+                  selectedColorVariants={selectedColorVariants}
+                  onSelectItemColor={onSelectItemColor}
+                />
               </div>
             ) : (
               <div className="h-11 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
@@ -95,27 +161,35 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
           {/* Ngăn Layer 2: Áo khoác ngoài */}
           <div className="mt-2 pt-1.5 border-t border-slate-200/80">
             {selectedOutfit.outer_top ? (
-              <div
-                onClick={() => onSelectSlot('outer_top')}
-                className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-indigo-200 cursor-pointer hover:border-indigo-400 transition"
-                title={`Áo khoác ngoài: ${selectedOutfit.outer_top.name}`}
-              >
-                <img
-                  src={selectedOutfit.outer_top.image || 'https://placehold.co/40x40'}
-                  alt={selectedOutfit.outer_top.name}
-                  className="w-6 h-6 object-cover rounded shrink-0 border border-slate-100"
-                />
-                <span className="text-[9px] font-bold text-indigo-800 truncate flex-1 text-left">
-                  🧥 {selectedOutfit.outer_top.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => onRemoveSlot('outer_top', e)}
-                  className="w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[8px] font-bold shrink-0 hover:bg-rose-600 cursor-pointer"
-                  title="Gỡ áo khoác"
+              <div className="space-y-1">
+                <div
+                  onClick={() => onSelectSlot('outer_top')}
+                  className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-indigo-200 cursor-pointer hover:border-indigo-400 transition"
+                  title={`Áo khoác ngoài: ${selectedOutfit.outer_top.name}`}
                 >
-                  ✕
-                </button>
+                  <img
+                    src={selectedOutfit.outer_top.image || 'https://placehold.co/40x40'}
+                    alt={selectedOutfit.outer_top.name}
+                    className="w-6 h-6 object-cover rounded shrink-0 border border-slate-100"
+                  />
+                  <span className="text-[9px] font-bold text-indigo-800 truncate flex-1 text-left">
+                    🧥 {selectedOutfit.outer_top.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => onRemoveSlot('outer_top', e)}
+                    className="w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[8px] font-bold shrink-0 hover:bg-rose-600 cursor-pointer"
+                    title="Gỡ áo khoác"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <InlineColorSwatches
+                  item={selectedOutfit.outer_top}
+                  selectedColorVariants={selectedColorVariants}
+                  onSelectItemColor={onSelectItemColor}
+                  compact
+                />
               </div>
             ) : (
               <button
@@ -158,7 +232,12 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
                   ✕
                 </button>
               </div>
-              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px]">{selectedOutfit.bottom.name}</p>
+              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px] mx-auto">{selectedOutfit.bottom.name}</p>
+              <InlineColorSwatches
+                item={selectedOutfit.bottom}
+                selectedColorVariants={selectedColorVariants}
+                onSelectItemColor={onSelectItemColor}
+              />
             </div>
           ) : (
             <div className="h-12 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">
@@ -195,7 +274,12 @@ export const TryOnMixMatchBuilder: React.FC<TryOnMixMatchBuilderProps> = ({
                   ✕
                 </button>
               </div>
-              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px]">{selectedOutfit.shoes.name}</p>
+              <p className="text-[10px] font-semibold text-slate-800 truncate max-w-[70px] mx-auto">{selectedOutfit.shoes.name}</p>
+              <InlineColorSwatches
+                item={selectedOutfit.shoes}
+                selectedColorVariants={selectedColorVariants}
+                onSelectItemColor={onSelectItemColor}
+              />
             </div>
           ) : (
             <div className="h-12 flex flex-col items-center justify-center text-slate-400 hover:text-slate-600">

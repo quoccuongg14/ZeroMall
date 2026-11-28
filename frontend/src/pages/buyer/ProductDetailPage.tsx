@@ -1040,6 +1040,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           setSelectedBundleForTryOn(null)
         }}
         product={product}
+        initialVariant={currentVariantName}
         initialBundle={selectedBundleForTryOn}
         cart={cart}
         onAddToCart={onAddToCart}

@@ -152,6 +152,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 isLoadingAi={logic.isLoadingAi}
                 totalOutfitPrice={logic.totalOutfitPrice}
                 outfitItems={logic.outfitItems}
+                selectedColorVariants={logic.selectedColorVariants}
+                onSelectItemColor={logic.setItemColorVariant}
                 onTryOnWholeOutfit={() => {
                   if (!logic.userPhoto) {
                     logic.triggerToast('⚠️ Vui lòng tải ảnh của bạn lên trước khi thử đồ!')
@@ -276,6 +278,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         predictedSizes={logic.predictedSizes}
         selectedItemSizes={logic.resolvedItemSizes}
         onSelectItemSize={logic.setItemSizeOverride}
+        selectedColorVariants={logic.selectedColorVariants}
+        onSelectItemColor={logic.setItemColorVariant}
         onAddSingleItemToCart={logic.handleAddSingleItemToCart}
         onBuySingleItem={logic.handleBuySingleItem}
         totalOutfitPrice={logic.totalOutfitPrice}

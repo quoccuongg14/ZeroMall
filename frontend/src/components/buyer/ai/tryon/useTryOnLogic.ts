@@ -23,11 +23,18 @@ import {
 } from './tryonUtils'
 import { addOutfitBundleToCart } from '../../../../utils/cartBundleHelper'
 import { predictProductSize, type SizePredictionResult } from '../../../../utils/sizePredictor'
+import {
+  composeVariantSelection,
+  extractColorFromVariantString,
+  getEffectiveProductForColor,
+  getProductColorVariants,
+} from '../../../../utils/variantImageHelper'
 
 export const useTryOnLogic = ({
   isOpen,
   onClose,
   product,
+  initialVariant,
   cart,
   onAddToCart,
   onBuyNow,
@@ -223,6 +230,16 @@ export const useTryOnLogic = ({
   const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
   const [slotPickerTarget, setSlotPickerTarget] = useState<OutfitSlotKey | null>(null)
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState<boolean>(false)
+  const [selectedColorVariants, setSelectedColorVariants] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (isOpen && product && initialVariant) {
+      const cName = extractColorFromVariantString(product, initialVariant)
+      if (cName) {
+        setSelectedColorVariants((prev) => ({ ...prev, [product.id]: cName }))
+      }
+    }
+  }, [isOpen, product?.id, initialVariant])
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const customGarmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -715,9 +732,24 @@ export const useTryOnLogic = ({
       return
     }
 
-    const effectiveOutfit = overrideOutfit || selectedOutfit
+    const applyColorToSlot = (item: Product | null): Product | null =>
+      item ? getEffectiveProductForColor(item, selectedColorVariants[item.id]) : null
+
+    const rawOutfit = overrideOutfit || selectedOutfit
+    const rawAccessories = Array.isArray(rawOutfit.accessories)
+      ? rawOutfit.accessories.map((a) => applyColorToSlot(a)!).filter(Boolean)
+      : []
+    const effectiveOutfit: OutfitSlots = {
+      top: applyColorToSlot(rawOutfit.top),
+      outer_top: applyColorToSlot(rawOutfit.outer_top),
+      bottom: applyColorToSlot(rawOutfit.bottom),
+      shoes: applyColorToSlot(rawOutfit.shoes),
+      accessory: rawAccessories[0] || applyColorToSlot(rawOutfit.accessory),
+      accessories: rawAccessories,
+    }
     const activeItems = flattenOutfitItems(effectiveOutfit)
-    const targetPant = pantToTry || selectedPant || (activeItems.length > 0 ? activeItems[0] : null)
+    const rawTargetPant = pantToTry || selectedPant || (activeItems.length > 0 ? activeItems[0] : null)
+    const targetPant = rawTargetPant ? applyColorToSlot(rawTargetPant) : null
     if (!targetPant && activeItems.length === 0) {
       triggerToast('⚠️ Vui lòng chọn ít nhất 1 món đồ để thử!')
       return
@@ -915,7 +947,9 @@ export const useTryOnLogic = ({
 
   const resolveVariantForItem = (item: Product): string => {
     const pred = predictedSizes[item.id]
-    return resolvedItemSizes[item.id] || pred?.recommendedSize || 'Freesize'
+    const sizeVal = resolvedItemSizes[item.id] || pred?.recommendedSize || 'Freesize'
+    const colorVal = resolvedColorVariants[item.id] || (item as any).selectedVariant
+    return composeVariantSelection(item, colorVal, sizeVal)
   }
 
   const handleAddSingleItemToCart = (item: Product) => {
@@ -977,7 +1011,7 @@ export const useTryOnLogic = ({
     }
     if (onAddToCart) {
       const variant = `Size ${fitResult?.recommended_size || 'L'}`
-      const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedItemSizes)
+      const { addedCount, skippedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedCartVariants)
       if (addedCount === 0) {
         triggerToast('⚠️ Các món trong bộ phối hiện đã hết hàng!')
         return
@@ -1008,7 +1042,7 @@ export const useTryOnLogic = ({
     }
     if (onAddToCart) {
       const variant = `Size ${fitResult?.recommended_size || 'L'}`
-      const { addedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedItemSizes)
+      const { addedCount } = addOutfitBundleToCart(items, variant, onAddToCart, resolvedCartVariants)
       if (addedCount === 0) {
         triggerToast('⚠️ Các món trong bộ phối hiện đã hết hàng!')
         return
@@ -1189,7 +1223,23 @@ export const useTryOnLogic = ({
     setTimeout(() => setToastMsg(''), 3000)
   }
 
-  const outfitItems = flattenOutfitItems(selectedOutfit)
+  const effectiveSelectedOutfit = useMemo<OutfitSlots>(() => {
+    const mapItem = (item: Product | null): Product | null =>
+      item ? getEffectiveProductForColor(item, selectedColorVariants[item.id]) : null
+    const accs = Array.isArray(selectedOutfit.accessories)
+      ? selectedOutfit.accessories.map((a) => mapItem(a)!).filter(Boolean)
+      : []
+    return {
+      top: mapItem(selectedOutfit.top),
+      outer_top: mapItem(selectedOutfit.outer_top),
+      bottom: mapItem(selectedOutfit.bottom),
+      shoes: mapItem(selectedOutfit.shoes),
+      accessory: accs[0] || mapItem(selectedOutfit.accessory),
+      accessories: accs,
+    }
+  }, [selectedOutfit, selectedColorVariants])
+
+  const outfitItems = useMemo(() => flattenOutfitItems(effectiveSelectedOutfit), [effectiveSelectedOutfit])
 
   const predictedSizes = useMemo<Record<string, SizePredictionResult>>(() => {
     const map: Record<string, SizePredictionResult> = {}
@@ -1207,6 +1257,20 @@ export const useTryOnLogic = ({
     return map
   }, [outfitItems, selectedOutfit.outer_top?.id, height, weight, gender])
 
+  const resolvedColorVariants = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    outfitItems.forEach((item) => {
+      const variants = getProductColorVariants(item)
+      const chosen = selectedColorVariants[item.id]
+      if (chosen && variants.some((v) => v.name.toLowerCase() === chosen.toLowerCase())) {
+        map[item.id] = chosen
+      } else if (variants.length > 0) {
+        map[item.id] = variants[0].name
+      }
+    })
+    return map
+  }, [outfitItems, selectedColorVariants])
+
   const resolvedItemSizes = useMemo<Record<string, string>>(() => {
     const map: Record<string, string> = {}
     outfitItems.forEach((item) => {
@@ -1221,8 +1285,23 @@ export const useTryOnLogic = ({
     return map
   }, [outfitItems, predictedSizes, sizeOverrides])
 
+  const resolvedCartVariants = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {}
+    outfitItems.forEach((item) => {
+      const sizeVal = resolvedItemSizes[item.id] || predictedSizes[item.id]?.recommendedSize || 'Freesize'
+      const colorVal = resolvedColorVariants[item.id] || (item as any).selectedVariant
+      map[item.id] = composeVariantSelection(item, colorVal, sizeVal)
+    })
+    return map
+  }, [outfitItems, resolvedItemSizes, predictedSizes, resolvedColorVariants])
+
   const setItemSizeOverride = (productId: string, size: string) => {
     setSizeOverrides((prev) => ({ ...prev, [productId]: size }))
+  }
+
+  const setItemColorVariant = (productId: string, colorName: string) => {
+    setSelectedColorVariants((prev) => ({ ...prev, [productId]: colorName }))
+    triggerToast(`🎨 Đã chọn màu [${colorName}]! Bấm "Ướm Thử Lên Người" để AI mặc màu mới.`)
   }
 
   const totalOutfitPrice = outfitItems.reduce((sum, item) => {
@@ -1247,7 +1326,7 @@ export const useTryOnLogic = ({
     setTryonEngineMode,
     showMageConfirmModal,
     setShowMageConfirmModal,
-    selectedOutfit,
+    selectedOutfit: effectiveSelectedOutfit,
     activeOutfitSlot,
     sourceTab,
     setSourceTab,
@@ -1292,7 +1371,9 @@ export const useTryOnLogic = ({
     outfitItems,
     predictedSizes,
     resolvedItemSizes,
+    selectedColorVariants: resolvedColorVariants,
     setItemSizeOverride,
+    setItemColorVariant,
     totalOutfitPrice,
     handleSearchDatabase,
     handlePhotoUpload,
