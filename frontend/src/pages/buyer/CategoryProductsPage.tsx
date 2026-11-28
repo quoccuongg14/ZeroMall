@@ -60,16 +60,20 @@ const toSlug = (str: string) => {
 }
 
 interface CategoryProductsPageProps {
+  user?: any
   products?: any[]
   cart?: import('../../models/cart.model').CartItem[]
   onAddToCart?: (product: any, quantity: number, variant: string) => void
   onBuyNow?: (product: any, quantity: number, variant: string) => void
+  onRequireLogin?: (title?: string, description?: string, icon?: string) => void
 }
 
 export const CategoryProductsPage: React.FC<CategoryProductsPageProps> = ({
+  user,
   cart,
   onAddToCart,
   onBuyNow,
+  onRequireLogin,
 }) => {
   const { categorySlug } = useParams<{ categorySlug: string }>()
   const navigate = useNavigate()
@@ -292,7 +296,21 @@ export const CategoryProductsPage: React.FC<CategoryProductsPageProps> = ({
             </div>
           </div>
           <button
-            onClick={() => setIsTryOnModalOpen(true)}
+            onClick={() => {
+              if (!user) {
+                if (onRequireLogin) {
+                  onRequireLogin(
+                    'Đăng nhập để sử dụng Phòng Thử Đồ AI',
+                    'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để mở Phòng Thử Đồ Trực Tuyến và ướm thử trang phục AI.',
+                    '✨'
+                  )
+                } else {
+                  alert('Vui lòng đăng nhập để sử dụng Phòng Thử Đồ AI!')
+                }
+                return
+              }
+              setIsTryOnModalOpen(true)
+            }}
             className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer flex items-center gap-2 shrink-0 hover:scale-102"
           >
             <span>👗</span>

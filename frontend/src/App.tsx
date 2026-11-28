@@ -229,11 +229,16 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
 
   // Trigger login prompt if redirected from an unauthenticated protected action
   useEffect(() => {
-    if ((location.state as any)?.showLoginPrompt && !user) {
-      triggerLoginPrompt();
-      navigate(location.pathname, { replace: true, state: {} });
+    const navState = location.state as any
+    if (navState?.showLoginPrompt && !user) {
+      triggerLoginPrompt(
+        navState?.loginPromptTitle,
+        navState?.loginPromptDesc,
+        navState?.loginPromptIcon
+      )
+      navigate(location.pathname, { replace: true, state: {} })
     }
-  }, [location, user, navigate]);
+  }, [location, user, navigate])
 
   const filteredProducts = selectedCategory
     ? dbProducts.filter(p => {
@@ -255,14 +260,6 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
   }
 
   const handleCartClick = () => {
-    if (!user) {
-      triggerLoginPrompt(
-        t('auth.prompt_title', 'Bạn chưa đăng nhập tài khoản'),
-        t('auth.prompt_cart_desc', 'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để xem giỏ hàng, lưu trữ sản phẩm và tiến hành đặt hàng.'),
-        '🛒'
-      );
-      return;
-    }
     localStorage.setItem('zm_checkout_step', 'cart');
     navigate('/cart');
   };
@@ -376,11 +373,41 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
           />
           <Route
             path="/virtual-tryon"
-            element={<VirtualTryOnPage />}
+            element={
+              !user ? (
+                <Navigate
+                  to="/"
+                  replace
+                  state={{
+                    showLoginPrompt: true,
+                    loginPromptTitle: 'Đăng nhập để sử dụng Phòng Thử Đồ AI',
+                    loginPromptDesc: 'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để ướm thử trang phục trực tuyến bằng AI.',
+                    loginPromptIcon: '✨',
+                  }}
+                />
+              ) : (
+                <VirtualTryOnPage />
+              )
+            }
           />
           <Route
             path="/try-on"
-            element={<VirtualTryOnPage />}
+            element={
+              !user ? (
+                <Navigate
+                  to="/"
+                  replace
+                  state={{
+                    showLoginPrompt: true,
+                    loginPromptTitle: 'Đăng nhập để sử dụng Phòng Thử Đồ AI',
+                    loginPromptDesc: 'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để ướm thử trang phục trực tuyến bằng AI.',
+                    loginPromptIcon: '✨',
+                  }}
+                />
+              ) : (
+                <VirtualTryOnPage />
+              )
+            }
           />
           <Route
             path="/daily-discover"
@@ -394,9 +421,11 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
             path="/category/:categorySlug"
             element={
               <CategoryProductsPage
+                user={user}
                 cart={cart}
                 onAddToCart={handleAddToCart}
                 onBuyNow={handleBuyerBuyNow}
+                onRequireLogin={(title, desc, icon) => triggerLoginPrompt(title, desc, icon)}
               />
             }
           />
@@ -415,24 +444,30 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
           <Route
             path="/cart"
             element={
-              !user ? (
-                <Navigate to="/" replace state={{ showLoginPrompt: true }} />
-              ) : (
-                <CartPage
-                  cart={cart}
-                  user={user}
-                  onUpdateQuantity={handleUpdateCartQuantity}
-                  onRemoveItem={handleRemoveCartItem}
-                  onBackToHome={() => navigate('/')}
-                />
-              )
+              <CartPage
+                cart={cart}
+                user={user}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onRemoveItem={handleRemoveCartItem}
+                onBackToHome={() => navigate('/')}
+                onRequireLogin={(title, desc, icon) => triggerLoginPrompt(title, desc, icon)}
+              />
             }
           />
           <Route
             path="/checkout"
             element={
               !user ? (
-                <Navigate to="/" replace state={{ showLoginPrompt: true }} />
+                <Navigate
+                  to="/"
+                  replace
+                  state={{
+                    showLoginPrompt: true,
+                    loginPromptTitle: 'Đăng nhập để thanh toán',
+                    loginPromptDesc: 'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để chọn địa chỉ giao hàng và thanh toán đơn hàng.',
+                    loginPromptIcon: '💳',
+                  }}
+                />
               ) : (
                 <CartPage
                   cart={cart}
@@ -440,6 +475,7 @@ const BuyerContainer: React.FC<BuyerContainerProps> = ({
                   onUpdateQuantity={handleUpdateCartQuantity}
                   onRemoveItem={handleRemoveCartItem}
                   onBackToHome={() => navigate('/')}
+                  onRequireLogin={(title, desc, icon) => triggerLoginPrompt(title, desc, icon)}
                 />
               )
             }
@@ -831,21 +867,51 @@ function App() {
   }, [])
 
   const handleAuthSuccess = (userData: any, userToken: string) => {
+    // Gộp giỏ hàng tạm (khách vãng lai) vào giỏ hàng tài khoản vừa đăng nhập trước khi đồng bộ state
+    if (userData?.id && (!userData?.role || userData.role === 'BUYER')) {
+      try {
+        const guestRaw = localStorage.getItem('zm_cart_guest')
+        if (guestRaw) {
+          const guestItems: CartItem[] = JSON.parse(guestRaw)
+          if (Array.isArray(guestItems) && guestItems.length > 0) {
+            const userCartKey = `zm_cart_${userData.id}`
+            const existingRaw = localStorage.getItem(userCartKey)
+            const existingItems: CartItem[] = existingRaw ? JSON.parse(existingRaw) : []
+            const merged = [...(Array.isArray(existingItems) ? existingItems : [])]
+            for (const gItem of guestItems) {
+              if (!gItem?.product?.id) continue
+              const idx = merged.findIndex(
+                (m) => m.product.id === gItem.product.id && (m.selectedVariant || '') === (gItem.selectedVariant || '')
+              )
+              if (idx > -1) {
+                merged[idx] = { ...merged[idx], quantity: merged[idx].quantity + (gItem.quantity || 1) }
+              } else {
+                merged.push(gItem)
+              }
+            }
+            localStorage.setItem(userCartKey, JSON.stringify(merged))
+            localStorage.removeItem('zm_cart_guest')
+          }
+        }
+      } catch (e) {
+        console.warn('[App] Failed to merge guest cart:', e)
+      }
+      mergeGuestBehaviorToUser(userData.id)
+    }
+
     setUser(userData)
     setToken(userToken)
     localStorage.setItem('zm_user', JSON.stringify(userData))
     localStorage.setItem('zm_token', userToken)
     localStorage.setItem('zm_last_active_time', Date.now().toString())
     sessionStorage.setItem('zm_tab_session_id', 'active_session')
-    if (userData?.id && (!userData?.role || userData.role === 'BUYER')) {
-      mergeGuestBehaviorToUser(userData.id)
-    }
+
     if (userData?.role === 'ADMIN' || userData?.role === 'PLATFORM_SUPPORT') {
       window.location.href = '/admin'
     } else if (userData?.role === 'SHOP_OWNER' || userData?.role === 'SHOP_STAFF') {
       window.location.href = '/seller'
     } else {
-      window.location.href = '/'
+      window.location.reload()
     }
   }
 

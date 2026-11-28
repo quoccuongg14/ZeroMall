@@ -105,12 +105,11 @@ export const ProductOutfitModal: React.FC<ProductOutfitModalProps> = ({
     }
 
     if (goToCheckout) {
-      const hasLoggedUser = Boolean(localStorage.getItem('zm_user'))
       try {
-        localStorage.setItem('zm_checkout_step', hasLoggedUser ? 'checkout' : 'cart')
+        localStorage.setItem('zm_checkout_step', 'checkout')
       } catch (_) {}
       onClose()
-      navigate(hasLoggedUser ? '/checkout' : '/cart')
+      navigate('/checkout')
       return
     }
 

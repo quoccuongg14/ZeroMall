@@ -18,7 +18,8 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
   const { isOpen, onClose, product } = props
   const logic = useTryOnLogic(props)
 
-  if (!isOpen) return null
+  const hasLoggedUser = Boolean(localStorage.getItem('zm_user'))
+  if (!isOpen || !hasLoggedUser) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">

@@ -401,15 +401,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return
     }
 
-    if (!user) {
-      if (onRequireLogin) {
-        onRequireLogin()
-      } else {
-        onOpenLogin()
-      }
-      return
-    }
-
     const effectiveProduct = {
       ...product,
       price: currentFlashPrice,
@@ -937,7 +928,21 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           onSelectOptionImage={handleSelectOptionImage}
           user={user}
           shopDetails={shopDetails}
-          onOpenTryOnModal={() => setIsTryOnModalOpen(true)}
+          onOpenTryOnModal={() => {
+            if (!user) {
+              if (onRequireLogin) {
+                onRequireLogin(
+                  'Đăng nhập để sử dụng Phòng Thử Đồ AI',
+                  'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để mở Phòng Thử Đồ Trực Tuyến và ướm thử trang phục AI.',
+                  '✨'
+                )
+              } else {
+                onOpenLogin()
+              }
+              return
+            }
+            setIsTryOnModalOpen(true)
+          }}
         />
       </div>
 
@@ -961,6 +966,18 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           product={product}
           onAddToCart={onAddToCart}
           onOpenTryOnModal={(bundle) => {
+            if (!user) {
+              if (onRequireLogin) {
+                onRequireLogin(
+                  'Đăng nhập để sử dụng Phòng Thử Đồ AI',
+                  'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để mở Phòng Thử Đồ Trực Tuyến và ướm thử trang phục AI.',
+                  '✨'
+                )
+              } else {
+                onOpenLogin()
+              }
+              return
+            }
             setSelectedBundleForTryOn(bundle || null)
             setIsTryOnModalOpen(true)
           }}

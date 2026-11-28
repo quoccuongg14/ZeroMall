@@ -104,6 +104,7 @@ interface CartPageProps {
   onUpdateQuantity: (productId: string, variant: string, quantity: number) => void
   onRemoveItem: (productId: string, variant?: string) => void
   onBackToHome: () => void
+  onRequireLogin?: (title?: string, description?: string, icon?: string) => void
 }
 
 export const CartPage: React.FC<CartPageProps> = ({
@@ -111,7 +112,8 @@ export const CartPage: React.FC<CartPageProps> = ({
   user,
   onUpdateQuantity,
   onRemoveItem,
-  onBackToHome
+  onBackToHome,
+  onRequireLogin
 }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -132,8 +134,20 @@ export const CartPage: React.FC<CartPageProps> = ({
     setStepInternal(newStep)
   }, [location.pathname])
 
-  // Custom setStep that also navigates
+  // Custom setStep that also navigates (Checkout requires login)
   const setStep = (newStep: 'cart' | 'checkout' | 'success') => {
+    if (newStep === 'checkout' && !user) {
+      if (onRequireLogin) {
+        onRequireLogin(
+          'Đăng nhập để thanh toán',
+          'Vui lòng đăng nhập hoặc tạo tài khoản ZeroMall để chọn địa chỉ giao hàng và tiến hành thanh toán đơn hàng.',
+          '💳'
+        )
+      } else {
+        navigate('/checkout', { replace: false })
+      }
+      return
+    }
     setStepInternal(newStep)
     if (newStep === 'checkout') {
       navigate('/checkout', { replace: false })
