@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { GeminiAiService } from './gemini-ai.service';
 import { LocalAiService } from './local-ai.service';
 import { AiModerationService } from './ai-moderation.service';
@@ -14,6 +15,7 @@ export class AuditProductDto {
   imageUrl?: string;
   description?: string;
   isBatchScan?: boolean;
+  isFinalSubmit?: boolean;
 }
 
 export interface AuditCategoryResult {
@@ -89,12 +91,16 @@ export class AiCategoryAuditorService {
   private static clipEndpointWorkingUrl: string | null = null;
   private static clipLastCheckTime = 0;
   private static isClipAvailable: boolean | null = null;
+  private static readonly pendingVisionWarms = new Set<string>();
+  private static readonly memoryVisionCache = new Map<string, { itemNameVi: string; itemCategory: string; visualTraits: string; isProhibited: boolean; prohibitedReason: string }>();
+  private static readonly memoryVerifyCache = new Map<string, { titleMatchesImage: boolean; categoryMatches: boolean; suggestedCategory: string; suggestedTitle: string; reason: string }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiAi: GeminiAiService,
     private readonly localAi: LocalAiService,
-    private readonly aiModeration?: AiModerationService,
+    @Optional() private readonly aiModeration?: AiModerationService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   /**
@@ -193,31 +199,29 @@ export class AiCategoryAuditorService {
 
     // 1.2 ĐÁNH GIÁ LỆCH ẢNH & TIÊU ĐỀ / SAI NGÀNH TỪ CLIP
     if (visualCheck && visualCheck.isMismatch) {
-      const inferredFromTitle = this.inferCategoryFromTitle(lowerName);
-      const isWrongCatOnly =
-        visualCheck.mismatchType === 'WRONG_CATEGORY' ||
-        (visualCheck.suggestedCategory &&
-          inferredFromTitle &&
-          this.isCategoryCompatible(visualCheck.suggestedCategory, inferredFromTitle) &&
-          currentCat &&
-          !this.isCategoryCompatible(currentCat, visualCheck.suggestedCategory));
+      // Chỉ coi là thuần túy sai ngành hàng khi CLIP xác nhận mismatchType === 'WRONG_CATEGORY'
+      // Tuyệt đối không ghi đè lỗi IMAGE_MISMATCH cùng ngành (vd: Ảnh Áo khoác Bomber nhưng gõ "áo sơ mi")
+      const isWrongCatOnly = visualCheck.mismatchType === 'WRONG_CATEGORY';
 
       if (isWrongCatOnly && visualCheck.suggestedCategory) {
-        return {
-          isMatched: false,
-          isProhibited: false,
-          issueType: 'WRONG_CATEGORY',
-          confidence: visualCheck.confidence || 95,
-          currentCategory: currentCat,
-          suggestedTitle: undefined,
-          detectedVisual: visualCheck.detectedVisual,
-          suggestedCategory: visualCheck.suggestedCategory,
-          titleFeedback: `Tên sản phẩm "${rawName}" hợp lệ với hình ảnh.`,
-          imageFeedback: `Ảnh & tên sản phẩm thuộc ngành "${visualCheck.suggestedCategory}", chưa khớp với ngành "${currentCat}" bạn đang chọn.`,
-          actionRequired: 'CHANGE_CATEGORY',
-          recommendation: `Sản phẩm thuộc ngành "${visualCheck.suggestedCategory}". Vui lòng bấm đổi sang đúng ngành hàng "${visualCheck.suggestedCategory}"!`,
-          source: 'local-clip-engine',
-        };
+        return this.finalizeWithTier2Check(
+          {
+            isMatched: false,
+            isProhibited: false,
+            issueType: 'WRONG_CATEGORY',
+            confidence: visualCheck.confidence || 95,
+            currentCategory: currentCat,
+            suggestedTitle: undefined,
+            detectedVisual: visualCheck.detectedVisual,
+            suggestedCategory: visualCheck.suggestedCategory,
+            titleFeedback: `Tên sản phẩm "${rawName}" hợp lệ với hình ảnh.`,
+            imageFeedback: `Ảnh & tên sản phẩm thuộc ngành "${visualCheck.suggestedCategory}", chưa khớp với ngành "${currentCat}" bạn đang chọn.`,
+            actionRequired: 'CHANGE_CATEGORY',
+            recommendation: `Sản phẩm thuộc ngành "${visualCheck.suggestedCategory}". Vui lòng bấm đổi sang đúng ngành hàng "${visualCheck.suggestedCategory}"!`,
+            source: 'local-clip-engine',
+          },
+          { coverImage, rawName, currentCat, isFinalSubmit: Boolean(input.isFinalSubmit), isBatchScan: Boolean(input.isBatchScan) },
+        );
       }
 
       return {
@@ -301,21 +305,24 @@ export class AiCategoryAuditorService {
       currentCat &&
       !this.isCategoryCompatible(currentCat, visualCheck.suggestedCategory)
     ) {
-      return {
-        isMatched: false,
-        isProhibited: false,
-        issueType: 'WRONG_CATEGORY',
-        confidence: visualCheck.confidence || 94,
-        currentCategory: currentCat,
-        suggestedTitle: undefined,
-        detectedVisual: visualCheck.detectedVisual,
-        suggestedCategory: visualCheck.suggestedCategory,
-        titleFeedback: `Tiêu đề sản phẩm "${rawName}" khớp với hình ảnh.`,
-        imageFeedback: `Ảnh & tên sản phẩm là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), chưa khớp với ngành "${currentCat}" bạn chọn.`,
-        actionRequired: 'CHANGE_CATEGORY',
-        recommendation: `Vui lòng đổi ngành hàng từ "${currentCat}" sang "${visualCheck.suggestedCategory}"!`,
-        source: visualCheck.source || 'local-clip-engine',
-      };
+      return this.finalizeWithTier2Check(
+        {
+          isMatched: false,
+          isProhibited: false,
+          issueType: 'WRONG_CATEGORY',
+          confidence: visualCheck.confidence || 94,
+          currentCategory: currentCat,
+          suggestedTitle: undefined,
+          detectedVisual: visualCheck.detectedVisual,
+          suggestedCategory: visualCheck.suggestedCategory,
+          titleFeedback: `Tiêu đề sản phẩm "${rawName}" khớp với hình ảnh.`,
+          imageFeedback: `Ảnh & tên sản phẩm là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), chưa khớp với ngành "${currentCat}" bạn chọn.`,
+          actionRequired: 'CHANGE_CATEGORY',
+          recommendation: `Vui lòng đổi ngành hàng từ "${currentCat}" sang "${visualCheck.suggestedCategory}"!`,
+          source: visualCheck.source || 'local-clip-engine',
+        },
+        { coverImage, rawName, currentCat, isFinalSubmit: Boolean(input.isFinalSubmit), isBatchScan: Boolean(input.isBatchScan) },
+      );
     }
 
     // 2.1 Trường hợp đặc biệt: Merchandise / Fanmeeting / Esports
@@ -339,35 +346,41 @@ export class AiCategoryAuditorService {
 
     // 2.2 Kiểm tra tương thích ngành hàng
     if (effectiveSuggestedCat && currentCat && !this.isCategoryCompatible(currentCat, effectiveSuggestedCat)) {
-      return {
-        isMatched: false,
-        issueType: 'WRONG_CATEGORY',
-        confidence: 93,
-        currentCategory: currentCat,
-        suggestedCategory: effectiveSuggestedCat,
-        suggestedTitle: visualCheck?.suggestedTitle,
-        detectedVisual: visualCheck?.detectedVisual,
-        titleFeedback: rawName ? `Sản phẩm "${rawName}" có thực thể chính thuộc ngành "${effectiveSuggestedCat}".` : `Hình ảnh sản phẩm thuộc ngành "${effectiveSuggestedCat}".`,
-        imageFeedback: visualCheck?.detectedVisual ? `Ảnh hiển thị: ${visualCheck.detectedVisual}.` : undefined,
-        actionRequired: 'CHANGE_CATEGORY',
-        recommendation: `ZeroAI đề xuất chuyển sang ngành "${effectiveSuggestedCat}" để tối ưu tìm kiếm và đúng chuẩn danh mục sàn.`,
-        source: visualCheck?.source || 'local-ai-engine',
-      };
+      return this.finalizeWithTier2Check(
+        {
+          isMatched: false,
+          issueType: 'WRONG_CATEGORY',
+          confidence: 93,
+          currentCategory: currentCat,
+          suggestedCategory: effectiveSuggestedCat,
+          suggestedTitle: visualCheck?.suggestedTitle,
+          detectedVisual: visualCheck?.detectedVisual,
+          titleFeedback: rawName ? `Sản phẩm "${rawName}" có thực thể chính thuộc ngành "${effectiveSuggestedCat}".` : `Hình ảnh sản phẩm thuộc ngành "${effectiveSuggestedCat}".`,
+          imageFeedback: visualCheck?.detectedVisual ? `Ảnh hiển thị: ${visualCheck.detectedVisual}.` : undefined,
+          actionRequired: 'CHANGE_CATEGORY',
+          recommendation: `ZeroAI đề xuất chuyển sang ngành "${effectiveSuggestedCat}" để tối ưu tìm kiếm và đúng chuẩn danh mục sàn.`,
+          source: visualCheck?.source || 'local-ai-engine',
+        },
+        { coverImage, rawName, currentCat, isFinalSubmit: Boolean(input.isFinalSubmit), isBatchScan: Boolean(input.isBatchScan) },
+      );
     }
 
-    // 2.3 Hợp lệ: Cả Ảnh = Tên = Ngành Hàng đều đồng nhất chuẩn xác!
-    return {
-      isMatched: true,
-      issueType: 'MATCHED',
-      confidence: 98,
-      currentCategory: currentCat,
-      suggestedCategory: currentCat,
-      titleFeedback: `Tiêu đề "${rawName}" chuẩn xác.`,
-      imageFeedback: 'Hình ảnh, tiêu đề và phân loại ngành hàng hoàn toàn đồng nhất.',
-      actionRequired: 'NONE',
-      recommendation: `Sản phẩm đã được phân loại đúng ngành "${currentCat}". Đủ điều kiện hiển thị ưu tiên trên sàn ZeroMall.`,
-      source: visualCheck?.source || 'local-ai-engine',
-    };
+    // 2.3 Hợp lệ: Cả Ảnh = Tên = Ngành Hàng đều đồng nhất chuẩn xác! (Chạy qua Tier 2 VLM+LLM nếu có cache hoặc submit cuối)
+    return this.finalizeWithTier2Check(
+      {
+        isMatched: true,
+        issueType: 'MATCHED',
+        confidence: 98,
+        currentCategory: currentCat,
+        suggestedCategory: currentCat,
+        titleFeedback: `Tiêu đề "${rawName}" chuẩn xác.`,
+        imageFeedback: 'Hình ảnh, tiêu đề và phân loại ngành hàng hoàn toàn đồng nhất.',
+        actionRequired: 'NONE',
+        recommendation: `Sản phẩm đã được phân loại đúng ngành "${currentCat}". Đủ điều kiện hiển thị ưu tiên trên sàn ZeroMall.`,
+        source: visualCheck?.source || 'local-ai-engine',
+      },
+      { coverImage, rawName, currentCat, isFinalSubmit: Boolean(input.isFinalSubmit), isBatchScan: Boolean(input.isBatchScan) },
+    );
   }
 
   /**
@@ -1595,6 +1608,214 @@ export class AiCategoryAuditorService {
     }
 
     return { isMismatch: false };
+  }
+
+  private hashCacheKey(raw: string): string {
+    return createHash('sha256').update(raw).digest('hex').slice(0, 24);
+  }
+
+  private async getCachedVisionSummary(imgHash: string) {
+    const mem = AiCategoryAuditorService.memoryVisionCache.get(imgHash);
+    if (mem) return mem;
+    if (!this.redisService) return null;
+    try {
+      const cached = await this.redisService.get<{
+        itemNameVi: string;
+        itemCategory: string;
+        visualTraits: string;
+        isProhibited: boolean;
+        prohibitedReason: string;
+      }>(`ai:vlm:vision:${imgHash}`);
+      if (cached) {
+        if (AiCategoryAuditorService.memoryVisionCache.size > 500) {
+          AiCategoryAuditorService.memoryVisionCache.clear();
+        }
+        AiCategoryAuditorService.memoryVisionCache.set(imgHash, cached);
+      }
+      return cached;
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveCachedVisionSummary(
+    imgHash: string,
+    summary: { itemNameVi: string; itemCategory: string; visualTraits: string; isProhibited: boolean; prohibitedReason: string },
+  ) {
+    if (AiCategoryAuditorService.memoryVisionCache.size > 500) {
+      AiCategoryAuditorService.memoryVisionCache.clear();
+    }
+    AiCategoryAuditorService.memoryVisionCache.set(imgHash, summary);
+    if (!this.redisService) return;
+    try {
+      await this.redisService.set(`ai:vlm:vision:${imgHash}`, summary, 604800); // 7 ngày
+    } catch {}
+  }
+
+  private async getCachedVerifyResult(verifyKey: string) {
+    const mem = AiCategoryAuditorService.memoryVerifyCache.get(verifyKey);
+    if (mem) return mem;
+    if (!this.redisService) return null;
+    try {
+      const cached = await this.redisService.get<{
+        titleMatchesImage: boolean;
+        categoryMatches: boolean;
+        suggestedCategory: string;
+        suggestedTitle: string;
+        reason: string;
+      }>(verifyKey);
+      if (cached) {
+        if (AiCategoryAuditorService.memoryVerifyCache.size > 1000) {
+          AiCategoryAuditorService.memoryVerifyCache.clear();
+        }
+        AiCategoryAuditorService.memoryVerifyCache.set(verifyKey, cached);
+      }
+      return cached;
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveCachedVerifyResult(
+    verifyKey: string,
+    result: { titleMatchesImage: boolean; categoryMatches: boolean; suggestedCategory: string; suggestedTitle: string; reason: string },
+  ) {
+    if (AiCategoryAuditorService.memoryVerifyCache.size > 1000) {
+      AiCategoryAuditorService.memoryVerifyCache.clear();
+    }
+    AiCategoryAuditorService.memoryVerifyCache.set(verifyKey, result);
+    if (!this.redisService) return;
+    try {
+      await this.redisService.set(verifyKey, result, 3600); // 1 giờ
+    } catch {}
+  }
+
+  private warmVisionCacheAsync(imgHash: string, coverImage: string): void {
+    if (AiCategoryAuditorService.pendingVisionWarms.has(imgHash)) return;
+    AiCategoryAuditorService.pendingVisionWarms.add(imgHash);
+    void (async () => {
+      try {
+        const summary = await this.localAi.describeProductImageForAudit(coverImage);
+        if (summary) {
+          await this.saveCachedVisionSummary(imgHash, summary);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Tier 2 VLM warm error: ${err?.message || err}`);
+      } finally {
+        AiCategoryAuditorService.pendingVisionWarms.delete(imgHash);
+      }
+    })();
+  }
+
+  /**
+   * Tier 2 (0 Gemini tokens):
+   * - Khi đang gõ realtime (!isFinalSubmit): nếu chưa có Vision Cache thì pre-warm ngầm (không chặn < 50ms);
+   *   nếu đã có Vision Cache trong Redis thì dùng LLM (Groq -> qwen2.5:1.5b) đối chiếu ngữ nghĩa.
+   * - Khi nhấn Lưu/Đăng bán (isFinalSubmit = true): bắt buộc chạy đồng bộ VLM + LLM nếu chưa có cache.
+   */
+  private async finalizeWithTier2Check(
+    baseResult: AuditCategoryResult,
+    ctx: { coverImage: string; rawName: string; currentCat: string; isFinalSubmit: boolean; isBatchScan: boolean },
+  ): Promise<AuditCategoryResult> {
+    if (ctx.isBatchScan || !ctx.coverImage || ctx.rawName.length < 2) {
+      return baseResult;
+    }
+
+    const imgHash = this.hashCacheKey(ctx.coverImage);
+    let visionSummary = await this.getCachedVisionSummary(imgHash);
+
+    if (!visionSummary) {
+      if (!ctx.isFinalSubmit) {
+        this.warmVisionCacheAsync(imgHash, ctx.coverImage);
+        return baseResult;
+      }
+      visionSummary = await this.localAi.describeProductImageForAudit(ctx.coverImage);
+      if (visionSummary) {
+        await this.saveCachedVisionSummary(imgHash, visionSummary);
+      }
+    }
+
+    if (!visionSummary) {
+      return baseResult;
+    }
+
+    if (visionSummary.isProhibited) {
+      return {
+        isMatched: false,
+        isProhibited: true,
+        prohibitedLabel: visionSummary.prohibitedReason || visionSummary.itemNameVi || 'Hàng cấm / Vi phạm chính sách',
+        issueType: 'PROHIBITED_ITEM',
+        confidence: 97,
+        currentCategory: ctx.currentCat,
+        suggestedCategory: ctx.currentCat,
+        detectedVisual: visionSummary.itemNameVi,
+        titleFeedback: `Tiêu đề bạn nhập là "${ctx.rawName}".`,
+        imageFeedback: visionSummary.prohibitedReason || `AI Vision phát hiện "${visionSummary.itemNameVi}" thuộc danh mục cấm.`,
+        actionRequired: 'TAKEDOWN',
+        recommendation: `🚫 CẢNH BÁO HÀNG CẤM: AI Vision nhận diện hình ảnh chứa "${visionSummary.itemNameVi}". ZeroMall nghiêm cấm đăng tải sản phẩm này!`,
+        source: 'local-ai-engine',
+      };
+    }
+
+    const verifyHash = this.hashCacheKey(`${ctx.rawName.toLowerCase()}__${ctx.currentCat.toLowerCase()}`);
+    const verifyKey = `ai:vlm:verify:${imgHash}:${verifyHash}`;
+    let verifyResult = await this.getCachedVerifyResult(verifyKey);
+
+    if (!verifyResult) {
+      verifyResult = await this.localAi.verifyTitleAndCategoryWithLlm({
+        productName: ctx.rawName,
+        currentCategory: ctx.currentCat,
+        visionSummary,
+      });
+      if (verifyResult) {
+        await this.saveCachedVerifyResult(verifyKey, verifyResult);
+      }
+    }
+
+    if (!verifyResult) {
+      return baseResult;
+    }
+
+    if (!verifyResult.titleMatchesImage) {
+      const suggestedCat = verifyResult.suggestedCategory || visionSummary.itemCategory || baseResult.suggestedCategory || ctx.currentCat;
+      const suggestedTitle = verifyResult.suggestedTitle || visionSummary.itemNameVi;
+      return {
+        isMatched: false,
+        isProhibited: false,
+        issueType: 'IMAGE_MISMATCH',
+        confidence: 96,
+        currentCategory: ctx.currentCat,
+        suggestedTitle,
+        detectedVisual: visionSummary.itemNameVi,
+        suggestedCategory: suggestedCat,
+        titleFeedback: `Tiêu đề bạn nhập là "${ctx.rawName}".`,
+        imageFeedback: `AI Vision nhận diện ảnh là "${visionSummary.itemNameVi}"${visionSummary.visualTraits ? ` (${visionSummary.visualTraits})` : ''} — ${verifyResult.reason || 'không khớp với tên sản phẩm bạn nhập'}.`,
+        actionRequired: 'REPLACE_IMAGE',
+        recommendation: `Hình ảnh thực tế là "${visionSummary.itemNameVi}", nhưng tên sản phẩm lại ghi "${ctx.rawName}". Vui lòng đổi ảnh thực tế hoặc sửa tên thành "${suggestedTitle}".`,
+        source: 'local-ai-engine',
+      };
+    }
+
+    if (!verifyResult.categoryMatches && verifyResult.suggestedCategory && ctx.currentCat) {
+      if (!this.isCategoryCompatible(ctx.currentCat, verifyResult.suggestedCategory)) {
+        return {
+          isMatched: false,
+          isProhibited: false,
+          issueType: 'WRONG_CATEGORY',
+          confidence: 94,
+          currentCategory: ctx.currentCat,
+          detectedVisual: visionSummary.itemNameVi,
+          suggestedCategory: verifyResult.suggestedCategory,
+          titleFeedback: `Tên sản phẩm "${ctx.rawName}" phù hợp với hình ảnh "${visionSummary.itemNameVi}".`,
+          imageFeedback: `Ảnh & tên sản phẩm thuộc ngành "${verifyResult.suggestedCategory}", chưa khớp với ngành "${ctx.currentCat}" bạn đang chọn.`,
+          actionRequired: 'CHANGE_CATEGORY',
+          recommendation: `Vui lòng đổi ngành hàng từ "${ctx.currentCat}" sang "${verifyResult.suggestedCategory}"!`,
+          source: 'local-ai-engine',
+        };
+      }
+    }
+
+    return baseResult;
   }
 
   private async fetchImageBase64(imageUrl: string): Promise<{ base64: string; mimeType: string } | null> {

@@ -784,26 +784,45 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None, cache_key=N
 
         # 1. TOPS vs OTHER DOMAINS & Chi tiết nhóm TOPS
         if domain in TOPS_DOMAINS:
-            is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần"])
+            is_suit = any(k in cleaned_name for k in ["bộ", "set", "đồ bộ", "bộ đồ", "combo", "áo và quần", "áo phối quần", "áo khoác sơ mi", "sơ mi khoác"])
+            is_outerwear_title = has_kw(cleaned_name, [
+                "áo khoác", "khoác", "bomber", "blazer", "vest", "hoodie", "jacket", "phao", "măng tô", "mang to", "gile", "trench", "cardigan"
+            ])
+            is_shirt_title = has_kw(cleaned_name, ["sơ mi", "so mi", "áo sơ mi", "ao so mi"])
+            is_tshirt_polo_title = has_kw(cleaned_name, ["áo thun", "ao thun", "áo phông", "ao phong", "polo", "t-shirt", "tee", "tank top"])
+            is_cardigan_knit_title = any(k in cleaned_name for k in ["cardigan", "áo len", "ao len", "dệt kim", "det kim", "len mỏng", "knitwear"])
+
             if has_bottom_title and not has_top_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị áo/áo khoác thời trang, không khớp với tên sản phẩm bạn nhập là quần (\"{name}\")."
             elif not has_top_title and not is_suit and (has_bag_title or has_watch_title or has_footwear_title or has_kitchen_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or has_gym_equipment_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem", "tạ"])):
                 is_mismatch = True
                 reason = f"Ảnh là áo thời trang ({cat_info['label']}), không khớp với tên sản phẩm \"{name}\"."
+            elif not has_top_title and not is_suit and title_sim > 0 and title_sim < 0.20:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị {cat_info['label']}, không khớp với tên sản phẩm \"{name}\"."
 
-            # 1.1 Kiểm tra phân loại con: Áo thun vs Áo cardigan / Áo len dệt kim
-            if not is_mismatch and domain == "TSHIRT":
-                is_cardigan_knit = any(k in cleaned_name for k in ["cardigan", "áo len", "ao len", "dệt kim", "det kim", "len mỏng", "len dệt kim", "knitwear"])
-                if is_cardigan_knit and not any(k in cleaned_name for k in ["áo thun", "ao thun", "áo phông"]):
-                    is_mismatch = True
-                    reason = f"Ảnh hiển thị áo thun / áo phông năng động, không khớp với sản phẩm là áo cardigan / áo len dệt kim (\"{name}\")."
-
-            if not is_mismatch and domain == "CARDIGAN_KNIT":
-                is_tshirt_only = any(k in cleaned_name for k in ["áo thun", "ao thun", "áo phông", "t-shirt", "tee"]) and not any(k in cleaned_name for k in ["cardigan", "len", "dệt kim"])
-                if is_tshirt_only:
-                    is_mismatch = True
-                    reason = f"Ảnh hiển thị áo cardigan / áo len dệt kim, không khớp với sản phẩm là áo thun / áo phông (\"{name}\")."
+            # 1.1 Kiểm tra chéo sub-type áo: Áo khoác (OUTERWEAR) vs Sơ mi (SHIRT) vs Thun/Polo (TSHIRT) vs Len/Cardigan
+            if not is_mismatch and not is_suit:
+                if domain == "OUTERWEAR":
+                    if (is_shirt_title or is_tshirt_polo_title or is_cardigan_knit_title) and not is_outerwear_title:
+                        is_mismatch = True
+                        reason = f"Ảnh hiển thị {cat_info['label']}, không khớp với tên sản phẩm \"{name}\"."
+                elif domain == "SHIRT":
+                    if (is_outerwear_title or is_tshirt_polo_title or is_cardigan_knit_title) and not is_shirt_title:
+                        is_mismatch = True
+                        reason = f"Ảnh hiển thị {cat_info['label']}, không khớp với tên sản phẩm \"{name}\"."
+                elif domain == "TSHIRT":
+                    if is_cardigan_knit_title and not is_tshirt_polo_title:
+                        is_mismatch = True
+                        reason = f"Ảnh hiển thị áo thun / áo phông / polo, không khớp với sản phẩm áo cardigan / áo len dệt kim (\"{name}\")."
+                    elif (is_outerwear_title or is_shirt_title) and not is_tshirt_polo_title:
+                        is_mismatch = True
+                        reason = f"Ảnh hiển thị {cat_info['label']}, không khớp với tên sản phẩm \"{name}\"."
+                elif domain == "CARDIGAN_KNIT":
+                    if (is_tshirt_polo_title or is_shirt_title) and not is_cardigan_knit_title:
+                        is_mismatch = True
+                        reason = f"Ảnh hiển thị áo cardigan / áo len dệt kim, không khớp với tên sản phẩm \"{name}\"."
 
         # 2. FOOTWEAR: Bóc tách chuyên sâu Giày Sneaker vs Dép quai ngang vs Sandal vs Giày da công sở
         elif domain in FOOTWEAR_DOMAINS:
@@ -867,6 +886,9 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None, cache_key=N
             if has_top_title and not has_bottom_title and not is_suit:
                 is_mismatch = True
                 reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm bạn nhập là áo (\"{name}\")."
+            elif has_dress_title and not has_bottom_title and not is_suit:
+                is_mismatch = True
+                reason = f"Ảnh hiển thị quần thời trang, không khớp với tên sản phẩm váy/đầm (\"{name}\")."
             elif not has_bottom_title and not is_suit and (has_bag_title or has_watch_title or has_beauty_title or has_health_title or has_electronics_title or has_camera_title or has_books_title or has_gym_equipment_title or any(k in cleaned_name for k in ["giày", "dép", "sneaker", "sandal", "nồi chiên", "bếp", "điện thoại", "laptop", "máy tính", "balo", "túi", "ví", "cặp", "đồng hồ", "son", "kem", "tạ"])):
                 is_mismatch = True
                 reason = f"Ảnh là quần thời trang, không khớp với tên sản phẩm \"{name}\"."

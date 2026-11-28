@@ -7,6 +7,7 @@ export interface AuditProductInput {
   image?: string;
   images?: string[];
   description?: string;
+  isFinalSubmit?: boolean;
 }
 
 export interface AuditCategoryResult {

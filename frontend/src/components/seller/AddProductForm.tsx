@@ -737,16 +737,24 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
     e.preventDefault()
 
     let currentAudit = categoryAudit
-    if (!currentAudit && images.length > 0) {
+    if (
+      images.length > 0 &&
+      (!currentAudit || currentAudit.isMatched || currentAudit.issueType === 'WRONG_CATEGORY')
+    ) {
       try {
-        const coverImg = images[0]?.url || ''
-        currentAudit = await auditProductCategory({
+        const coverImg = images.find(i => i.isCover)?.url || images[0]?.url || ''
+        const finalAudit = await auditProductCategory({
           name: productName.trim() || category || 'Sản phẩm mới',
           category: category || '',
           image: coverImg,
           images: images.map(i => i.url).filter(Boolean),
           description: description || '',
+          isFinalSubmit: true,
         })
+        if (finalAudit) {
+          currentAudit = finalAudit
+          setCategoryAudit(finalAudit)
+        }
       } catch {}
     }
 

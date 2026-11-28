@@ -823,7 +823,191 @@ QUY TẮC:
     } catch (e: any) {
       this.logger.warn(`Ollama chat (${ollamaModel}) error: ${e.message}`);
     }
+    return null;
+  }
 
+  private vlmActiveCount = 0;
+  private readonly VLM_MAX_CONCURRENCY = 2;
+
+  private async toRawBase64Image(imageInput: string): Promise<string | null> {
+    if (!imageInput) return null;
+    if (imageInput.startsWith('data:')) {
+      return imageInput.split(',', 2)[1] || null;
+    }
+    if (imageInput.startsWith('http://') || imageInput.startsWith('https://')) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(imageInput, {
+          headers: { 'User-Agent': 'ZeroMall/1.0' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return null;
+        const buf = Buffer.from(await res.arrayBuffer());
+        return buf.toString('base64');
+      } catch {
+        return null;
+      }
+    }
+    return imageInput.length > 200 ? imageInput : null;
+  }
+
+  /**
+   * Tầng 2 VLM (0 Token): Nhận diện trực tiếp sản phẩm trong ảnh bằng Ollama minicpm-v (fallback moondream)
+   */
+  async describeProductImageForAudit(imageInput: string): Promise<{
+    itemNameVi: string;
+    itemCategory: string;
+    visualTraits: string;
+    isProhibited: boolean;
+    prohibitedReason: string;
+  } | null> {
+    if (this.vlmActiveCount >= this.VLM_MAX_CONCURRENCY) {
+      return null;
+    }
+    const rawBase64 = await this.toRawBase64Image(imageInput);
+    if (!rawBase64) return null;
+
+    this.vlmActiveCount++;
+    try {
+      const prompt = `Bạn là AI kiểm duyệt ảnh sản phẩm sàn TMĐT ZeroMall Việt Nam.
+Hãy nhìn kỹ bức ảnh và trả về DUY NHẤT JSON chuẩn (không markdown, không giải thích ngoài JSON):
+{
+  "itemNameVi": "Tên đúng loại sản phẩm thực tế trong ảnh bằng tiếng Việt (ví dụ: Áo khoác Bomber dù có khóa kéo, Áo sơ mi nam dài tay, Quần jean ống suông, Balo laptop, Điện thoại, Máy khoan cầm tay...)",
+  "itemCategory": "Chọn 1 ngành phù hợp nhất trong: Thời Trang Nam, Thời Trang Nữ, Điện Thoại & Phụ Kiện, Thiết Bị Điện Tử, Máy Tính & Laptop, Đồng Hồ, Máy Ảnh, Giày Dép Nam, Giày Dép Nữ, Gia Dụng, Thể Thao, Mẹ & Bé, Nhà Cửa, Sắc Đẹp, Sức Khỏe, Phụ Kiện Nữ, Túi Ví Nữ, Sách & VPP",
+  "visualTraits": "Mô tả 1 câu ngắn đặc điểm nhận dạng (kiểu dáng, cổ áo/khóa kéo/nút bấm/chất liệu/màu sắc)",
+  "isProhibited": false,
+  "prohibitedReason": ""
+}
+Lưu ý: Chỉ đặt isProhibited=true nếu ảnh rõ ràng là vũ khí/súng đạn/dao bấm chiến đấu/chất ma túy.`;
+
+      for (const vm of ['minicpm-v:latest', 'moondream:latest']) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), vm.startsWith('minicpm') ? 16000 : 9000);
+          const res = await fetch(`${this.ollamaUrl}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: vm,
+              prompt,
+              images: [rawBase64],
+              format: 'json',
+              stream: false,
+              keep_alive: '30m',
+              options: { temperature: 0.1, num_predict: 220 },
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          if (!res.ok) continue;
+
+          const data: any = await res.json();
+          const parsed = this.extractJsonObject(data?.response || '');
+          if (parsed && parsed.itemNameVi && String(parsed.itemNameVi).trim().length >= 2) {
+            return {
+              itemNameVi: String(parsed.itemNameVi).trim(),
+              itemCategory: String(parsed.itemCategory || '').trim(),
+              visualTraits: String(parsed.visualTraits || '').trim(),
+              isProhibited: Boolean(parsed.isProhibited),
+              prohibitedReason: String(parsed.prohibitedReason || '').trim(),
+            };
+          }
+        } catch (err: any) {
+          this.logger.warn(`Audit VLM [${vm}] skipped: ${err.message}`);
+        }
+      }
+      return null;
+    } finally {
+      this.vlmActiveCount = Math.max(0, this.vlmActiveCount - 1);
+    }
+  }
+
+  /**
+   * Đối chiếu nhanh (Groq / qwen2.5:1.5b local) giữa tên sản phẩm người bán nhập và vật thể thực trong ảnh
+   */
+  async verifyTitleAndCategoryWithLlm(params: {
+    productName: string;
+    currentCategory: string;
+    visionSummary: { itemNameVi: string; itemCategory: string; visualTraits: string };
+  }): Promise<{
+    titleMatchesImage: boolean;
+    categoryMatches: boolean;
+    suggestedCategory: string;
+    suggestedTitle: string;
+    reason: string;
+  } | null> {
+    const { productName, currentCategory, visionSummary } = params;
+    const systemPrompt = `Bạn là AI kiểm duyệt sàn TMĐT ZeroMall. Đối chiếu Tên sản phẩm và Ngành hàng với sản phẩm thực tế AI đã nhìn thấy trong ảnh.
+QUY TẮC NGHIÊM NGẶT:
+1. Nếu tên người bán nhập chỉ sai LOẠI sản phẩm so với ảnh (ví dụ: ảnh là Áo khoác Bomber nhưng tên ghi "áo sơ mi", hoặc ảnh là Quần jean nhưng tên ghi "áo thun", hoặc ảnh là Balo nhưng tên ghi "ốp lưng") -> PHẢI trả titleMatchesImage = false.
+2. Nếu tên mô tả đúng loại sản phẩm trong ảnh (chấp nhận khác cách diễn đạt như "áo khoác dù" vs "áo khoác bomber", hay mô tả phối đồ đi kèm miễn sản phẩm chính đúng) -> titleMatchesImage = true.
+3. Trả DUY NHẤT JSON:
+{
+  "titleMatchesImage": true/false,
+  "categoryMatches": true/false,
+  "suggestedCategory": "Ngành hàng chuẩn của sản phẩm trong ảnh",
+  "suggestedTitle": "Tên sản phẩm gợi ý chuẩn nếu tên sai",
+  "reason": "Giải thích ngắn gọn bằng tiếng Việt (1 câu)"
+}`;
+
+    const userPrompt = `Sản phẩm thực tế trong ảnh: "${visionSummary.itemNameVi}" (${visionSummary.visualTraits}) | Ngành chuẩn của ảnh: "${visionSummary.itemCategory || 'Thời Trang Nam'}"
+Tên người bán nhập: "${productName}"
+Ngành người bán chọn: "${currentCategory || '(chưa chọn)'}"`;
+
+    const parseResult = (raw: string) => {
+      const obj = this.extractJsonObject(raw);
+      if (!obj || typeof obj.titleMatchesImage !== 'boolean') return null;
+      return {
+        titleMatchesImage: obj.titleMatchesImage,
+        categoryMatches: typeof obj.categoryMatches === 'boolean' ? obj.categoryMatches : true,
+        suggestedCategory: String(obj.suggestedCategory || visionSummary.itemCategory || currentCategory || '').trim(),
+        suggestedTitle: String(obj.suggestedTitle || visionSummary.itemNameVi || '').trim(),
+        reason: String(obj.reason || '').trim(),
+      };
+    };
+
+    const groqRes = await this.callGroqChat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { temperature: 0, maxTokens: 220, timeoutMs: 5000, jsonMode: true },
+    );
+    if (groqRes?.content) {
+      const parsed = parseResult(groqRes.content);
+      if (parsed) return parsed;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${this.ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen2.5:1.5b',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          format: 'json',
+          stream: false,
+          keep_alive: '30m',
+          options: { temperature: 0, num_ctx: 1536, num_predict: 200 },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data: any = await res.json();
+        const parsed = parseResult(data?.message?.content || '');
+        if (parsed) return parsed;
+      }
+    } catch {
+      // Bỏ qua nếu Ollama chat bận
+    }
     return null;
   }
 }

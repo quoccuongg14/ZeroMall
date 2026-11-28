@@ -288,6 +288,8 @@ services:
     container_name: zeromall-clip-service
     ports:
       - '5005:5005'
+    volumes:
+      - clip_hf_cache:/root/.cache/huggingface
     environment:
       - CLIP_PORT=5005
       - CLIP_SIMILARITY_THRESHOLD=0.20
@@ -310,3 +312,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  clip_hf_cache:
