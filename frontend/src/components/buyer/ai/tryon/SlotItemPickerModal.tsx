@@ -249,26 +249,6 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
             </button>
           </div>
 
-          {/* BANNER AI PHÂN TÍCH HÀNH VI & ĐỀ XUẤT THÔNG MINH */}
-          <div className="bg-gradient-to-r from-orange-50/90 via-amber-50/80 to-orange-50/90 border border-orange-200/80 rounded-2xl p-3 sm:p-3.5 flex items-start gap-3 shadow-2xs">
-            <div className="w-8 h-8 rounded-xl bg-[#ee4d2d] text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-xs">
-              🤖
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-[#ee4d2d]">AI Stylist Phân Tích Hành Vi & Gợi Ý:</span>
-                <span className="text-[10px] font-semibold text-slate-600 bg-white/80 px-2 py-0.2 rounded-md border border-orange-200/60">
-                  Chuẩn vóc dáng {height}cm • {weight}kg
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                {otherEquippedItems.length > 0
-                  ? `Dựa trên ${otherEquippedItems.map(it => it.product?.name).filter(Boolean).slice(0, 2).join(' và ')} bạn đang chọn, AI ưu tiên các sản phẩm trong giỏ hàng lên đầu và tự động chấm điểm độ hợp phom dáng cho từng mẫu ${meta.label.toLowerCase()}.`
-                  : `Dựa vào vóc dáng và sở thích mua sắm của bạn, AI ưu tiên sản phẩm trong giỏ hàng và tuyển chọn các mẫu ${meta.label.toLowerCase()} có điểm thẩm mỹ cao nhất.`}
-              </p>
-            </div>
-          </div>
-
           {/* DANH SÁCH PHỤ KIỆN ĐANG ĐEO CÙNG LÚC */}
           {slot === 'accessory' && accessoriesEquipped.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap bg-amber-50/70 border border-amber-200/80 rounded-xl px-3 py-2">
