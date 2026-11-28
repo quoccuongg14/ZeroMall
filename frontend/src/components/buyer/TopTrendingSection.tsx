@@ -107,7 +107,8 @@ export const TopTrendingSection: React.FC<TopTrendingSectionProps> = ({
             <div
               key={p.id}
               onClick={() => {
-                trackUserEngagement('VIEW', p.id, p.category)
+                const numericPrice = parseInt(String(p.flashPrice || p.originalPrice || '0').replace(/[^0-9]/g, ''), 10) || undefined
+                trackUserEngagement('VIEW', p.id, p.category, { title: p.name, price: numericPrice })
                 onSelectProduct(p)
               }}
               className="group cursor-pointer flex flex-col justify-between bg-white rounded-2xl border border-slate-200/70 hover:border-emerald-500/50 p-2.5 hover:shadow-lg hover:-translate-y-1 active:scale-[0.99] transition-all duration-200 relative overflow-hidden shadow-2xs"

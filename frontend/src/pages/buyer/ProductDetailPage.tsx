@@ -238,7 +238,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
 
     // Gửi tín hiệu hành vi VIEW tới ZeroAI Recommendation Engine
-    trackUserEngagement('VIEW', p.id, p.category)
+    trackUserEngagement('VIEW', p.id, p.category, { title: p.name, price: p.price })
   }, [rawProductData])
 
   // Multi-tier variation selection state
@@ -420,7 +420,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
 
     onAddToCart(effectiveProduct, quantity, currentVariantName)
-    trackUserEngagement('CART', product.id, product.category)
+    trackUserEngagement('CART', product.id, product.category, { title: product.name, price: currentFlashPrice })
 
     const rect = e.currentTarget.getBoundingClientRect()
     const cartIcon = document.getElementById('cart-icon')
@@ -463,7 +463,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       }
       return
     }
-    trackUserEngagement('CART', prod.id, prod.category)
+    trackUserEngagement('CART', prod.id, prod.category, { title: prod.name, price: prod.price })
     onBuyNow(prod, qty, variant)
   }
 
@@ -566,6 +566,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         const data = await res.json()
         setIsLiked(data.isLiked)
         setLikeCount(data.count)
+        if (data.isLiked) {
+          trackUserEngagement('LIKE', product.id, product.category, { title: product.name, price: product.price })
+        }
       }
     } catch (e) {
       console.error('Error toggling like:', e)

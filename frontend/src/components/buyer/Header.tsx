@@ -5,6 +5,7 @@ import { NotificationPopover } from '../common/NotificationPopover'
 import { useLanguage } from '../../context/LanguageContext'
 import { VisualSearchModal } from './ai/VisualSearchModal'
 import { ZeroMallLogoMark } from '../common/ZeroMallLogo'
+import { trackUserEngagement } from '../../services/ai-recommendation.service'
 
 interface HeaderProps {
   cart: CartItem[]
@@ -52,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
     e.preventDefault()
     const trimmed = searchValue.trim()
     if (trimmed) {
+      trackUserEngagement('SEARCH', undefined, undefined, { query: trimmed })
       navigate(`/search?q=${encodeURIComponent(trimmed)}`)
       onSearch(trimmed)
     } else {
@@ -62,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleHotSearchClick = (term: string) => {
     setSearchValue(term)
+    trackUserEngagement('SEARCH', undefined, undefined, { query: term })
     navigate(`/search?q=${encodeURIComponent(term)}`)
     onSearch(term)
   }

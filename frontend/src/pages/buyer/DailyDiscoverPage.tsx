@@ -166,7 +166,7 @@ export const DailyDiscoverPage: React.FC = () => {
                 <div
                   key={p.id}
                   onClick={() => {
-                    trackUserEngagement('VIEW', p.id, p.category)
+                    trackUserEngagement('VIEW', p.id, p.category, { title: p.name, price: flashVal || origVal || undefined })
                     navigate(`/product/${toSlug(p.name)}-i.${p.id}`)
                   }}
                   className="bg-white border border-slate-200/80 hover:border-emerald-500/50 rounded-2xl overflow-hidden shadow-2xs hover:shadow-lg hover:-translate-y-1 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between relative group cursor-pointer"

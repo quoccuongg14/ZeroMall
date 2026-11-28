@@ -10,6 +10,7 @@ import { ShopVoucherModal } from '../../components/buyer/ShopVoucherModal'
 import { PlatformVoucherModal } from '../../components/buyer/PlatformVoucherModal'
 import type { ShippingAddress } from '../../models/address.model'
 import { ZeroMallLogoMark } from '../../components/common/ZeroMallLogo'
+import { trackUserEngagement } from '../../services/ai-recommendation.service'
 
 export const VIETNAM_PROVINCES = [
   "Thành phố Hà Nội",
@@ -839,6 +840,16 @@ export const CartPage: React.FC<CartPageProps> = ({
         }
         return
       }
+
+      // Ghi nhận hành vi PURCHASE để cập nhật AI Recommendation Engine
+      selectedCartItems.forEach((item) => {
+        const numericPrice =
+          parseInt(String(item.product.flashPrice || item.product.price || item.product.originalPrice || '0').replace(/[^0-9]/g, ''), 10) || undefined
+        trackUserEngagement('PURCHASE', item.product.id, (item.product as any).category, {
+          title: item.product.name,
+          price: numericPrice,
+        })
+      })
 
       // Clear purchased items from cart state immediately
       selectedCartItems.forEach(item => {

@@ -73,7 +73,8 @@ export const ProductList: React.FC<ProductListProps> = ({ products, onSelectProd
 
   const handleProductClick = (p: Product) => {
     // 1. Ghi nhận hành vi VIEW ngay lập tức lên Recommendation Engine
-    trackUserEngagement('VIEW', p.id, p.category)
+    const numericPrice = parseInt(String(p.flashPrice || p.originalPrice || '0').replace(/[^0-9]/g, ''), 10) || undefined
+    trackUserEngagement('VIEW', p.id, p.category, { title: p.name, price: numericPrice })
 
     try {
       if (p.category) {
@@ -118,7 +119,7 @@ export const ProductList: React.FC<ProductListProps> = ({ products, onSelectProd
             <span className="font-semibold">
               {isFeedPersonalized ? (
                 <>
-                  <strong className="text-emerald-800">Gợi Ý Hôm Nay:</strong> Đã ưu tiên hiển thị 1-2 sản phẩm bạn vừa {recentActionType === 'CART' ? 'thêm vào giỏ' : 'quan tâm'} (xen kẽ cùng các mặt hàng thịnh hành toàn sàn).
+                  <strong className="text-emerald-800">Gợi Ý Hôm Nay:</strong> Đã cá nhân hóa theo {recentActionType === 'CART' ? 'giỏ hàng' : recentActionType === 'SEARCH' ? 'tìm kiếm' : recentActionType === 'PURCHASE' ? 'đơn đã mua' : 'sở thích'} của bạn (xen kẽ cùng các mặt hàng thịnh hành đa ngành).
                 </>
               ) : (
                 <>

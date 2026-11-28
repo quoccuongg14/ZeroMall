@@ -40,7 +40,7 @@ import { UserVoucherTab } from './pages/buyer/UserVoucherTab'
 import { UserWalletTab } from './pages/buyer/UserWalletTab'
 import { VirtualTryOnPage } from './pages/buyer/VirtualTryOnPage'
 import { DailyDiscoverPage } from './pages/buyer/DailyDiscoverPage'
-import { trackUserEngagement } from './services/ai-recommendation.service'
+import { trackUserEngagement, mergeGuestBehaviorToUser } from './services/ai-recommendation.service'
 import { DemoRouteInspectorModal } from './components/common/DemoRouteInspectorModal'
 import { handleSecretDemoTap } from './utils/demoHelperState'
 
@@ -831,6 +831,9 @@ function App() {
     localStorage.setItem('zm_token', userToken)
     localStorage.setItem('zm_last_active_time', Date.now().toString())
     sessionStorage.setItem('zm_tab_session_id', 'active_session')
+    if (userData?.id && (!userData?.role || userData.role === 'BUYER')) {
+      mergeGuestBehaviorToUser(userData.id)
+    }
     if (userData?.role === 'ADMIN' || userData?.role === 'PLATFORM_SUPPORT') {
       window.location.href = '/admin'
     } else if (userData?.role === 'SHOP_OWNER' || userData?.role === 'SHOP_STAFF') {
@@ -869,7 +872,10 @@ function App() {
     }
 
     // Ghi nhận sự kiện CART lên AI Recommendation Engine để cập nhật bảng "Gợi Ý Hôm Nay"
-    trackUserEngagement('CART', product.id, product.category)
+    trackUserEngagement('CART', product.id, product.category, {
+      title: product.name,
+      price: product.price ?? product.flashPrice ?? product.originalPrice,
+    })
 
     setCart((prev) => {
       const existingIdx = prev.findIndex(

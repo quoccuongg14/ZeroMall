@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, Query, Param } from '@nestjs/common';
 import { AiSearchService } from './ai-search.service';
 import { AiModerationService } from './ai-moderation.service';
-import { RecommendationService, TrackActionDto } from './recommendation.service';
+import { RecommendationService, TrackActionDto, MergeGuestDto } from './recommendation.service';
 import { AiAssistantService, AssistantChatDto } from './ai-assistant.service';
 import { AiCategoryAuditorService, AuditProductDto } from './ai-category-auditor.service';
 import { AiSemanticSearchDto, AiVisualSearchDto, AiModerateDto } from './ai.types';
@@ -60,6 +60,11 @@ export class AiController {
   async trackUserAction(@Body() dto: TrackActionDto) {
     await this.recommendationService.trackUserAction(dto);
     return { success: true };
+  }
+
+  @Post('ai/merge-guest')
+  async mergeGuestProfile(@Body() dto: MergeGuestDto) {
+    return this.recommendationService.mergeGuestProfile(dto.guestId, dto.userId);
   }
 
   @Post('ai/assistant/chat')

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/api.config';
+import { queryClient } from '../config/queryClient';
 
 export interface PersonalizedFeedResponse {
   products: any[];
@@ -13,9 +14,19 @@ export interface PersonalizedFeedResponse {
     isPersonalized: boolean;
     detectedGender?: string;
     topInterests: string[];
+    topKeywords?: string[];
+    preferredPriceRange?: number;
     hasRecentInteractions: boolean;
     recentAction?: string;
   };
+}
+
+export function getGuestId(): string | null {
+  try {
+    return localStorage.getItem('zm_guest_id') || sessionStorage.getItem('zm_guest_id');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -30,8 +41,7 @@ export function getEffectiveUserId(): string {
     }
   } catch {}
 
-  // Đối với khách vãng lai: Lưu vào localStorage để duy trì lịch sử phiên xuyên suốt các tab
-  let guestId = localStorage.getItem('zm_guest_id') || sessionStorage.getItem('zm_guest_id');
+  let guestId = getGuestId();
   if (!guestId) {
     guestId = 'guest_' + Math.random().toString(36).substring(2, 11);
     localStorage.setItem('zm_guest_id', guestId);
@@ -41,8 +51,31 @@ export function getEffectiveUserId(): string {
 }
 
 /**
+ * Gộp lịch sử hành vi từ Guest sang tài khoản User ngay khi đăng nhập / đăng ký thành công
+ */
+export async function mergeGuestBehaviorToUser(userId?: string): Promise<void> {
+  if (!userId) return;
+  const guestId = getGuestId();
+  if (!guestId || guestId === userId || !guestId.startsWith('guest_')) return;
+
+  try {
+    await fetch(`${API_BASE_URL}/products/ai/merge-guest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ guestId, userId }),
+    });
+    localStorage.removeItem('zm_guest_id');
+    sessionStorage.removeItem('zm_guest_id');
+    queryClient.invalidateQueries({ queryKey: ['products', 'personalized_feed'] });
+  } catch {
+    // Non-blocking
+  }
+}
+
+/**
  * Gửi sự kiện hành vi người dùng lên AI Recommendation Engine
- * (Kích hoạt khi Xem sản phẩm, Thêm vào giỏ, Thả tim, Tìm kiếm)
+ * (Kích hoạt khi Xem sản phẩm, Thêm vào giỏ, Thả tim, Tìm kiếm, Mua hàng)
  */
 export async function trackUserEngagement(
   action: 'VIEW' | 'CART' | 'LIKE' | 'PURCHASE' | 'SEARCH',
@@ -56,6 +89,7 @@ export async function trackUserEngagement(
     await fetch(`${API_BASE_URL}/products/ai/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      keepalive: action === 'PURCHASE',
       body: JSON.stringify({
         userId,
         action,
@@ -64,7 +98,10 @@ export async function trackUserEngagement(
         metadata,
       }),
     });
-  } catch (e) {
+
+    // Làm mới feed gợi ý ngay lập tức khi người dùng quay về trang chủ / trang Gợi ý
+    queryClient.invalidateQueries({ queryKey: ['products', 'personalized_feed'] });
+  } catch {
     // Non-blocking error handling
   }
 }
