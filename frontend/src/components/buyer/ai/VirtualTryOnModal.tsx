@@ -7,6 +7,7 @@ import {
   TryOnScannerTab,
   GemShieldBar,
   SlotItemPickerModal,
+  TryOnSizeGuideModal,
   useTryOnLogic,
 } from './tryon'
 import type { VirtualTryOnModalProps } from './tryon'
@@ -114,14 +115,9 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               outfitItems={logic.outfitItems}
               predictedSizes={logic.predictedSizes}
               selectedItemSizes={logic.resolvedItemSizes}
-              onSelectItemSize={logic.setItemSizeOverride}
-              isSizeGuideOpen={logic.isSizeGuideOpen}
-              onToggleSizeGuide={() => logic.setIsSizeGuideOpen((prev) => !prev)}
-              onAddSingleItemToCart={logic.handleAddSingleItemToCart}
-              onBuySingleItem={logic.handleBuySingleItem}
+              onOpenSizeGuide={() => logic.setIsSizeGuideOpen(true)}
               totalOutfitPrice={logic.totalOutfitPrice}
               onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
-              onBuyWholeOutfit={logic.handleBuyWholeOutfit}
               fileInputRef={logic.fileInputRef}
               onPhotoUpload={logic.handlePhotoUpload}
               onClearUserPhoto={logic.handleClearUserPhoto}
@@ -267,6 +263,24 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         gender={logic.gender}
         onGenderChange={logic.setGender}
         onSelectItem={(item, slot) => logic.handleSelectSlotItem(item, slot)}
+      />
+
+      {/* Modal Gợi Ý Chọn Size Chuẩn Sau Khi Thử Đồ */}
+      <TryOnSizeGuideModal
+        isOpen={logic.isSizeGuideOpen}
+        onClose={() => logic.setIsSizeGuideOpen(false)}
+        height={logic.height}
+        weight={logic.weight}
+        gender={logic.gender}
+        outfitItems={logic.outfitItems}
+        predictedSizes={logic.predictedSizes}
+        selectedItemSizes={logic.resolvedItemSizes}
+        onSelectItemSize={logic.setItemSizeOverride}
+        onAddSingleItemToCart={logic.handleAddSingleItemToCart}
+        onBuySingleItem={logic.handleBuySingleItem}
+        totalOutfitPrice={logic.totalOutfitPrice}
+        onAddWholeOutfitToCart={logic.handleAddWholeOutfitToCart}
+        onBuyWholeOutfit={logic.handleBuyWholeOutfit}
       />
     </div>
   )
