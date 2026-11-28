@@ -775,12 +775,34 @@ export class RouteAccountsService {
       };
     };
 
+    const pickSellerReview = (actionGuide: string, completed: boolean, notePrefix = '') => {
+      const sellerStage = byKey.get('SELLER')!;
+      const buyerNote = trace.order.buyerEmail
+        ? `${notePrefix}Khách nhận: ${trace.order.buyerName || 'Người mua'} (${trace.order.buyerEmail}).`
+        : sellerStage.note;
+      return {
+        completed,
+        actionGuide,
+        stage: {
+          ...sellerStage,
+          note: buyerNote,
+        },
+        order: trace.order,
+        shipment: trace.shipment,
+        isCrossSoc: trace.isCrossSoc,
+      };
+    };
+
     if (orderStatus === 'CANCELLED' || spStatus === 'CANCELLED') {
       return pick('SELLER', 'Đơn hàng này đã bị hủy, không còn bước tiếp theo.', true);
     }
 
     if (orderStatus === 'COMPLETED' || spStatus === 'DELIVERED') {
-      return pick('DELIVERY_DRIVER', 'Đơn hàng đã giao thành công! Không còn bước tiếp theo.', true);
+      const guide =
+        orderStatus === 'COMPLETED'
+          ? 'Đơn hàng đã hoàn tất! Đăng nhập Tài khoản Shop dưới đây để kiểm tra đơn & đối soát doanh thu.'
+          : 'Đơn hàng đã giao thành công! Đăng nhập Tài khoản Shop dưới đây để kiểm tra đơn (hoặc vào tài khoản Người mua xác nhận đã nhận hàng).';
+      return pickSellerReview(guide, true);
     }
 
     // 1. Chưa có vận đơn hoặc mới CREATED -> Seller xác nhận & chuẩn bị hàng
@@ -914,6 +936,13 @@ export class RouteAccountsService {
 
     // 7. Đã đến Hub phát hoặc đã gán / đang đi giao
     if (['AT_DESTINATION_HUB', 'DELIVERY_ASSIGNED', 'OUT_FOR_DELIVERY'].includes(spStatus)) {
+      if (spStatus === 'OUT_FOR_DELIVERY' && portal === 'driver') {
+        return pickSellerReview(
+          'Bước cuối trên App Shipper: Bấm "✅ Giao Thành Công & Thu COD" để hoàn tất. Bước tiếp theo: Đăng nhập Tài khoản Shop dưới đây để kiểm tra đơn & doanh thu.',
+          false,
+          'Sau khi bấm Giao Thành Công, ',
+        );
+      }
       const guide =
         spStatus === 'AT_DESTINATION_HUB'
           ? `Tại ${destHub?.hubName || 'Bưu Cục Giao'} bấm "Phân Tuyến Giao", sau đó đăng nhập Shipper Giao Hàng để nhận đơn & giao khách.`

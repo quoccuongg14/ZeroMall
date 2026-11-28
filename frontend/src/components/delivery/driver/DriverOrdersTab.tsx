@@ -146,7 +146,7 @@ export const DriverOrdersTab: React.FC<DriverOrdersTabProps> = ({
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <DemoNextStepButton
             identifier={shipment.trackingNumber || shipment.orderId}
-            portal="delivery"
+            portal="driver"
             compact
           />
           <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200">

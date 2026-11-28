@@ -44,7 +44,7 @@ interface NextStepResponse {
 
 interface DemoNextStepButtonProps {
   identifier: string;
-  portal?: 'buyer' | 'seller' | 'delivery';
+  portal?: 'buyer' | 'seller' | 'delivery' | 'driver';
   hubId?: string;
   compact?: boolean;
 }
