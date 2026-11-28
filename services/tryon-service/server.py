@@ -2003,14 +2003,56 @@ class GenderDetector:
     def detect_gender(cls, img: Image.Image) -> tuple[str, float, str]:
         """
         Phân tích giới tính Nam/Nữ từ hình ảnh người dùng:
-        - Sử dụng FashnHumanParser (Semantic segmentation: 1 = face, 2 = hair)
-        - Nếu tóc dài kéo qua cằm/vai (hair_reach_ratio > 0.22 hoặc hair_area_ratio > 1.25) => Nữ (female)
-        - Nếu tóc ngắn trên gáy => Nam (male)
+        - Ưu tiên gọi CLIP Vision (/detect-gender) để phân biệt chuẩn xác chân dung Nam vs Nữ (không phụ thuộc độ dài tóc hay nền tối)
+        - Fallback sang FashnHumanParser (Semantic segmentation: 1 = face, 2 = hair) nếu CLIP tạm bận
         """
         try:
             if img is None:
                 return "male", 0.7, "Không tìm thấy ảnh hợp lệ"
 
+            # 1. CLIP Vision Zero-Shot Classification (< 50ms)
+            try:
+                thumb = img.convert("RGB").copy()
+                thumb.thumbnail((384, 384))
+                buf = io.BytesIO()
+                thumb.save(buf, format="JPEG", quality=85)
+                b64_img = base64.b64encode(buf.getvalue()).decode("ascii")
+                req_body = json.dumps({"imageBase64": f"data:image/jpeg;base64,{b64_img}"}).encode("utf-8")
+
+                for clip_url in [
+                    os.environ.get("CLIP_DETECT_GENDER_URL", ""),
+                    "http://clip-service:5005/detect-gender",
+                    "http://zeromall-clip-service:5005/detect-gender",
+                    "http://127.0.0.1:5005/detect-gender",
+                ]:
+                    if not clip_url:
+                        continue
+                    try:
+                        req = urllib.request.Request(
+                            clip_url,
+                            data=req_body,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(req, timeout=3) as resp:
+                            if resp.status == 200:
+                                clip_res = json.loads(resp.read().decode("utf-8"))
+                                g = clip_res.get("gender")
+                                if g in ("female", "male"):
+                                    conf = float(clip_res.get("confidence", 0.92))
+                                    reason = (
+                                        "AI nhận diện chân dung & đường nét Nữ"
+                                        if g == "female"
+                                        else "AI nhận diện chân dung & đường nét Nam"
+                                    )
+                                    print(f"[GenderDetector-CLIP] gender={g}, conf={conf}, f={clip_res.get('femaleScore')}, m={clip_res.get('maleScore')}")
+                                    return g, conf, reason
+                    except Exception:
+                        continue
+            except Exception as clip_err:
+                print(f"[GenderDetector] CLIP probe skipped: {clip_err}")
+
+            # 2. Fallback: FashnHumanParser segmentation
             if shared_parser is not None:
                 labels = shared_parser.predict(img)
                 if isinstance(labels, (list, tuple)):
@@ -2652,7 +2694,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
                     "/api/tryon/stylist-recommend",
                     "/api/tryon/generate-top-outfits",
                     "/api/tryon/recommend-sizes",
-                    "/api/tryon/extract-garment",
+                    "/api/tryon/detect-gender",
                     "/api/tryon/extract-face",
                     "/api/tryon/full-pipeline"
                 ]
@@ -2689,15 +2731,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"error": "Invalid JSON body"}')
             return
 
-        if self.path == "/api/tryon/extract-garment":
-            # Bóc tách trang phục từ bất kỳ ảnh nào (người mẫu mặc, flat-lay, hoặc upload)
-            img_input = payload.get("image", "")
-            g_info = payload.get("garment_info", {})
-            extract_res = GarmentExtractor.extract_garment(img_input, g_info)
-            self._set_cors(200)
-            self.wfile.write(json.dumps(extract_res, ensure_ascii=False).encode("utf-8"))
-
-        elif self.path == "/api/tryon/extract-face":
+        if self.path == "/api/tryon/extract-face":
             # Trích xuất khuôn mặt người dùng thành avatar tròn trong suốt
             user_img_input = payload.get("user_image", "")
             face_res = GarmentExtractor.extract_face(user_img_input)
@@ -2769,7 +2803,7 @@ class TryOnRequestHandler(BaseHTTPRequestHandler):
 
             if user_image:
                 try:
-                    img = GarmentPipeline.load_pil_image(user_image)
+                    img = GarmentExtractor.load_pil_image(user_image)
                     if img is not None:
                         detected_gender, confidence, reason = GenderDetector.detect_gender(img)
                 except Exception as e:

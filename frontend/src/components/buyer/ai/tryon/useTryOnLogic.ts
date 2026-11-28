@@ -5,7 +5,6 @@ import type { Product } from '../../FlashSale'
 import type {
   BodyMeasurements,
   FitResult,
-  ExtractedGarment,
   CartFashionItem,
   OutfitSlots,
   OutfitSlotKey,
@@ -20,6 +19,7 @@ import {
   isOuterwearProduct,
   detectAccessoryZone,
   flattenOutfitItems,
+  isProductMatchingGender,
 } from './tryonUtils'
 import { addOutfitBundleToCart } from '../../../../utils/cartBundleHelper'
 import { predictProductSize, type SizePredictionResult } from '../../../../utils/sizePredictor'
@@ -59,14 +59,21 @@ export const useTryOnLogic = ({
     if (!saved || saved.includes('Trấn Thành') || saved.includes('tran_thanh')) return ''
     return saved
   })
-  const [height, setHeight] = useState<number>(() => {
-    return Number(localStorage.getItem('zeromall_tryon_user_height')) || 175
-  })
-  const [weight, setWeight] = useState<number>(() => {
-    return Number(localStorage.getItem('zeromall_tryon_user_weight')) || 68
-  })
+  const DEFAULT_BODY_STATS = {
+    male: { height: 175, weight: 68 },
+    female: { height: 160, weight: 50 },
+  } as const
+
   const [gender, setGender] = useState<'male' | 'female'>(() => {
     return (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
+  })
+  const [height, setHeight] = useState<number>(() => {
+    const savedGender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
+    return Number(localStorage.getItem('zeromall_tryon_user_height')) || DEFAULT_BODY_STATS[savedGender].height
+  })
+  const [weight, setWeight] = useState<number>(() => {
+    const savedGender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
+    return Number(localStorage.getItem('zeromall_tryon_user_weight')) || DEFAULT_BODY_STATS[savedGender].weight
   })
 
   // 2. Quản lý Chế độ thử đồ AI Siêu Thực
@@ -210,14 +217,12 @@ export const useTryOnLogic = ({
   const [isSearchingDb, setIsSearchingDb] = useState<boolean>(false)
   const searchTimeoutRef = useRef<any>(null)
 
-  // 4. Kết quả phân tích AI & Bóc tách đồ
+  // 4. Kết quả phân tích AI thử đồ
   const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false)
   const [measurements, setMeasurements] = useState<BodyMeasurements | null>(null)
   const [fitResult, setFitResult] = useState<FitResult | null>(null)
   const [compositeTryOnImage, setCompositeTryOnImage] = useState<string>('')
-  const [extractedGarment, setExtractedGarment] = useState<ExtractedGarment | null>(null)
-  const [isScanningGarment, setIsScanningGarment] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'photo' | 'scanner' | 'heatmap'>('photo')
+  const [activeTab, setActiveTab] = useState<'photo' | 'heatmap'>('photo')
   const [viewMode, setViewMode] = useState<'tryon' | 'original' | 'sidebyside'>('tryon')
   const [toastMsg, setToastMsg] = useState<string>('')
 
@@ -225,7 +230,6 @@ export const useTryOnLogic = ({
   const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
   const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
   const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(() => initialBundle?.id || null)
-  const [rightColTab, setRightColTab] = useState<'outfits100' | 'wardrobe' | 'scanner'>('wardrobe')
   const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
   const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
   const [slotPickerTarget, setSlotPickerTarget] = useState<OutfitSlotKey | null>(null)
@@ -513,15 +517,16 @@ export const useTryOnLogic = ({
           }
         } else {
           setAvailablePants(effectivePants)
-          if (verifiedCartItems.length > 0) {
-            const first = verifiedCartItems[0].product
+          const matchingCart = verifiedCartItems.find((c) => isProductMatchingGender(c.product, gender))
+          if (matchingCart) {
+            const first = matchingCart.product
             const { outfit, activeSlot } = buildOutfitFromSingleProduct(first)
             setSelectedOutfit(outfit)
             setActiveOutfitSlot(activeSlot)
             setSelectedPant(first)
             setSourceTab('cart')
           } else if (effectivePants.length > 0) {
-            const first = effectivePants[0]
+            const first = effectivePants.find((p) => isProductMatchingGender(p, gender)) || effectivePants[0]
             const { outfit, activeSlot } = buildOutfitFromSingleProduct(first)
             setSelectedOutfit(outfit)
             setActiveOutfitSlot(activeSlot)
@@ -544,6 +549,43 @@ export const useTryOnLogic = ({
 
     fetchRealFashion()
   }, [isOpen, product, cart])
+
+  // Chuyển đổi giới tính thông minh:
+  // - Khi sang Nữ: xóa hết đồ đang thử hiện tại, cập nhật chiều cao/cân nặng mặc định của nữ (160cm / 50kg), lọc & hiển thị đồ nữ
+  // - Khi là Nam: giữ nguyên đồ đang thử hiện tại, khôi phục thông số nam nếu đang ở thông số mặc định nữ
+  const handleChangeGender = (nextGender: 'male' | 'female', clearCurrentOutfit = true) => {
+    setGender(nextGender)
+    setCategoryFilter('all')
+    setSearchQuery('')
+    setSearchResults([])
+
+    if (nextGender === 'female') {
+      if (gender !== 'female' || (height === DEFAULT_BODY_STATS.male.height && weight === DEFAULT_BODY_STATS.male.weight)) {
+        setHeight(DEFAULT_BODY_STATS.female.height)
+        setWeight(DEFAULT_BODY_STATS.female.weight)
+      }
+      if (clearCurrentOutfit) {
+        setSelectedOutfit({ top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] })
+        setSelectedPant(null)
+        setActiveOutfitSlot('top')
+        setSelectedOutfitBundleId(null)
+        setSelectedColorVariants({})
+        setSizeOverrides({})
+        setCompositeTryOnImage('')
+        setFitResult(null)
+        setMeasurements(null)
+      }
+      const hasFemaleInCart = cartFashionItems.some((c) => isProductMatchingGender(c.product, 'female'))
+      if (sourceTab === 'cart' && !hasFemaleInCart) {
+        setSourceTab('catalog')
+      }
+    } else {
+      if (gender === 'female' && height === DEFAULT_BODY_STATS.female.height && weight === DEFAULT_BODY_STATS.female.weight) {
+        setHeight(DEFAULT_BODY_STATS.male.height)
+        setWeight(DEFAULT_BODY_STATS.male.weight)
+      }
+    }
+  }
 
   // Xử lý tải ảnh người dùng & tự động phân tích giới tính AI
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -575,11 +617,14 @@ export const useTryOnLogic = ({
           }
 
           if (detectedG) {
-            setGender(detectedG)
-            triggerToast(`🤖 AI nhận diện vóc dáng: ${detectedG === 'male' ? 'Nam' : 'Nữ'}. Đã tự động lọc đồ ${detectedG === 'male' ? 'Nam' : 'Nữ'}!`)
+            handleChangeGender(detectedG, detectedG === 'female')
+            triggerToast(
+              detectedG === 'female'
+                ? '🤖 AI nhận diện ảnh Nữ (160cm • 50kg): Đã dọn đồ đang thử và hiển thị lựa chọn đồ Nữ!'
+                : '🤖 AI nhận diện ảnh Nam: Giữ nguyên đồ đang thử hiện tại!'
+            )
           } else {
-            triggerToast('📸 Đã tải ảnh của bạn! Đang phân tích vóc dáng...')
-            // Gọi endpoint AI phân tích thị giác
+            triggerToast('📸 Đã tải ảnh của bạn! Đang phân tích giới tính & vóc dáng...')
             try {
               const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/detect-gender`, {
                 method: 'POST',
@@ -589,9 +634,12 @@ export const useTryOnLogic = ({
               if (res.ok) {
                 const data = await res.json()
                 if (data && (data.gender === 'male' || data.gender === 'female')) {
-                  setGender(data.gender)
-                  const gLabel = data.gender === 'male' ? 'Nam' : 'Nữ'
-                  triggerToast(`🤖 AI nhận diện ảnh: Vóc dáng ${gLabel} (${data.reason || 'Tự động lọc trang phục ' + gLabel}). Bạn có thể đổi lại nếu muốn!`)
+                  handleChangeGender(data.gender, data.gender === 'female')
+                  triggerToast(
+                    data.gender === 'female'
+                      ? `🤖 AI nhận diện ảnh Nữ (160cm • 50kg): Đã xóa đồ cũ và mở danh sách đồ Nữ!`
+                      : `🤖 AI nhận diện ảnh Nam (${data.reason || 'Tự động lọc đồ Nam'}). Giữ nguyên đồ đang thử!`
+                  )
                 }
               }
             } catch (err) {
@@ -608,7 +656,7 @@ export const useTryOnLogic = ({
   const handleSelectPresetModel = (modelUrl: string, modelName: string, modelGender: 'male' | 'female') => {
     setUserPhoto(modelUrl)
     setUserPhotoName(modelName)
-    setGender(modelGender)
+    handleChangeGender(modelGender, modelGender === 'female')
     setCompositeTryOnImage('')
     setViewMode('original')
     try {
@@ -617,7 +665,11 @@ export const useTryOnLogic = ({
     } catch (e) {
       console.warn('[useTryOnLogic] Failed to cache selected model to localStorage:', e)
     }
-    triggerToast(`Đã chọn [${modelName}]! Bấm "Ướm Cả Bộ" để AI thử đồ.`)
+    triggerToast(
+      modelGender === 'female'
+        ? `Đã chọn [${modelName}] (160cm • 50kg) và hiển thị các món đồ Nữ!`
+        : `Đã chọn [${modelName}]! Bấm "Ướm Cả Bộ" để AI thử đồ.`
+    )
   }
 
   // Xóa ảnh người dùng
@@ -632,85 +684,33 @@ export const useTryOnLogic = ({
     triggerToast('Đã xóa ảnh người dùng!')
   }
 
-  // Bóc tách trang phục
-  const handleScanGarment = async (garmentToScan?: Product) => {
-    const target = garmentToScan || selectedPant
-    if (!target || !target.image) return
-    setIsScanningGarment(true)
-    triggerToast('AI FashnHumanParser đang quét và bóc tách từng lớp vải...')
-
-    try {
-      const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/extract-garment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: target.image,
-          garment_info: target
-        })
-      })
-      if (res.ok) {
-        const extData = await res.json()
-        if (extData.success) {
-          setExtractedGarment(extData)
-          setActiveTab('scanner')
-          triggerToast(`Bóc tách thành công [${extData.detected_category.toUpperCase()}]!`)
-        }
-      }
-    } catch (err) {
-      console.error(err)
-      triggerToast('Không thể kết nối AI Extractor.')
-    } finally {
-      setIsScanningGarment(false)
-    }
-  }
-
-  // Tải ảnh món đồ tự do
+  // Tải ảnh món đồ tự do lên để thử trực tiếp (không cần bước bóc tách vải)
   const handleCustomGarmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = async (evt) => {
+    reader.onload = (evt) => {
       const dataUrl = evt.target?.result as string
       if (!dataUrl) return
-      setIsScanningGarment(true)
-      triggerToast('AI đang quét và bóc tách món đồ bạn vừa tải lên...')
-
-      try {
-        const res = await fetch(`${TRYON_SERVICE_URL}/api/tryon/extract-garment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            image: dataUrl,
-            garment_info: { name: file.name }
-          })
-        })
-        if (res.ok) {
-          const ext = await res.json()
-          if (ext.success) {
-            setExtractedGarment(ext)
-            const customProduct: Product = {
-              id: `custom-${Date.now()}`,
-              name: file.name.replace(/\.[^/.]+$/, ''),
-              price: '0',
-              originalPrice: '0',
-              flashPrice: '0',
-              sold: 0,
-              total: 10,
-              image: dataUrl,
-              category: ext.detected_category,
-              stock: 1
-            }
-            setSelectedPant(customProduct)
-            setActiveTab('scanner')
-            triggerToast(`AI đã bóc tách thành công: ${ext.detected_category.toUpperCase()}!`)
-            handleRunTryOn(customProduct)
-          }
-        }
-      } catch (err) {
-        console.error(err)
-        triggerToast('Lỗi khi bóc tách món đồ.')
-      } finally {
-        setIsScanningGarment(false)
+      const customProduct: Product = {
+        id: `custom-${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        price: '0',
+        originalPrice: '0',
+        flashPrice: '0',
+        sold: 0,
+        total: 10,
+        image: dataUrl,
+        category: gender === 'female' ? 'Thời Trang Nữ' : 'Thời Trang Nam',
+        stock: 1
+      }
+      const { outfit, activeSlot } = buildOutfitFromSingleProduct(customProduct)
+      setSelectedOutfit(outfit)
+      setActiveOutfitSlot(activeSlot)
+      setSelectedPant(customProduct)
+      triggerToast(`📸 Đã tải món đồ "${customProduct.name}" vào Bảng Phối Đồ!`)
+      if (userPhoto) {
+        handleRunTryOn(customProduct, undefined, undefined, undefined, undefined, outfit)
       }
     }
     reader.readAsDataURL(file)
@@ -784,9 +784,6 @@ export const useTryOnLogic = ({
           if (data.preview && data.preview.composite_image) {
             setCompositeTryOnImage(data.preview.composite_image)
             setViewMode('tryon')
-          }
-          if (data.extracted_garment && data.extracted_garment.extracted_garment_url) {
-            setExtractedGarment(data.extracted_garment)
           }
           if (data.outfits && Array.isArray(data.outfits) && data.outfits.length > 0) {
             setTopScoredOutfits(data.outfits)
@@ -1062,7 +1059,9 @@ export const useTryOnLogic = ({
   // 100 Sets AI
   const fetchTopScoredOutfits = async (targetProduct?: Product) => {
     const activeItems = flattenOutfitItems(selectedOutfit)
-    const effectiveProd = targetProduct || selectedPant || product || (activeItems.length > 0 ? activeItems[0] : null)
+    const genderMatchedPropProduct = product && isProductMatchingGender(product, gender) ? product : null
+    const genderMatchedFallback = availablePants.find((p) => isProductMatchingGender(p, gender)) || null
+    const effectiveProd = targetProduct || selectedPant || activeItems[0] || genderMatchedPropProduct || genderMatchedFallback
     if (!effectiveProd) return
 
     setIsLoadingTopOutfits(true)
@@ -1319,6 +1318,7 @@ export const useTryOnLogic = ({
     setWeight,
     gender,
     setGender,
+    handleChangeGender,
     physiqueInfo,
     currentBmi,
     gemBalance,
@@ -1345,8 +1345,6 @@ export const useTryOnLogic = ({
     measurements,
     fitResult,
     compositeTryOnImage,
-    extractedGarment,
-    isScanningGarment,
     activeTab,
     setActiveTab,
     viewMode,
@@ -1355,8 +1353,6 @@ export const useTryOnLogic = ({
     topScoredOutfits,
     isLoadingTopOutfits,
     selectedOutfitBundleId,
-    rightColTab,
-    setRightColTab,
     isOutfitModalOpen,
     setIsOutfitModalOpen,
     isSlotPickerOpen,
@@ -1379,7 +1375,6 @@ export const useTryOnLogic = ({
     handlePhotoUpload,
     handleSelectPresetModel,
     handleClearUserPhoto,
-    handleScanGarment,
     handleCustomGarmentUpload,
     handleRunTryOn,
     handleEquipItem,

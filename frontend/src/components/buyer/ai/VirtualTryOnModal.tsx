@@ -4,7 +4,6 @@ import {
   TryOnMirrorStudio,
   TryOnMixMatchBuilder,
   TryOnWardrobeTab,
-  TryOnScannerTab,
   GemShieldBar,
   SlotItemPickerModal,
   TryOnSizeGuideModal,
@@ -107,9 +106,6 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               compositeTryOnImage={logic.compositeTryOnImage}
               tryonEngineMode={logic.tryonEngineMode}
               selectedPant={logic.selectedPant}
-              extractedGarment={logic.extractedGarment}
-              isScanningGarment={logic.isScanningGarment}
-              onScanGarment={logic.handleScanGarment}
               fitResult={logic.fitResult}
               measurements={logic.measurements}
               outfitItems={logic.outfitItems}
@@ -127,7 +123,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
               weight={logic.weight}
               setWeight={logic.setWeight}
               gender={logic.gender}
-              setGender={logic.setGender}
+              setGender={logic.handleChangeGender}
               physiqueInfo={logic.physiqueInfo}
               currentBmi={logic.currentBmi}
               onRunTryOn={() => {
@@ -165,69 +161,28 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
                 onBuyWholeOutfit={logic.handleBuyWholeOutfit}
               />
 
-              {/* Bộ chuyển tab Cột 2 (Gọn gàng chỉ 2 tab trực quan) */}
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                <button
-                  type="button"
-                  onClick={() => logic.setRightColTab('wardrobe')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                    logic.rightColTab === 'wardrobe'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <span>🛍️</span> Chọn Món Trong Kho / Giỏ Hàng
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => logic.setRightColTab('scanner')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                    logic.rightColTab === 'scanner'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <span>🔬</span> Bóc Tách Vải (AI Parser)
-                </button>
-              </div>
-
-              {/* Tab 1: Tủ đồ & Giỏ hàng */}
-              {logic.rightColTab !== 'scanner' && (
-                <TryOnWardrobeTab
-                  gender={logic.gender}
-                  sourceTab={logic.sourceTab}
-                  setSourceTab={logic.setSourceTab}
-                  cartFashionItems={logic.cartFashionItems}
-                  availablePants={logic.availablePants}
-                  selectedOutfit={logic.selectedOutfit}
-                  categoryFilter={logic.categoryFilter}
-                  setCategoryFilter={logic.setCategoryFilter}
-                  searchQuery={logic.searchQuery}
-                  setSearchQuery={logic.setSearchQuery}
-                  searchResults={logic.searchResults}
-                  setSearchResults={logic.setSearchResults}
-                  isSearchingDb={logic.isSearchingDb}
-                  isLoadingPants={logic.isLoadingPants}
-                  isScanningGarment={logic.isScanningGarment}
-                  onSearchDatabase={logic.handleSearchDatabase}
-                  onEquipItem={logic.handleEquipItem}
-                  onAnchorItemTo100Sets={logic.handleAnchorItemTo100Sets}
-                  onCustomGarmentUpload={logic.handleCustomGarmentUpload}
-                  customGarmentInputRef={logic.customGarmentInputRef}
-                />
-              )}
-
-              {/* Tab 2: AI Scanner */}
-              {logic.rightColTab === 'scanner' && (
-                <TryOnScannerTab
-                  selectedPant={logic.selectedPant}
-                  extractedGarment={logic.extractedGarment}
-                  isScanningGarment={logic.isScanningGarment}
-                  onScanGarment={logic.handleScanGarment}
-                  onAnchorItemTo100Sets={logic.handleAnchorItemTo100Sets}
-                />
-              )}
+              {/* Tủ đồ & Giỏ hàng (Hiển thị trực tiếp, không chia tab bóc tách vải) */}
+              <TryOnWardrobeTab
+                gender={logic.gender}
+                sourceTab={logic.sourceTab}
+                setSourceTab={logic.setSourceTab}
+                cartFashionItems={logic.cartFashionItems}
+                availablePants={logic.availablePants}
+                selectedOutfit={logic.selectedOutfit}
+                categoryFilter={logic.categoryFilter}
+                setCategoryFilter={logic.setCategoryFilter}
+                searchQuery={logic.searchQuery}
+                setSearchQuery={logic.setSearchQuery}
+                searchResults={logic.searchResults}
+                setSearchResults={logic.setSearchResults}
+                isSearchingDb={logic.isSearchingDb}
+                isLoadingPants={logic.isLoadingPants}
+                onSearchDatabase={logic.handleSearchDatabase}
+                onEquipItem={logic.handleEquipItem}
+                onAnchorItemTo100Sets={logic.handleAnchorItemTo100Sets}
+                onCustomGarmentUpload={logic.handleCustomGarmentUpload}
+                customGarmentInputRef={logic.customGarmentInputRef}
+              />
             </div>
           </div>
         </div>
@@ -263,7 +218,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
         height={logic.height}
         weight={logic.weight}
         gender={logic.gender}
-        onGenderChange={logic.setGender}
+        onGenderChange={logic.handleChangeGender}
         onSelectItem={(item, slot) => logic.handleSelectSlotItem(item, slot)}
       />
 

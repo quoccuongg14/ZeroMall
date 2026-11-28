@@ -1253,6 +1253,48 @@ class ClipHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
 
+        elif self.path == "/detect-gender":
+            try:
+                pil_img, cache_key = parse_pil_image(payload)
+                if pil_img is None and cache_key is None:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Missing image"}).encode("utf-8"))
+                    return
+
+                img_emb, _, _ = get_cached_image_features(cache_key, pil_img)
+                female_prompts = [
+                    "a portrait or fashion photo of a woman, young lady, female model",
+                    "a woman wearing a dress, top, or feminine hairstyle and makeup",
+                ]
+                male_prompts = [
+                    "a portrait or fashion photo of a man, young guy, male model",
+                    "a man with short hair wearing menswear shirt or jacket",
+                ]
+                f_scores = [float(util.cos_sim(img_emb, get_cached_title_embedding(p))[0].item()) for p in female_prompts]
+                m_scores = [float(util.cos_sim(img_emb, get_cached_title_embedding(p))[0].item()) for p in male_prompts]
+                female_score = sum(f_scores) / len(f_scores)
+                male_score = sum(m_scores) / len(m_scores)
+                gender = "female" if female_score >= male_score else "male"
+                margin = abs(female_score - male_score)
+                confidence = round(min(0.99, 0.72 + margin * 4.5), 2)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "gender": gender,
+                    "confidence": confidence,
+                    "femaleScore": round(female_score, 4),
+                    "maleScore": round(male_score, 4),
+                }).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+
         elif self.path in ["/audit", "/classify"]:
             try:
                 name = (payload.get("name") or payload.get("title") or "").strip()

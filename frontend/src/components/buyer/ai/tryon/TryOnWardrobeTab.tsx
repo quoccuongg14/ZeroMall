@@ -19,7 +19,6 @@ interface TryOnWardrobeTabProps {
   setSearchResults: (items: Product[]) => void
   isSearchingDb: boolean
   isLoadingPants: boolean
-  isScanningGarment: boolean
   onSearchDatabase: (query: string) => void
   onEquipItem: (item: Product) => void
   onAnchorItemTo100Sets: (item: Product) => void
@@ -42,30 +41,45 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
   setSearchResults,
   isSearchingDb,
   isLoadingPants,
-  isScanningGarment,
   onSearchDatabase,
   onEquipItem,
   onAnchorItemTo100Sets,
   onCustomGarmentUpload,
   customGarmentInputRef,
 }) => {
+  const filterItemsByGenderAndCategory = (list: Product[]) =>
+    list.filter((p) => {
+      const slot = detectItemSlot(p)
+      if (!slot) return false
+      if (gender && !isProductMatchingGender(p, gender)) return false
+      if (categoryFilter === 'all') return true
+      return slot === categoryFilter
+    })
+
+  const activeSourceList =
+    sourceTab === 'cart'
+      ? cartFashionItems.map(c => c.product)
+      : (searchQuery.trim() ? searchResults : availablePants)
+  const visibleItems = filterItemsByGenderAndCategory(activeSourceList)
+  const visibleCartCount = cartFashionItems.filter((c) => isProductMatchingGender(c.product, gender)).length
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 shadow-2xs space-y-3.5">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
-            <span>🛍️</span> Chọn Món Đồ Phối Vào Bảng Đồ
+            <span>🛍️</span> Chọn Món Đồ Phối Vào Bảng Đồ ({gender === 'female' ? 'Đồ Nữ' : 'Đồ Nam'})
           </h3>
           <p className="text-[11px] text-slate-400">
-            Chọn món đồ bạn muốn để AI ướm thử vào cơ thể
+            Chọn món đồ {gender === 'female' ? 'nữ' : 'nam'} bạn muốn để AI ướm thử vào cơ thể
           </p>
         </div>
         <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
           {sourceTab === 'cart'
-            ? `${cartFashionItems.length} món trong giỏ`
+            ? `${visibleCartCount} món trong giỏ`
             : searchQuery.trim()
-            ? `${searchResults.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} kết quả`
-            : `${availablePants.filter(p => categoryFilter === 'all' || detectItemSlot(p) === categoryFilter).length} mẫu`}
+            ? `${visibleItems.length} kết quả`
+            : `${visibleItems.length} mẫu ${gender === 'female' ? 'nữ' : 'nam'}`}
         </span>
       </div>
 
@@ -81,9 +95,9 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
           }`}
         >
           <span>🛒</span> Trong Giỏ Hàng
-          {cartFashionItems.length > 0 && (
+          {visibleCartCount > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-[#ee4d2d] text-white">
-              {cartFashionItems.length}
+              {visibleCartCount}
             </span>
           )}
         </button>
@@ -105,10 +119,9 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
         <button
           type="button"
           onClick={() => customGarmentInputRef.current?.click()}
-          disabled={isScanningGarment}
-          className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-[#ee4d2d] text-slate-700 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+          className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-[#ee4d2d] text-slate-700 rounded-xl text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer"
         >
-          <span>📷</span> {isScanningGarment ? 'AI đang quét trang phục...' : 'Tải ảnh món đồ riêng của bạn để thử'}
+          <span>📷</span> Tải ảnh món đồ riêng của bạn để thử
         </button>
         <input
           ref={customGarmentInputRef}
@@ -182,15 +195,7 @@ export const TryOnWardrobeTab: React.FC<TryOnWardrobeTabProps> = ({
         </div>
       ) : (
         <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-          {(sourceTab === 'cart' ? cartFashionItems.map(c => c.product) : (searchQuery.trim() ? searchResults : availablePants))
-            .filter((p) => {
-              const slot = detectItemSlot(p)
-              if (!slot) return false
-              if (gender && !isProductMatchingGender(p, gender)) return false
-              if (categoryFilter === 'all') return true
-              return slot === categoryFilter
-            })
-            .map((item) => {
+          {visibleItems.map((item) => {
               const isEquipped = isProductInOutfit(selectedOutfit, item.id)
               return (
                 <div

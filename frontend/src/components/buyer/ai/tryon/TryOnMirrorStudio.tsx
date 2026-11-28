@@ -1,12 +1,12 @@
 import React from 'react'
 import type { Product } from '../../FlashSale'
-import type { BodyMeasurements, ExtractedGarment, FitResult, TryonEngineMode } from './types'
+import type { BodyMeasurements, FitResult, TryonEngineMode } from './types'
 import { formatCurrencyVND } from '../../../../utils/formatters'
 import type { SizePredictionResult } from '../../../../utils/sizePredictor'
 
 interface TryOnMirrorStudioProps {
-  activeTab: 'photo' | 'scanner' | 'heatmap'
-  setActiveTab: (tab: 'photo' | 'scanner' | 'heatmap') => void
+  activeTab: 'photo' | 'heatmap'
+  setActiveTab: (tab: 'photo' | 'heatmap') => void
   viewMode: 'tryon' | 'original' | 'sidebyside'
   setViewMode: (mode: 'tryon' | 'original' | 'sidebyside') => void
   onOpen100SetsModal?: () => void
@@ -16,9 +16,6 @@ interface TryOnMirrorStudioProps {
   compositeTryOnImage: string
   tryonEngineMode?: TryonEngineMode
   selectedPant: Product | null
-  extractedGarment?: ExtractedGarment | null
-  isScanningGarment?: boolean
-  onScanGarment?: () => void
   fitResult: FitResult | null
   measurements: BodyMeasurements | null
   outfitItems: Product[]
@@ -451,7 +448,7 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
                   max="220"
                   value={height || ''}
                   onChange={(e) => setHeight(Number(e.target.value))}
-                  placeholder="175"
+                  placeholder={gender === 'female' ? '160' : '175'}
                   className="w-full px-2.5 py-1.5 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:border-[#ee4d2d] focus:outline-hidden transition"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
@@ -471,7 +468,7 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
                   max="150"
                   value={weight || ''}
                   onChange={(e) => setWeight(Number(e.target.value))}
-                  placeholder="68"
+                  placeholder={gender === 'female' ? '50' : '68'}
                   className="w-full px-2.5 py-1.5 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:border-[#ee4d2d] focus:outline-hidden transition"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
@@ -487,7 +484,7 @@ export const TryOnMirrorStudio: React.FC<TryOnMirrorStudioProps> = ({
             </span>
             <button
               type="button"
-              disabled={isLoadingAi || !selectedPant || !height || !weight}
+              disabled={isLoadingAi || (!selectedPant && outfitItems.length === 0) || !height || !weight}
               onClick={onRunTryOn}
               className="text-[#ee4d2d] hover:text-[#d93b1d] font-bold text-[11px] shrink-0 ml-2 hover:underline cursor-pointer disabled:opacity-40"
             >

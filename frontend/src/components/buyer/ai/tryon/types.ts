@@ -64,17 +64,6 @@ export interface ScoredOutfitBundle {
   discount_percent: number
 }
 
-export interface ExtractedGarment {
-  success: boolean
-  detected_category: string
-  dominant_colors: string[]
-  dimensions: { width: number; height: number; orig_width: number; orig_height: number }
-  bbox: number[]
-  mask_url: string
-  extracted_garment_url: string
-  pixels_count: number
-}
-
 export interface CartFashionItem {
   product: Product
   variant?: string
