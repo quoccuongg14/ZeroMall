@@ -51,16 +51,27 @@ export class RouteAccountsService {
       .replace(/[đĐ]/g, 'd')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\b(tp\.?|thanh pho|tinh|quan|huyen|thi xa|phuong|xa|thi tran)\b/g, ' ')
-      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/[^a-z0-9.\s]/g, ' ')
+      // Chỉ bỏ tiền tố hành chính khi KHÔNG đứng trước số (giữ "quan 1", "phuong 4" để tránh "1" khớp nhầm "12")
+      .replace(/\b(tp\.?|thanh pho|tinh|thi tran)\b/g, ' ')
+      .replace(/\b(quan|huyen|thi xa|phuong|xa)\b(?!\s*\d+)/g, ' ')
+      .replace(/\./g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  private containsPhrase(haystackNorm: string, needleNorm: string): boolean {
+    if (!haystackNorm || !needleNorm || needleNorm.length < 2) return false;
+    // Không bao giờ cho phép chuỗi chỉ toàn chữ số đứng đơn độc (ví dụ "1" hoặc "4") khớp tự do
+    if (/^\d+$/.test(needleNorm)) return false;
+    const escaped = needleNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`).test(haystackNorm);
   }
 
   private matchesAddress(addressNorm: string, candidate?: string | null): boolean {
     const c = this.normalizeText(candidate);
     if (!c || c.length < 2 || !addressNorm) return false;
-    return addressNorm.includes(c) || c.includes(addressNorm);
+    return this.containsPhrase(addressNorm, c) || this.containsPhrase(c, addressNorm);
   }
 
   private pickBestHub(
@@ -84,13 +95,21 @@ export class RouteAccountsService {
       const hubProv = this.normalizeText(hub.province);
       const hubName = this.normalizeText(hub.name);
 
-      if (hubDist && ((distNorm && (distNorm.includes(hubDist) || hubDist.includes(distNorm))) || addrNorm.includes(hubDist))) {
+      if (
+        hubDist &&
+        ((distNorm && (this.containsPhrase(distNorm, hubDist) || this.containsPhrase(hubDist, distNorm))) ||
+          this.containsPhrase(addrNorm, hubDist))
+      ) {
         score += 100;
       }
-      if (hubProv && ((provNorm && (provNorm.includes(hubProv) || hubProv.includes(provNorm))) || addrNorm.includes(hubProv))) {
+      if (
+        hubProv &&
+        ((provNorm && (this.containsPhrase(provNorm, hubProv) || this.containsPhrase(hubProv, provNorm))) ||
+          this.containsPhrase(addrNorm, hubProv))
+      ) {
         score += 45;
       }
-      if (hubName && addrNorm.includes(hubName)) {
+      if (hubName && this.containsPhrase(addrNorm, hubName)) {
         score += 30;
       }
       return score;
@@ -102,6 +121,58 @@ export class RouteAccountsService {
       .sort((a, b) => b.score - a.score);
 
     return ranked[0]?.hub || null;
+  }
+
+  private extractLatestLinehaulTarget(
+    trackingLogs: Array<{ status?: string | null; description?: string | null; hubId?: string | null }> | undefined,
+    allHubs: any[],
+  ): { originHub: any | null; destHub: any | null; sealNumber: string | null } | null {
+    if (!trackingLogs || trackingLogs.length === 0) return null;
+
+    const linehaulLog = trackingLogs.find((l) => {
+      const desc = l.description || '';
+      return l.status === 'IN_TRANSIT' || /Seal:\s*\[?[A-Z0-9-]+\]?/i.test(desc) || desc.includes('Xe tải');
+    });
+    if (!linehaulLog) return null;
+
+    const desc = linehaulLog.description || '';
+    const sealMatch = desc.match(/Seal:\s*\[?([A-Z0-9-]+)\]?/i);
+    const sealNumber = sealMatch ? sealMatch[1].toUpperCase() : null;
+
+    let originHub: any | null = linehaulLog.hubId
+      ? allHubs.find((h) => h.id === linehaulLog.hubId) || null
+      : null;
+    let destHub: any | null = null;
+
+    if (sealNumber) {
+      const parts = sealNumber.split('-');
+      // Định dạng chuẩn: SEAL-<ORIGIN_CODE>-<DEST_CODE>-<RAND>
+      if (parts.length >= 4 && parts[0] === 'SEAL') {
+        const originCode = parts[1];
+        const destCode = parts[2];
+        if (!originHub && originCode) {
+          originHub = allHubs.find((h) => (h.code || '').toUpperCase() === originCode) || null;
+        }
+        if (destCode) {
+          destHub = allHubs.find((h) => (h.code || '').toUpperCase() === destCode) || null;
+        }
+      }
+    }
+
+    if (!destHub && desc) {
+      const descLower = desc.toLowerCase();
+      destHub =
+        allHubs.find(
+          (h) =>
+            h.name &&
+            (descLower.includes(`đến ${h.name.toLowerCase()}`) ||
+              descLower.includes(`về [${h.name.toLowerCase()}]`) ||
+              descLower.includes(`về ${h.name.toLowerCase()}`)),
+        ) || null;
+    }
+
+    if (!originHub && !destHub && !sealNumber) return null;
+    return { originHub, destHub, sealNumber };
   }
 
   private rankLocalDrivers(
@@ -256,6 +327,11 @@ export class RouteAccountsService {
    * Truy vết đủ 7 chặng tài khoản từ Order / Invoice / TrackingNumber
    */
   async traceRouteAccounts(identifier: string) {
+    const { trace } = await this.buildRouteTrace(identifier);
+    return trace;
+  }
+
+  private async buildRouteTrace(identifier: string) {
     const id = (identifier || '').trim();
     if (!id) throw new NotFoundException('Vui lòng cung cấp mã đơn hàng hoặc mã vận đơn.');
 
@@ -295,6 +371,10 @@ export class RouteAccountsService {
         assignments: {
           include: { driver: true },
           orderBy: { assignedAt: 'desc' },
+        },
+        trackingLogs: {
+          orderBy: { timestamp: 'desc' },
+          take: 15,
         },
       },
     });
@@ -405,10 +485,16 @@ export class RouteAccountsService {
       (a) => a.type === 'DELIVERY' && a.status !== 'CANCELLED',
     );
 
-    // 1. Origin Hub
+    // 1. Origin Hub (chỉ dùng currentHub nếu đơn chưa sang chặng giao cuối)
+    const earlyOriginHubFromCurrent =
+      shipment?.currentHub &&
+      shipment.currentHub.type !== 'SORTING_CENTER' &&
+      ['PICKED_UP', 'AT_ORIGIN_HUB'].includes((shipment.status || '').toUpperCase())
+        ? shipment.currentHub
+        : null;
     const originHub =
       (assignedPickup?.driver?.hubId && allHubs.find((h) => h.id === assignedPickup.driver.hubId)) ||
-      (shipment?.currentHub && shipment.currentHub.type !== 'SORTING_CENTER' ? shipment.currentHub : null) ||
+      earlyOriginHubFromCurrent ||
       this.pickBestHub(allHubs, pickupAddressText, 'ORIGIN_HUB', pickupDistrict, pickupProvince) ||
       allHubs.find((h) => h.type === 'ORIGIN_HUB') ||
       null;
@@ -589,30 +675,36 @@ export class RouteAccountsService {
       },
     ];
 
+    const linehaulTarget = this.extractLatestLinehaulTarget(shipment?.trackingLogs, allHubs);
+
     return {
-      order: {
-        id: order.id,
-        invoiceNo: order.invoiceNo,
-        orderStatus: order.orderStatus,
-        totalAmount: order.totalAmount,
-        paymentMethod: order.paymentMethod,
-        buyerName: order.buyerName,
-        buyerEmail: order.buyerEmail,
-        shippingAddress: order.shippingAddress,
-        createdAt: order.createdAt,
-        shopName: shop?.name || null,
+      linehaulTarget,
+      hubUsersMap,
+      trace: {
+        order: {
+          id: order.id,
+          invoiceNo: order.invoiceNo,
+          orderStatus: order.orderStatus,
+          totalAmount: order.totalAmount,
+          paymentMethod: order.paymentMethod,
+          buyerName: order.buyerName,
+          buyerEmail: order.buyerEmail,
+          shippingAddress: order.shippingAddress,
+          createdAt: order.createdAt,
+          shopName: shop?.name || null,
+        },
+        shipment: shipment
+          ? {
+              id: shipment.id,
+              trackingNumber: shipment.trackingNumber,
+              status: shipment.status,
+              currentHubCode: shipment.currentHub?.code || null,
+              currentHubName: shipment.currentHub?.name || null,
+            }
+          : null,
+        isCrossSoc,
+        stages,
       },
-      shipment: shipment
-        ? {
-            id: shipment.id,
-            trackingNumber: shipment.trackingNumber,
-            status: shipment.status,
-            currentHubCode: shipment.currentHub?.code || null,
-            currentHubName: shipment.currentHub?.name || null,
-          }
-        : null,
-      isCrossSoc,
-      stages,
     };
   }
 
@@ -620,7 +712,7 @@ export class RouteAccountsService {
    * Trả về DUY NHẤT 1 bước tiếp theo cần thao tác dựa trên trạng thái hiện tại của đơn hàng
    */
   async getNextStepHint(identifier: string, contextHubId?: string, portal?: string) {
-    const trace = await this.traceRouteAccounts(identifier);
+    const { trace, linehaulTarget, hubUsersMap } = await this.buildRouteTrace(identifier);
     const byKey = new Map(trace.stages.map((s) => [s.stageKey, s]));
 
     const orderStatus = (trace.order.orderStatus || '').toUpperCase();
@@ -643,6 +735,45 @@ export class RouteAccountsService {
       shipment: trace.shipment,
       isCrossSoc: trace.isCrossSoc,
     });
+
+    const pickTargetHub = (targetHub: any, actionGuide: string) => {
+      const code = (targetHub.code || '').toUpperCase();
+      if (originSoc?.hubCode && code === originSoc.hubCode.toUpperCase()) {
+        return pick('ORIGIN_SOC', actionGuide);
+      }
+      if (destSoc?.hubCode && code === destSoc.hubCode.toUpperCase()) {
+        return pick('DEST_SOC', actionGuide);
+      }
+      if (destHub?.hubCode && code === destHub.hubCode.toUpperCase()) {
+        return pick('DEST_HUB', actionGuide);
+      }
+      if (currentHub?.hubCode && code === currentHub.hubCode.toUpperCase()) {
+        return pick('ORIGIN_HUB', actionGuide);
+      }
+      const isSocHub = targetHub.type === 'SORTING_CENTER';
+      const dynamicStage: RouteStageSummary = {
+        stageKey: isSocHub ? 'DEST_SOC' : 'DEST_HUB',
+        step: isSocHub ? 5 : 6,
+        title: isSocHub
+          ? 'Trung Tâm Phân Loại Tiếp Nhận (SOC)'
+          : 'Bưu Cục Giao Hàng Tiếp Nhận (Hub)',
+        subtitle: `${targetHub.name} (${targetHub.code})`,
+        locationLabel: [targetHub.district, targetHub.province].filter(Boolean).join(', '),
+        hubCode: targetHub.code,
+        hubName: targetHub.name,
+        hubType: targetHub.type,
+        portal: 'delivery',
+        accounts: this.getHubOperatorAccounts(targetHub, hubUsersMap),
+      };
+      return {
+        completed: false,
+        actionGuide,
+        stage: dynamicStage,
+        order: trace.order,
+        shipment: trace.shipment,
+        isCrossSoc: trace.isCrossSoc,
+      };
+    };
 
     if (orderStatus === 'CANCELLED' || spStatus === 'CANCELLED') {
       return pick('SELLER', 'Đơn hàng này đã bị hủy, không còn bước tiếp theo.', true);
@@ -683,8 +814,21 @@ export class RouteAccountsService {
       );
     }
 
-    // 4. Đang ở Origin Hub -> Kiểm tra xem đã ở SOC hay còn ở Hub con
+    // 4. Đang ở Origin Hub -> Kiểm tra xem đang ở Hub lấy, Origin SOC, hay Dest SOC
     if (spStatus === 'AT_ORIGIN_HUB') {
+      const destSocId = await this.findHubIdByCode(destSoc?.hubCode);
+      const isAtDestSoc =
+        trace.isCrossSoc &&
+        ((contextHubId && destSocId && contextHubId === destSocId) ||
+          (sp.currentHubCode && destSoc?.hubCode && sp.currentHubCode === destSoc.hubCode));
+
+      if (isAtDestSoc) {
+        return pick(
+          'DEST_HUB',
+          `Bấm "Chuyển về ${destHub?.hubCode || 'Hub giao'}", sau đó đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}).`,
+        );
+      }
+
       const originSocId = await this.findHubIdByCode(originSoc?.hubCode);
       const isAtOriginSoc =
         (contextHubId && originSocId && contextHubId === originSocId) ||
@@ -709,30 +853,53 @@ export class RouteAccountsService {
       );
     }
 
-    // 5. Đang trung chuyển (Hub -> SOC hoặc SOC -> SOC / Hub)
+    // 5. Đang trung chuyển (Hub -> Origin SOC | Origin SOC -> Dest SOC | Dest SOC -> Dest Hub)
     if (spStatus === 'IN_TRANSIT') {
-      const isFromOriginSoc = sp.currentHubCode && originSoc?.hubCode && sp.currentHubCode === originSoc.hubCode;
+      if (linehaulTarget?.destHub) {
+        const dest = linehaulTarget.destHub;
+        const sealNote = linehaulTarget.sealNumber ? ` (${linehaulTarget.sealNumber})` : '';
+        const guide =
+          dest.type === 'SORTING_CENTER'
+            ? `Đăng nhập ${dest.name} (${dest.code}) -> Tab 3. Tiếp Nhận Xe Tải Đến để đối soát & nhập kho SOC${sealNote}.`
+            : `Đăng nhập ${dest.name} (${dest.code}) -> Tab 3. Tiếp Nhận Xe Từ SOC để đối soát & nhập kho phát hàng${sealNote}.`;
+        return pickTargetHub(dest, guide);
+      }
+
+      if (sp.currentHubCode && destSoc?.hubCode && sp.currentHubCode === destSoc.hubCode) {
+        return pick(
+          'DEST_HUB',
+          `Đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}) -> Tab 3. Tiếp Nhận Xe Từ SOC để nhập kho phát hàng.`,
+        );
+      }
+
+      const isFromOriginSoc =
+        sp.currentHubCode && originSoc?.hubCode && sp.currentHubCode === originSoc.hubCode;
       if (isFromOriginSoc) {
         if (trace.isCrossSoc) {
           return pick(
             'DEST_SOC',
-            `Đăng nhập SOC Đích (${destSoc?.hubName || 'Dest SOC'}) -> Tab Nhập Hàng / Đối Soát Chuyến để nhận xe tải.`,
+            `Đăng nhập SOC Đích (${destSoc?.hubName || 'Dest SOC'}) -> Tab 3. Tiếp Nhận Xe Tải Đến để nhận chuyến.`,
           );
         }
         return pick(
           'DEST_HUB',
-          `Đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}) để nhập kho phát hàng.`,
+          `Đăng nhập Bưu Cục Giao Hàng (${destHub?.hubName || 'Dest Hub'}) -> Tab 3. Tiếp Nhận Xe Từ SOC để nhập kho phát hàng.`,
         );
       }
+
       return pick(
         'ORIGIN_SOC',
-        `Đăng nhập SOC Xuất Phát (${originSoc?.hubName || 'Origin SOC'}) -> Tab Nhập Hàng / Đối Soát Chuyến để nhận kiện từ Hub.`,
+        `Đăng nhập SOC Xuất Phát (${originSoc?.hubName || 'Origin SOC'}) -> Tab 3. Tiếp Nhận Xe Tải Đến để nhận kiện từ Hub.`,
       );
     }
 
     // 6. Đang phân loại tại SOC
     if (spStatus === 'SORTING') {
-      const isAtDestSoc = trace.isCrossSoc && sp.currentHubCode && destSoc?.hubCode && sp.currentHubCode === destSoc.hubCode;
+      const isAtDestSoc =
+        trace.isCrossSoc &&
+        sp.currentHubCode &&
+        destSoc?.hubCode &&
+        sp.currentHubCode === destSoc.hubCode;
       if (trace.isCrossSoc && !isAtDestSoc) {
         return pick(
           'DEST_SOC',
