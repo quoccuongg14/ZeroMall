@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Hub, DockTruck, LinehaulShipment, Shipment } from './types'
+import { matchesRouteTargetHub } from './helpers'
 
 export function useHubDockTrucks(
   currentHub: Hub | null,
@@ -157,58 +158,10 @@ export function useHubDockTrucks(
   const getMatchingUnloadedParcelsForTruck = (truck: DockTruck) => {
     const loadedIds = new Set(dockTrucks.flatMap((t) => t.shipments.map((s) => s.id)))
     const targetHub = hubs.find((h) => h.id === truck.targetHubId)
-    const targetProv = (targetHub?.province || '').toLowerCase()
 
     return sortingList.filter((s) => {
       if (loadedIds.has(s.id)) return false
-      const addr = (s.deliveryAddress || '').toLowerCase()
-      if (targetProv.includes('hồ chí minh') || targetProv.includes('hcm')) {
-        return (
-          addr.includes('hồ chí minh') ||
-          addr.includes('tp.hcm') ||
-          addr.includes('tp hcm') ||
-          addr.includes('sài gòn') ||
-          addr.includes('tân bình') ||
-          addr.includes('gò vấp') ||
-          addr.includes('bình thạnh') ||
-          addr.includes('quận 1') ||
-          addr.includes('quận 2') ||
-          addr.includes('quận 3') ||
-          addr.includes('quận 7') ||
-          addr.includes('quận 12') ||
-          addr.includes('thủ đức') ||
-          addr.includes('bình tân') ||
-          addr.includes('tân phú') ||
-          addr.includes('phú nhuận') ||
-          addr.includes('nhà bè') ||
-          addr.includes('bình chánh') ||
-          addr.includes('hóc môn') ||
-          addr.includes('củ chi') ||
-          addr.includes('bình dương') ||
-          addr.includes('đồng nai')
-        )
-      }
-      if (targetProv.includes('hà nội') || targetProv.includes('mê linh')) {
-        return (
-          addr.includes('hà nội') ||
-          addr.includes('mê linh') ||
-          addr.includes('cầu giấy') ||
-          addr.includes('ba đình') ||
-          addr.includes('đống đa') ||
-          addr.includes('hoàn kiếm') ||
-          addr.includes('hà đông') ||
-          addr.includes('long biên') ||
-          addr.includes('hoàng mai') ||
-          addr.includes('thanh xuân') ||
-          addr.includes('nam từ liêm') ||
-          addr.includes('bắc từ liêm') ||
-          addr.includes('tây hồ') ||
-          addr.includes('gia lâm') ||
-          addr.includes('đông anh') ||
-          addr.includes('sóc sơn')
-        )
-      }
-      return false
+      return matchesRouteTargetHub(s.deliveryAddress, targetHub)
     })
   }
 

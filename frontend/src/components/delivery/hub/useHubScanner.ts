@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Shipment, Hub, StationTab, DockTruck, LinehaulShipment } from './types'
-import { playBeepSound } from './helpers'
+import { playBeepSound, matchesRouteTargetHub } from './helpers'
 import { returnService } from '../../../services/return.service'
 
 export function useHubScanner(
@@ -101,30 +101,7 @@ export function useHubScanner(
 
         if (directScanMode && targetTruck) {
           const targetHub = hubs.find((h) => h.id === targetTruck.targetHubId)
-          const targetProv = (targetHub?.province || '').toLowerCase()
-          const addr = (targetShipment.deliveryAddress || '').toLowerCase()
-          let isMisroute = false
-
-          if (targetProv.includes('hồ chí minh') || targetProv.includes('hcm')) {
-            isMisroute =
-              !addr.includes('hồ chí minh') &&
-              !addr.includes('hcm') &&
-              !addr.includes('sài gòn') &&
-              !addr.includes('tân bình') &&
-              !addr.includes('gò vấp') &&
-              !addr.includes('bình thạnh') &&
-              !addr.includes('quận 1') &&
-              !addr.includes('bình dương') &&
-              !addr.includes('long an') &&
-              !addr.includes('đồng nai')
-          } else if (targetProv.includes('hà nội') || targetProv.includes('mê linh')) {
-            isMisroute =
-              !addr.includes('hà nội') &&
-              !addr.includes('mê linh') &&
-              !addr.includes('bắc ninh') &&
-              !addr.includes('vĩnh phúc') &&
-              !addr.includes('hải phòng')
-          }
+          const isMisroute = targetHub ? !matchesRouteTargetHub(targetShipment.deliveryAddress, targetHub) : false
 
           if (isMisroute) {
             setScanMessage({

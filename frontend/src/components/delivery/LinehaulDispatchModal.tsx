@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { matchesDistrict, matchesProvinceRegion, matchesRouteTargetHub } from './hub/helpers'
 
 export interface LinehaulShipment {
   id: string
@@ -93,124 +94,43 @@ export const detectDestinationHub = (
 
   for (const s of shipments) {
     const addr = (s.deliveryAddress || '').toLowerCase()
-    
+
     // Kiểm tra đơn hàng này là nội tỉnh hay liên tỉnh so với Hub gửi
-    const isInterProvincial = !currentProvince || !addr.includes(currentProvince.replace('thành phố ', '').replace('tỉnh ', ''))
+    const cleanCurrentProv = currentProvince.replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '').trim()
+    const isInterProvincial = !cleanCurrentProv || !addr.includes(cleanCurrentProv)
 
     for (const hub of filteredDestHubs) {
-      const prov = (hub.province || '').toLowerCase()
-      const dist = (hub.district || '').toLowerCase()
-      const name = (hub.name || '').toLowerCase()
+      const provMatched = matchesProvinceRegion(addr, hub.province)
+      const distMatched = matchesDistrict(addr, hub.district, hub.name)
       const isSoc = hub.type === 'SORTING_CENTER'
 
-      let matched = false
-      if (prov && addr.includes(prov)) matched = true
-      if (dist && addr.includes(dist)) matched = true
-      if (name && addr.includes(name)) matched = true
+      if (!provMatched && !distMatched) continue
 
-      // Phân tích các từ khóa vùng miền phổ biến tại Việt Nam
-      const isHcmAddress =
-        addr.includes('hồ chí minh') ||
-        addr.includes('tp.hcm') ||
-        addr.includes('tp hcm') ||
-        addr.includes('sài gòn') ||
-        addr.includes('tân bình') ||
-        addr.includes('gò vấp') ||
-        addr.includes('bình thạnh') ||
-        addr.includes('quận 1') ||
-        addr.includes('quận 2') ||
-        addr.includes('quận 3') ||
-        addr.includes('quận 7') ||
-        addr.includes('quận 12') ||
-        addr.includes('thủ đức') ||
-        addr.includes('bình tân') ||
-        addr.includes('tân phú') ||
-        addr.includes('phú nhuận') ||
-        addr.includes('nhà bè') ||
-        addr.includes('bình chánh') ||
-        addr.includes('hóc môn') ||
-        addr.includes('củ chi') ||
-        addr.includes('bình dương') ||
-        addr.includes('đồng nai')
-
-      if (
-        (prov.includes('hồ chí minh') || prov.includes('hcm') || name.includes('tân bình') || name.includes('hcm') || hub.id === 'hub-hcm-01') &&
-        isHcmAddress
-      ) {
-        matched = true
-      }
-
-      const isHnAddress =
-        addr.includes('hà nội') ||
-        addr.includes('mê linh') ||
-        addr.includes('cầu giấy') ||
-        addr.includes('ba đình') ||
-        addr.includes('đống đa') ||
-        addr.includes('hoàn kiếm') ||
-        addr.includes('hà đông') ||
-        addr.includes('long biên') ||
-        addr.includes('hoàng mai') ||
-        addr.includes('thanh xuân') ||
-        addr.includes('nam từ liêm') ||
-        addr.includes('bắc từ liêm') ||
-        addr.includes('tây hồ') ||
-        addr.includes('gia lâm') ||
-        addr.includes('đông anh') ||
-        addr.includes('sóc sơn')
-
-      if (
-        (prov.includes('hà nội') || prov.includes('hn') || name.includes('mê linh') || name.includes('hà nội') || hub.id === 'hub-hn-01') &&
-        isHnAddress
-      ) {
-        matched = true
-      }
-
-      const isDngAddress =
-        addr.includes('đà nẵng') ||
-        addr.includes('hải châu') ||
-        addr.includes('sơn trà') ||
-        addr.includes('ngũ hành sơn') ||
-        addr.includes('cẩm lệ') ||
-        addr.includes('liên chiểu') ||
-        addr.includes('hòa vang')
-
-      if (
-        (prov.includes('đà nẵng') || name.includes('đà nẵng') || name.includes('hòa cầm') || hub.id === 'hub-dng-soc') &&
-        isDngAddress
-      ) {
-        matched = true
-      }
-
-      const isCtAddress =
-        addr.includes('cần thơ') ||
-        addr.includes('ninh kiều') ||
-        addr.includes('bình thủy') ||
-        addr.includes('cái răng') ||
-        addr.includes('ô môn') ||
-        addr.includes('thốt nốt')
-
-      if (
-        (prov.includes('cần thơ') || name.includes('cần thơ') || name.includes('trà nóc') || hub.id === 'hub-ct-soc') &&
-        isCtAddress
-      ) {
-        matched = true
-      }
-
-      if (matched) {
-        let weight = 1
-        // NGUYÊN TẮC LOGISTICS ĐẦU MỐI: Tuyến liên tỉnh BẮT BUỘC ưu tiên hàng đầu vào SOC tổng cấp vùng
-        if (isInterProvincial) {
-          if (isSoc) {
-            weight = 100 // Ưu tiên tuyệt đối cho SOC đích khi vận chuyển liên tỉnh
-          } else {
-            weight = 0 // Giảm trọng số của bưu cục phát lẻ khi trung chuyển liên tỉnh
+      let weight = 0
+      if (isInterProvincial) {
+        // NGUYÊN TẮC LOGISTICS ĐẦU MỐI: Tuyến liên tỉnh BẮT BUỘC ưu tiên vào SOC tổng cấp vùng
+        if (isSoc) {
+          weight = 100
+        } else if (distMatched) {
+          // Trường hợp tỉnh đích chưa có SOC riêng (ví dụ Đồng Nai -> Biên Hòa Hub)
+          weight = 30
+        } else if (provMatched) {
+          weight = 1
+        }
+      } else {
+        // Tuyến nội tỉnh:
+        // - Xuất từ SOC -> Ưu tiên tuyệt đối Hub phát khớp đúng Quận/Huyện (+100), khớp tỉnh (+10)
+        // - Xuất từ Hub vệ tinh -> Ưu tiên gom về SOC tổng cùng tỉnh (+50)
+        if (currentHub?.type === 'SORTING_CENTER') {
+          if (!isSoc) {
+            weight = (provMatched ? 10 : 0) + (distMatched ? 100 : 0)
           }
         } else {
-          // Tuyến nội tỉnh: Nếu gửi từ SOC thì phát tới HUD con, nếu gửi từ HUD thì bàn giao lên SOC
-          if (!isSoc) {
-            weight = 10
-          }
+          weight = isSoc ? 50 : (provMatched ? 10 : 0) + (distMatched ? 25 : 0)
         }
+      }
+
+      if (weight > 0) {
         scores.set(hub.id, (scores.get(hub.id) || 0) + weight)
       }
     }
@@ -471,33 +391,7 @@ export const LinehaulDispatchModal: React.FC<LinehaulDispatchModalProps> = ({
   // Kiểm tra chống chất nhầm xe (Anti-Misroute Check)
   const misroutedShipments = useMemo(() => {
     if (!targetHub) return []
-    const targetProv = (targetHub.province || '').toLowerCase()
-
-    return selectedShipments.filter((s) => {
-      const addr = (s.deliveryAddress || '').toLowerCase()
-      // Tuyến đi miền Nam/TP.HCM
-      if (targetProv.includes('hồ chí minh') || targetProv.includes('hcm')) {
-        return (
-          !addr.includes('hồ chí minh') &&
-          !addr.includes('hcm') &&
-          !addr.includes('sài gòn') &&
-          !addr.includes('bình dương') &&
-          !addr.includes('long an') &&
-          !addr.includes('đồng nai')
-        )
-      }
-      // Tuyến đi miền Bắc/Hà Nội
-      if (targetProv.includes('hà nội') || targetProv.includes('mê linh')) {
-        return (
-          !addr.includes('hà nội') &&
-          !addr.includes('mê linh') &&
-          !addr.includes('bắc ninh') &&
-          !addr.includes('vĩnh phúc') &&
-          !addr.includes('hải phòng')
-        )
-      }
-      return false
-    })
+    return selectedShipments.filter((s) => !matchesRouteTargetHub(s.deliveryAddress, targetHub))
   }, [selectedShipments, targetHub])
 
   // Tổng hợp thống kê chuyến xe

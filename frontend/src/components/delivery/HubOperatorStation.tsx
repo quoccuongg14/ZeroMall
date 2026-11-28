@@ -15,6 +15,7 @@ import type {
 import {
   extractLinehaulInfo,
   isDestinedForCurrentHub,
+  matchesRouteTargetHub,
 } from './hub/helpers'
 import { useHubDockTrucks } from './hub/useHubDockTrucks'
 import { useHubDispatchModals } from './hub/useHubDispatchModals'
@@ -923,30 +924,10 @@ export const HubOperatorStation: React.FC<HubOperatorStationProps> = ({
               onOpenLastMileSingle={handleOpenLastMileSingle}
               onUnloadSingleShipmentFromDock={handleUnloadSingleShipmentFromDock}
               onSelectRouteForSorting={(destHub) => {
-                const prov = (destHub.province || '').toLowerCase()
                 const loadedIds = new Set(dockTrucks.flatMap((t) => t.shipments.map((item) => item.id)))
-                const matching = sortingList.filter((s) => {
-                  if (loadedIds.has(s.id)) return false
-                  const addr = (s.deliveryAddress || '').toLowerCase()
-                  if (prov.includes('hồ chí minh') || prov.includes('hcm')) {
-                    return (
-                      addr.includes('hồ chí minh') ||
-                      addr.includes('tp.hcm') ||
-                      addr.includes('tp hcm') ||
-                      addr.includes('sài gòn') ||
-                      addr.includes('tân bình') ||
-                      addr.includes('gò vấp') ||
-                      addr.includes('bình thạnh') ||
-                      addr.includes('quận 1') ||
-                      addr.includes('bình dương') ||
-                      addr.includes('đồng nai')
-                    )
-                  }
-                  if (prov.includes('hà nội') || prov.includes('mê linh')) {
-                    return addr.includes('hà nội') || addr.includes('mê linh') || addr.includes('cầu giấy')
-                  }
-                  return addr.includes(prov)
-                })
+                const matching = sortingList.filter(
+                  (s) => !loadedIds.has(s.id) && matchesRouteTargetHub(s.deliveryAddress, destHub)
+                )
                 setSelectedShipmentIds(new Set(matching.map((s) => s.id)))
               }}
               onOpenReconciliation={(trip) => setReconcilingTrip(trip)}

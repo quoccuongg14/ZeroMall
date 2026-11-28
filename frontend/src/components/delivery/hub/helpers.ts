@@ -49,6 +49,163 @@ export function extractLinehaulInfo(s: Shipment) {
   }
 }
 
+export function cleanAdminName(str?: string | null): string {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '')
+    .replace(/^(quận|huyện|thị xã|thị trấn|tx\.?)\s+/i, '')
+    .replace(/^(phường|xã)\s+/i, '')
+    .trim()
+}
+
+export function matchesDistrict(
+  address?: string | null,
+  district?: string | null,
+  hubName?: string | null
+): boolean {
+  const addr = (address || '').toLowerCase()
+  if (!addr) return false
+
+  const distRaw = (district || '').toLowerCase().trim()
+  if (distRaw) {
+    // Tránh trường hợp "quận 1" khớp nhầm vào "quận 12" hoặc "quận 10"
+    if (/\d+$/.test(distRaw)) {
+      const escaped = distRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')
+      if (new RegExp(`(?:^|[\\s,])${escaped}(?=$|[\\s,])`, 'i').test(addr)) {
+        return true
+      }
+      const numOnly = distRaw.match(/(\d+)$/)?.[1]
+      if (numOnly && new RegExp(`(?:^|[\\s,])(?:q\\.?|quận\\s*)${numOnly}(?=$|[\\s,])`, 'i').test(addr)) {
+        return true
+      }
+    } else if (addr.includes(distRaw)) {
+      return true
+    }
+  }
+
+  const distClean = cleanAdminName(district)
+  if (distClean && distClean.length >= 2 && !/^\d+$/.test(distClean) && addr.includes(distClean)) {
+    return true
+  }
+
+  if (hubName) {
+    const cleanedHubLabel = hubName
+      .toLowerCase()
+      .replace(/bưu cục giao hàng|trung tâm phân loại|bưu cục|trạm khai thác|spx|zmx|hub|hud|soc/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (
+      cleanedHubLabel &&
+      cleanedHubLabel.length >= 4 &&
+      !/^\d+$/.test(cleanedHubLabel) &&
+      addr.includes(cleanedHubLabel)
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+export function matchesProvinceRegion(address?: string | null, province?: string | null): boolean {
+  const addr = (address || '').toLowerCase()
+  const prov = (province || '').toLowerCase()
+  if (!addr || !prov) return false
+
+  if (addr.includes(prov)) return true
+  const provClean = cleanAdminName(prov)
+  if (provClean && provClean.length >= 3 && addr.includes(provClean)) return true
+
+  if (prov.includes('hồ chí minh') || prov.includes('hcm')) {
+    return (
+      addr.includes('hồ chí minh') ||
+      addr.includes('hcm') ||
+      addr.includes('sài gòn') ||
+      addr.includes('tân bình') ||
+      addr.includes('gò vấp') ||
+      addr.includes('bình thạnh') ||
+      addr.includes('thủ đức') ||
+      addr.includes('bình tân') ||
+      addr.includes('tân phú') ||
+      addr.includes('phú nhuận') ||
+      addr.includes('nhà bè') ||
+      addr.includes('bình chánh') ||
+      addr.includes('hóc môn') ||
+      addr.includes('củ chi') ||
+      /(?:^|[\s,])(quận|q\.?)\s*(1|2|3|4|5|6|7|8|9|10|11|12)(?=$|[\s,])/.test(addr) ||
+      addr.includes('bình dương') ||
+      addr.includes('long an') ||
+      addr.includes('đồng nai')
+    )
+  }
+
+  if (prov.includes('hà nội') || prov.includes('mê linh')) {
+    return (
+      addr.includes('hà nội') ||
+      addr.includes('mê linh') ||
+      addr.includes('cầu giấy') ||
+      addr.includes('ba đình') ||
+      addr.includes('đống đa') ||
+      addr.includes('hoàn kiếm') ||
+      addr.includes('hà đông') ||
+      addr.includes('long biên') ||
+      addr.includes('hoàng mai') ||
+      addr.includes('thanh xuân') ||
+      addr.includes('nam từ liêm') ||
+      addr.includes('bắc từ liêm') ||
+      addr.includes('tây hồ') ||
+      addr.includes('gia lâm') ||
+      addr.includes('đông anh') ||
+      addr.includes('sóc sơn') ||
+      addr.includes('bắc ninh') ||
+      addr.includes('vĩnh phúc') ||
+      addr.includes('hải phòng')
+    )
+  }
+
+  if (prov.includes('đà nẵng')) {
+    return (
+      addr.includes('đà nẵng') ||
+      addr.includes('hải châu') ||
+      addr.includes('sơn trà') ||
+      addr.includes('ngũ hành sơn') ||
+      addr.includes('cẩm lệ') ||
+      addr.includes('liên chiểu') ||
+      addr.includes('hòa vang')
+    )
+  }
+
+  if (prov.includes('cần thơ')) {
+    return (
+      addr.includes('cần thơ') ||
+      addr.includes('ninh kiều') ||
+      addr.includes('bình thủy') ||
+      addr.includes('cái răng') ||
+      addr.includes('ô môn') ||
+      addr.includes('thốt nốt')
+    )
+  }
+
+  return false
+}
+
+export function matchesRouteTargetHub(
+  address?: string | null,
+  targetHub?: { name?: string; province?: string; district?: string; type?: string } | null
+): boolean {
+  if (!targetHub) return true
+  const isSoc = targetHub.type === 'SORTING_CENTER'
+  if (isSoc) {
+    return matchesProvinceRegion(address, targetHub.province)
+  }
+  // Đối với Hub phát vệ tinh (DESTINATION_HUB), ưu tiên đối chiếu đúng Quận/Huyện nếu có thông tin quận
+  if (targetHub.district || targetHub.name) {
+    return matchesDistrict(address, targetHub.district, targetHub.name)
+  }
+  return matchesProvinceRegion(address, targetHub.province)
+}
+
 export function isDestinedForCurrentHub(s: Shipment, currentHub?: Hub | null): boolean {
   if (!currentHub) return true
 
@@ -101,23 +258,13 @@ export function isDestinedForCurrentHub(s: Shipment, currentHub?: Hub | null): b
     addr = `${s.pickupAddress.province || ''} ${s.pickupAddress.district || ''} ${s.pickupAddress.address || ''}`.toLowerCase()
   }
 
-  const cleanAdminName = (str?: string | null) => {
-    if (!str) return ''
-    return str
-      .toLowerCase()
-      .replace(/^(thành phố|tỉnh|tp\.?)\s+/i, '')
-      .replace(/^(quận|huyện|thị xã|tx\.?)\s+/i, '')
-      .replace(/^(phường|xã|thị trấn)\s+/i, '')
-      .trim()
-  }
-
   const hubProv = cleanAdminName(currentHub.province)
   const hubDist = cleanAdminName(currentHub.district)
 
   // Khớp theo tỉnh thành hoặc quận huyện của Hub/SOC (toàn quốc)
   if (hubProv && addr.includes(hubProv)) {
-    if (currentHub.type !== 'SORTING_CENTER' && hubDist) {
-      if (addr.includes(hubDist)) return true
+    if (currentHub.type !== 'SORTING_CENTER' && currentHub.district) {
+      if (matchesDistrict(addr, currentHub.district, currentHub.name)) return true
     } else {
       return true
     }
