@@ -56,16 +56,21 @@ export interface BatchAuditStats {
 /**
  * Kiểm tra ngành hàng và hình ảnh theo thời gian thực
  */
-export async function auditProductCategory(input: AuditProductInput): Promise<AuditCategoryResult | null> {
+export async function auditProductCategory(
+  input: AuditProductInput,
+  signal?: AbortSignal,
+): Promise<AuditCategoryResult | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/products/ai/audit-category`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      signal,
     });
     if (!res.ok) return null;
     return await res.json();
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return null;
     console.error('Error auditing product category:', err);
     return null;
   }

@@ -93,10 +93,10 @@ export class AiModerationService {
       }
     }
 
-    // 3. Tùy chọn kiểm tra sâu qua Gemini AI nếu có key
-    const apiKey = dto.customApiKey || process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      const geminiResult = await this.geminiAi.moderateText(apiKey, rawText, dto.category);
+    // 3. Mặc định dùng 100% Local Engine (0 token, <1ms). Chỉ dùng LLM ngoài nếu client truyền customApiKey riêng.
+    const customKey = (dto.customApiKey || '').trim();
+    if (customKey) {
+      const geminiResult = await this.geminiAi.moderateText(customKey, rawText, dto.category);
       if (geminiResult) {
         return {
           ...geminiResult,

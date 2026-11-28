@@ -103,43 +103,37 @@ export class AiSearchService {
     }
 
     // -------------------------------------------------------------------------
-    // BƯỚC 2: NẾU BỘ NÃO CHƯA CÓ -> MỚI GỌI GEMINI HOẶC OLLAMA ĐỂ GIẢI MÃ
+    // BƯỚC 2: ƯU TIÊN LOCAL OLLAMA / GROQ (KHÔNG DÙNG GEMINI MẶC ĐỊNH ĐỂ TRÁNH HẾT TOKEN)
     // -------------------------------------------------------------------------
     let geminiResult: any = null;
-    const apiKey = dto.customApiKey || process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      geminiResult = await this.geminiAi.parseSemantic(apiKey, rawQuery, dto.category || localParsed.suggestedCategory);
-    }
+    const customApiKey = (dto.customApiKey || '').trim();
 
-    // Hợp nhất từ khóa tìm kiếm
     let detectedIntent = localParsed.detectedIntent;
     let suggestedCategory = dto.category || localParsed.suggestedCategory;
     let expandedKeywords = [...localParsed.expandedKeywords];
-    let priceRangeMin = localParsed.priceRangeMin;
-    let priceRangeMax = localParsed.priceRangeMax;
+    const priceRangeMin = localParsed.priceRangeMin;
+    const priceRangeMax = localParsed.priceRangeMax;
     let source: 'gemini-ai' | 'local-ai-engine' = 'local-ai-engine';
 
-    if (geminiResult) {
-      source = 'gemini-ai';
-      if (geminiResult.detectedIntent) detectedIntent = geminiResult.detectedIntent;
-      if (geminiResult.suggestedCategory && suggestedCategory === 'Tất cả danh mục') {
-        suggestedCategory = geminiResult.suggestedCategory;
+    const ollamaResult = await this.localAi.parseSemanticWithOllama(rawQuery);
+    if (ollamaResult) {
+      if (ollamaResult.detectedIntent) detectedIntent = ollamaResult.detectedIntent;
+      if (ollamaResult.suggestedCategory && suggestedCategory === 'Tất cả danh mục') {
+        suggestedCategory = ollamaResult.suggestedCategory;
       }
-      if (Array.isArray(geminiResult.expandedKeywords)) {
-        expandedKeywords = [...new Set([...expandedKeywords, ...geminiResult.expandedKeywords])];
+      if (Array.isArray(ollamaResult.expandedKeywords) && ollamaResult.expandedKeywords.length > 0) {
+        expandedKeywords = [...new Set([...expandedKeywords, ...ollamaResult.expandedKeywords])];
       }
-      if (typeof geminiResult.priceRangeMin === 'number') priceRangeMin = geminiResult.priceRangeMin;
-      if (typeof geminiResult.priceRangeMax === 'number') priceRangeMax = geminiResult.priceRangeMax;
-    } else {
-      // Tầng 2: Gọi Ollama Qwen2.5 Local trên Mac nếu Gemini hết quota
-      const ollamaResult = await this.localAi.parseSemanticWithOllama(rawQuery);
-      if (ollamaResult) {
-        if (ollamaResult.detectedIntent) detectedIntent = ollamaResult.detectedIntent;
-        if (ollamaResult.suggestedCategory && suggestedCategory === 'Tất cả danh mục') {
-          suggestedCategory = ollamaResult.suggestedCategory;
+    } else if (customApiKey) {
+      geminiResult = await this.geminiAi.parseSemantic(customApiKey, rawQuery, dto.category || localParsed.suggestedCategory);
+      if (geminiResult) {
+        source = 'gemini-ai';
+        if (geminiResult.detectedIntent) detectedIntent = geminiResult.detectedIntent;
+        if (geminiResult.suggestedCategory && suggestedCategory === 'Tất cả danh mục') {
+          suggestedCategory = geminiResult.suggestedCategory;
         }
-        if (Array.isArray(ollamaResult.expandedKeywords) && ollamaResult.expandedKeywords.length > 0) {
-          expandedKeywords = [...new Set([...expandedKeywords, ...ollamaResult.expandedKeywords])];
+        if (Array.isArray(geminiResult.expandedKeywords)) {
+          expandedKeywords = [...new Set([...expandedKeywords, ...geminiResult.expandedKeywords])];
         }
       }
     }
@@ -328,11 +322,9 @@ export class AiSearchService {
       this.logger.warn(`Ollama Vision Local lỗi: ${ollamaErr.message}`);
     }
 
-    // 2. DỰ PHÒNG THỨ YẾU: Chỉ khi Ollama không khả dụng mới fallback sang Gemini
-    if (!visualParsed) {
-      this.logger.log('Ollama Vision không phản hồi, fallback dự phòng sang Gemini Vision...');
-      const apiKey = dto.customApiKey || process.env.GEMINI_API_KEY;
-      visualParsed = await this.geminiAi.parseVisual(apiKey, base64Data, mimeType);
+    // 2. DỰ PHÒNG THỨ YẾU: Chỉ dùng Gemini khi người dùng truyền customApiKey riêng
+    if (!visualParsed && dto.customApiKey) {
+      visualParsed = await this.geminiAi.parseVisual(dto.customApiKey, base64Data, mimeType);
       if (visualParsed) {
         visualSource = 'gemini-ai';
       }

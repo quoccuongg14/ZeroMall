@@ -36,6 +36,40 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function isAvifFile(file: File): boolean {
+  return file.type === 'image/avif' || /\.avif$/i.test(file.name);
+}
+
+/**
+ * Chuyển ảnh AVIF sang WebP chất lượng cao trên trình duyệt để tương thích 100% với Storage bucket & mọi thiết bị
+ */
+async function convertAvifToWebpIfNeeded(file: File): Promise<File> {
+  if (!isAvifFile(file)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/webp', 0.9)
+    );
+    if (blob && blob.size > 0) {
+      const nextName = file.name.replace(/\.avif$/i, '.webp');
+      return new File([blob], nextName, { type: 'image/webp' });
+    }
+  } catch {
+    // Giữ nguyên file AVIF nếu trình duyệt không hỗ trợ decode qua canvas
+  }
+  return file;
+}
+
 /**
  * Tải ảnh sản phẩm lên Bucket 'product-images' (Public read, Shop-isolated)
  */
@@ -50,19 +84,21 @@ export async function uploadProductImage(
     throw new Error('Dung lượng ảnh vượt quá giới hạn 5MB cho phép.');
   }
 
-  // Ràng buộc MIME Type
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  if (!allowedMimes.includes(file.type)) {
-    throw new Error('Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPG, PNG, WEBP, GIF.');
+  // Ràng buộc MIME Type (hỗ trợ cả AVIF và trường hợp trình duyệt không trả file.type cho .avif)
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+  const isAllowedByExt = /\.(jpe?g|png|webp|gif|avif)$/i.test(file.name);
+  if (!allowedMimes.includes(file.type) && !(file.type === '' && isAllowedByExt)) {
+    throw new Error('Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPG, PNG, WEBP, GIF, AVIF.');
   }
 
-  const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const uploadFile = await convertAvifToWebpIfNeeded(file);
+  const sanitizedFileName = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const filePath = `${shopId}/${Date.now()}-${sanitizedFileName}`;
 
   try {
     const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.PRODUCT_IMAGES)
-      .upload(filePath, file, {
+      .upload(filePath, uploadFile, {
         cacheControl: '3600',
         upsert: options?.upsert ?? true,
       });
@@ -70,7 +106,7 @@ export async function uploadProductImage(
     if (error) {
       console.warn('Supabase Storage upload warning:', error.message);
       // Fallback về DataURL nếu chưa cấu hình endpoint từ xa
-      return await readFileAsDataUrl(file);
+      return await readFileAsDataUrl(uploadFile);
     }
 
     const { data: publicData } = supabase.storage
@@ -80,7 +116,7 @@ export async function uploadProductImage(
     return publicData.publicUrl;
   } catch (err) {
     console.warn('Fallback to local file reader:', err);
-    return await readFileAsDataUrl(file);
+    return await readFileAsDataUrl(uploadFile);
   }
 }
 

@@ -1,13 +1,45 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { findProhibitedKeyword } from '../../../utils/bannedWords'
 import { AiModerationBadge } from '../ai/AiModerationBadge'
 import type { AiModerationResponse } from '../../../services/ai-moderation.service'
 import { auditProductCategory, type AuditCategoryResult } from '../../../services/ai-category-auditor.service'
 
-const fileToBase64 = (file: File): Promise<string> => {
+const auditThumbCache = new WeakMap<File, string>()
+
+const fileToAuditThumbnail = async (file: File): Promise<string> => {
+  const cached = auditThumbCache.get(file)
+  if (cached) return cached
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const maxEdge = 384
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      bitmap.close()
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+      if (dataUrl && dataUrl.length > 50) {
+        auditThumbCache.set(file, dataUrl)
+        return dataUrl
+      }
+    } else {
+      bitmap.close()
+    }
+  } catch {
+    // Fallback sang FileReader nếu trình duyệt không decode được ảnh
+  }
+
   return new Promise((resolve) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
+    reader.onload = () => {
+      const res = typeof reader.result === 'string' ? reader.result : ''
+      if (res) auditThumbCache.set(file, res)
+      resolve(res)
+    }
     reader.onerror = () => resolve('')
     reader.readAsDataURL(file)
   })
@@ -91,6 +123,9 @@ export const AddProductBasicTab: React.FC<AddProductBasicTabProps> = ({
 }) => {
   const [categoryAudit, setCategoryAudit] = useState<AuditCategoryResult | null>(null)
   const [isAuditing, setIsAuditing] = useState(false)
+  const auditAbortRef = useRef<AbortController | null>(null)
+
+  const coverImgItem = images.find((img) => img.isCover) || images[0]
 
   const triggerAudit = useCallback(async () => {
     const hasImages = images.length > 0
@@ -104,49 +139,63 @@ export const AddProductBasicTab: React.FC<AddProductBasicTabProps> = ({
       return
     }
 
+    if (auditAbortRef.current) {
+      auditAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    auditAbortRef.current = controller
+
     try {
       setIsAuditing(true)
 
-      // Chuyển toàn bộ ảnh local File sang Base64 để AI xử lý được trực tiếp 100%
-      const imagePromises = images.map(async (img) => {
-        if (img.file) {
-          try {
-            const b64 = await fileToBase64(img.file)
-            if (b64) return b64
-          } catch {}
+      // Chỉ nén thumbnail nhẹ (~384px) cho ảnh bìa để gửi AI nhanh <20ms và chống nghẽn mạng
+      let coverImg = ''
+      if (coverImgItem) {
+        if (coverImgItem.url && !coverImgItem.url.startsWith('blob:') && !coverImgItem.url.startsWith('data:')) {
+          coverImg = coverImgItem.url
+        } else if (coverImgItem.file) {
+          coverImg = await fileToAuditThumbnail(coverImgItem.file)
+        } else if (coverImgItem.url && !coverImgItem.url.startsWith('blob:')) {
+          coverImg = coverImgItem.url
         }
-        if (img.url && !img.url.startsWith('blob:')) {
-          return img.url
-        }
-        return ''
-      })
+      }
 
-      const resolvedImages = (await Promise.all(imagePromises)).filter(Boolean)
-      const coverImg = resolvedImages[0] || ''
+      if (controller.signal.aborted) return
 
-      const result = await auditProductCategory({
-        name: productName.trim() || category || 'Sản phẩm mới',
-        category: category || '',
-        image: coverImg,
-        images: resolvedImages,
-        description: description || '',
-      })
+      const result = await auditProductCategory(
+        {
+          name: productName.trim() || category || 'Sản phẩm mới',
+          category: category || '',
+          image: coverImg,
+          description: '',
+        },
+        controller.signal,
+      )
+
+      if (controller.signal.aborted || !result) return
 
       setCategoryAudit(result)
       onAuditChange?.(result)
     } catch (e) {
       console.error('Lỗi khi thẩm định sản phẩm:', e)
     } finally {
-      setIsAuditing(false)
+      if (!controller.signal.aborted) {
+        setIsAuditing(false)
+      }
     }
-  }, [productName, category, images, description])
+  }, [productName, category, images.length, coverImgItem?.id, coverImgItem?.url])
 
   useEffect(() => {
     const timer = setTimeout(() => {
       triggerAudit()
-    }, 400)
+    }, 650)
 
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      if (auditAbortRef.current) {
+        auditAbortRef.current.abort()
+      }
+    }
   }, [triggerAudit])
 
   return (
@@ -249,7 +298,7 @@ export const AddProductBasicTab: React.FC<AddProductBasicTabProps> = ({
               <input
                 type="file"
                 multiple
-                accept="image/*"
+                accept="image/*,.avif"
                 onChange={handleImageChange}
                 className="hidden"
               />
@@ -504,7 +553,11 @@ export const AddProductBasicTab: React.FC<AddProductBasicTabProps> = ({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white transition cursor-pointer"
+            className={`w-full border rounded-xl px-4 py-2.5 text-xs focus:outline-none transition cursor-pointer ${
+              categoryAudit?.issueType === 'WRONG_CATEGORY'
+                ? 'border-amber-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-amber-50/30'
+                : 'border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white'
+            }`}
           >
             <option value="">-- Chọn ngành hàng phù hợp --</option>
             {categoriesList.map((cat, i) => {

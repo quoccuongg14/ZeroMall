@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { GeminiAiService } from './gemini-ai.service';
 import { LocalAiService } from './local-ai.service';
@@ -190,9 +191,35 @@ export class AiCategoryAuditorService {
       };
     }
 
-    // 1.2 ĐÁNH GIÁ LỆCH ẢNH & TIÊU ĐỀ (Ảnh một đằng, Tiêu đề một nẻo)
-    // NẾU ẢNH KHÔNG TRÙNG TIÊU ĐỀ -> LẬP TỨC CHẶN NGAY, DỪNG LẠI KHÔNG KIỂM TRA TIẾP!
+    // 1.2 ĐÁNH GIÁ LỆCH ẢNH & TIÊU ĐỀ / SAI NGÀNH TỪ CLIP
     if (visualCheck && visualCheck.isMismatch) {
+      const inferredFromTitle = this.inferCategoryFromTitle(lowerName);
+      const isWrongCatOnly =
+        visualCheck.mismatchType === 'WRONG_CATEGORY' ||
+        (visualCheck.suggestedCategory &&
+          inferredFromTitle &&
+          this.isCategoryCompatible(visualCheck.suggestedCategory, inferredFromTitle) &&
+          currentCat &&
+          !this.isCategoryCompatible(currentCat, visualCheck.suggestedCategory));
+
+      if (isWrongCatOnly && visualCheck.suggestedCategory) {
+        return {
+          isMatched: false,
+          isProhibited: false,
+          issueType: 'WRONG_CATEGORY',
+          confidence: visualCheck.confidence || 95,
+          currentCategory: currentCat,
+          suggestedTitle: undefined,
+          detectedVisual: visualCheck.detectedVisual,
+          suggestedCategory: visualCheck.suggestedCategory,
+          titleFeedback: `Tên sản phẩm "${rawName}" hợp lệ với hình ảnh.`,
+          imageFeedback: `Ảnh & tên sản phẩm thuộc ngành "${visualCheck.suggestedCategory}", chưa khớp với ngành "${currentCat}" bạn đang chọn.`,
+          actionRequired: 'CHANGE_CATEGORY',
+          recommendation: `Sản phẩm thuộc ngành "${visualCheck.suggestedCategory}". Vui lòng bấm đổi sang đúng ngành hàng "${visualCheck.suggestedCategory}"!`,
+          source: 'local-clip-engine',
+        };
+      }
+
       return {
         isMatched: false,
         isProhibited: false,
@@ -201,7 +228,7 @@ export class AiCategoryAuditorService {
         currentCategory: currentCat,
         suggestedTitle: visualCheck.suggestedTitle,
         detectedVisual: visualCheck.detectedVisual,
-        suggestedCategory: currentCat, // Lỗi do ảnh sai lệch: Giữ nguyên ngành hàng chuẩn của sản phẩm, không đổi ngành theo ảnh sai!
+        suggestedCategory: visualCheck.suggestedCategory || currentCat,
         titleFeedback: `Tiêu đề sản phẩm là "${rawName}".`,
         imageFeedback: visualCheck.reason || `Hình ảnh nhận diện là "${visualCheck.detectedVisual}", không đồng nhất với tiêu đề.`,
         actionRequired: 'REPLACE_IMAGE',
@@ -277,16 +304,16 @@ export class AiCategoryAuditorService {
       return {
         isMatched: false,
         isProhibited: false,
-        issueType: 'IMAGE_MISMATCH',
+        issueType: 'WRONG_CATEGORY',
         confidence: visualCheck.confidence || 94,
         currentCategory: currentCat,
-        suggestedTitle: visualCheck.suggestedTitle,
+        suggestedTitle: undefined,
         detectedVisual: visualCheck.detectedVisual,
         suggestedCategory: visualCheck.suggestedCategory,
-        titleFeedback: `Tiêu đề sản phẩm là "${rawName}".`,
-        imageFeedback: `Hình ảnh nhận diện là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không tương thích với ngành "${currentCat}" bạn chọn.`,
-        actionRequired: 'REPLACE_IMAGE',
-        recommendation: `Hình ảnh nhận diện là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), không tương thích với ngành "${currentCat}". Vui lòng đổi ảnh hoặc chọn lại đúng ngành hàng!`,
+        titleFeedback: `Tiêu đề sản phẩm "${rawName}" khớp với hình ảnh.`,
+        imageFeedback: `Ảnh & tên sản phẩm là "${visualCheck.detectedVisual}" (ngành ${visualCheck.suggestedCategory}), chưa khớp với ngành "${currentCat}" bạn chọn.`,
+        actionRequired: 'CHANGE_CATEGORY',
+        recommendation: `Vui lòng đổi ngành hàng từ "${currentCat}" sang "${visualCheck.suggestedCategory}"!`,
         source: visualCheck.source || 'local-clip-engine',
       };
     }
@@ -1262,6 +1289,7 @@ export class AiCategoryAuditorService {
     category: string,
   ): Promise<{
     isMismatch: boolean;
+    mismatchType?: 'IMAGE_MISMATCH' | 'WRONG_CATEGORY' | 'PROHIBITED_ITEM';
     isProhibited?: boolean;
     prohibitedLabel?: string;
     detectedVisual?: string;
@@ -1300,6 +1328,7 @@ export class AiCategoryAuditorService {
         const data: any = await res.json();
         return {
           isMismatch: !!data.isMismatch,
+          mismatchType: data.mismatchType,
           isProhibited: !!data.isProhibited,
           prohibitedLabel: data.prohibitedLabel,
           detectedVisual: data.detectedVisual,
@@ -1325,6 +1354,7 @@ export class AiCategoryAuditorService {
     base64Data?: string,
   ): Promise<{
     isMismatch: boolean;
+    mismatchType?: 'IMAGE_MISMATCH' | 'WRONG_CATEGORY' | 'PROHIBITED_ITEM';
     isProhibited?: boolean;
     prohibitedLabel?: string;
     detectedVisual?: string;
@@ -1334,7 +1364,8 @@ export class AiCategoryAuditorService {
     confidence?: number;
     source?: 'local-clip-engine';
   } | null> {
-    const cacheKey = `${imageUrl}__${rawName}__${category}`;
+    const imgKeyHash = createHash('sha256').update(base64Data || imageUrl || '').digest('hex');
+    const cacheKey = `${imgKeyHash}__${rawName}__${category}`;
     if (this.visualPerceptionCache.has(cacheKey)) {
       return this.visualPerceptionCache.get(cacheKey) as any;
     }
@@ -1375,6 +1406,7 @@ export class AiCategoryAuditorService {
         const data: any = await res.json();
         const result = {
           isMismatch: !!data.isMismatch,
+          mismatchType: data.mismatchType,
           isProhibited: !!data.isProhibited,
           prohibitedLabel: data.prohibitedLabel,
           detectedVisual: data.detectedVisual,
@@ -1402,6 +1434,7 @@ export class AiCategoryAuditorService {
     category: string,
   ): Promise<{
     isMismatch: boolean;
+    mismatchType?: 'IMAGE_MISMATCH' | 'WRONG_CATEGORY' | 'PROHIBITED_ITEM';
     isProhibited?: boolean;
     prohibitedLabel?: string;
     detectedVisual?: string;

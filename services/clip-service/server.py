@@ -3,15 +3,81 @@ import sys
 import json
 import base64
 import io
+import hashlib
+import threading
 import urllib.request
+from collections import OrderedDict
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 
 PORT = int(os.environ.get("CLIP_PORT", 5005))
+MAX_AUDIT_EDGE = int(os.environ.get("CLIP_MAX_AUDIT_EDGE", "384"))
+MAX_CONCURRENCY = int(os.environ.get("CLIP_MAX_CONCURRENCY", "4"))
+
 print(f"[*] Loading clip-ViT-B-32 model on Apple Silicon / CPU / CUDA...")
 model = SentenceTransformer("clip-ViT-B-32")
-print(f"[+] Model loaded!")
+print(f"[+] Model loaded! (max_edge={MAX_AUDIT_EDGE}, max_concurrency={MAX_CONCURRENCY})")
+
+# Bảo vệ CPU/RAM khi nhiều shop upload cùng lúc + Cache Vector theo SHA-256 ảnh
+INFERENCE_SEMAPHORE = threading.BoundedSemaphore(value=MAX_CONCURRENCY)
+CACHE_LOCK = threading.Lock()
+IMAGE_FEAT_CACHE: "OrderedDict[str, tuple]" = OrderedDict()
+TITLE_EMB_CACHE: "OrderedDict[str, object]" = OrderedDict()
+MAX_IMAGE_CACHE = 2048
+MAX_TITLE_CACHE = 4096
+
+
+def resize_pil_for_clip(pil_img):
+    if pil_img is None:
+        return None
+    w, h = pil_img.size
+    if max(w, h) > MAX_AUDIT_EDGE:
+        pil_img = pil_img.copy()
+        pil_img.thumbnail((MAX_AUDIT_EDGE, MAX_AUDIT_EDGE), Image.Resampling.BILINEAR)
+    return pil_img
+
+
+def get_cached_image_features(cache_key, pil_img):
+    if cache_key:
+        with CACHE_LOCK:
+            cached = IMAGE_FEAT_CACHE.get(cache_key)
+            if cached is not None:
+                IMAGE_FEAT_CACHE.move_to_end(cache_key)
+                return cached
+
+    resized = resize_pil_for_clip(pil_img)
+    with INFERENCE_SEMAPHORE:
+        img_emb = model.encode(resized)
+    sims = util.cos_sim(img_emb, CAT_EMBEDDINGS)[0]
+    prohibited_sims = util.cos_sim(img_emb, PROHIBITED_EMBEDDINGS)[0]
+    feats = (img_emb, sims, prohibited_sims)
+
+    if cache_key:
+        with CACHE_LOCK:
+            IMAGE_FEAT_CACHE[cache_key] = feats
+            IMAGE_FEAT_CACHE.move_to_end(cache_key)
+            while len(IMAGE_FEAT_CACHE) > MAX_IMAGE_CACHE:
+                IMAGE_FEAT_CACHE.popitem(last=False)
+    return feats
+
+
+def get_cached_title_embedding(name):
+    if not name:
+        return None
+    with CACHE_LOCK:
+        cached = TITLE_EMB_CACHE.get(name)
+        if cached is not None:
+            TITLE_EMB_CACHE.move_to_end(name)
+            return cached
+    with INFERENCE_SEMAPHORE:
+        emb = model.encode([name])[0]
+    with CACHE_LOCK:
+        TITLE_EMB_CACHE[name] = emb
+        TITLE_EMB_CACHE.move_to_end(name)
+        while len(TITLE_EMB_CACHE) > MAX_TITLE_CACHE:
+            TITLE_EMB_CACHE.popitem(last=False)
+    return emb
 
 # Ngành hàng & vật thể chuẩn để phân loại hình ảnh (Zero-shot Multimodal Vision)
 CANONICAL_CATEGORIES = {
@@ -394,25 +460,30 @@ COMPATIBLE_CATEGORIES = {
 
 def parse_single_image_item(item):
     if not item:
-        return None
+        return None, None
     if isinstance(item, str):
         if item.startswith("data:") or len(item) > 200:
             raw_str = item.split(",", 1)[1] if item.startswith("data:") else item
             try:
                 raw_bytes = base64.b64decode(raw_str)
-                return Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+                img_hash = hashlib.sha256(raw_bytes).hexdigest()
+                return Image.open(io.BytesIO(raw_bytes)).convert("RGB"), f"b64:{img_hash}"
             except Exception:
-                return None
+                return None, None
         elif item.startswith("http://") or item.startswith("https://"):
+            url_key = f"url:{hashlib.sha256(item.encode('utf-8')).hexdigest()}"
+            with CACHE_LOCK:
+                if url_key in IMAGE_FEAT_CACHE:
+                    return None, url_key
             try:
                 req = urllib.request.Request(item, headers={"User-Agent": "Mozilla/5.0"})
                 raw_bytes = urllib.request.urlopen(req, timeout=10).read()
-                return Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+                return Image.open(io.BytesIO(raw_bytes)).convert("RGB"), url_key
             except Exception:
-                return None
+                return None, None
     elif isinstance(item, dict):
         return parse_pil_image(item)
-    return None
+    return None, None
 
 
 def parse_pil_image(payload):
@@ -424,14 +495,19 @@ def parse_pil_image(payload):
             if image_b64.startswith("data:"):
                 image_b64 = image_b64.split(",", 1)[1]
             raw_bytes = base64.b64decode(image_b64)
-            return Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+            img_hash = hashlib.sha256(raw_bytes).hexdigest()
+            return Image.open(io.BytesIO(raw_bytes)).convert("RGB"), f"b64:{img_hash}"
         elif image_url and (image_url.startswith("http://") or image_url.startswith("https://")):
+            url_key = f"url:{hashlib.sha256(image_url.encode('utf-8')).hexdigest()}"
+            with CACHE_LOCK:
+                if url_key in IMAGE_FEAT_CACHE:
+                    return None, url_key
             req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
             raw_bytes = urllib.request.urlopen(req, timeout=10).read()
-            return Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+            return Image.open(io.BytesIO(raw_bytes)).convert("RGB"), url_key
     except Exception:
-        return None
-    return None
+        return None, None
+    return None, None
 
 
 import re
@@ -455,15 +531,14 @@ def has_kw(text, keywords):
     padded = f" {norm} "
     return any(f" {kw.lower()} " in padded for kw in keywords if kw)
 
-def audit_single_image_logic(pil_img, name, category, name_emb=None):
+def audit_single_image_logic(pil_img, name, category, name_emb=None, cache_key=None):
     """
     AGENT: MultiImageVisualAgent
-    Thẩm định 1 bức ảnh cụ thể bằng mô hình CLIP ViT-B-32 Zero-Shot Matching
+    Thẩm định 1 bức ảnh cụ thể bằng mô hình CLIP ViT-B-32 Zero-Shot Matching (có cache SHA-256)
     """
-    img_emb = model.encode(pil_img)
+    img_emb, sims, prohibited_sims = get_cached_image_features(cache_key, pil_img)
 
     # Tính độ khớp với các danh mục ngành hàng tiêu chuẩn
-    sims = util.cos_sim(img_emb, CAT_EMBEDDINGS)[0]
     best_idx = sims.argmax().item()
     best_cat = CAT_KEYS[best_idx]
     cat_info = CANONICAL_CATEGORIES[best_cat]
@@ -471,10 +546,6 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
     visual_confidence = round(max_cat_sim * 100, 1)
 
     # 0. QUÉT AN TOÀN THỊ GIÁC: PHÁT HIỆN HÀNG CẤM (Vũ khí, Súng, Kiếm, Cần sa...)
-    # Chỉ cảnh báo hàng cấm khi độ tương đồng với vật phẩm cấm đạt ngưỡng cao (>= threshold)
-    # VÀ vượt trội hơn so với các ngành hàng thương mại hợp pháp (max_proh_sim > max_cat_sim + 0.03)
-    # Tránh tuyệt đối việc nếp gấp quần áo/váy hoa bị nhận diện nhầm thành vũ khí!
-    prohibited_sims = util.cos_sim(img_emb, PROHIBITED_EMBEDDINGS)[0]
     best_proh_idx = prohibited_sims.argmax().item()
     max_proh_sim = float(prohibited_sims[best_proh_idx].item())
     proh_key = PROHIBITED_KEYS[best_proh_idx]
@@ -488,6 +559,7 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
     title_sim = 0.0
     is_mismatch = False
+    mismatch_type = ""
     reason = ""
 
     lower_name = name.lower()
@@ -690,18 +762,20 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
     if is_prohibited:
         is_mismatch = True
+        mismatch_type = "PROHIBITED_ITEM"
         reason = f"[Visual Safety Guard] Hình ảnh nhận diện là {prohibited_label} (độ tin cậy: {round(max_proh_sim*100, 1)}%) - thuộc danh mục hàng cấm kinh doanh tuyệt đối trên sàn ZeroMall!"
     elif best_cat == "Sơ đồ / Tài liệu":
         # Chỉ coi là sơ đồ / tài liệu khi độ tin cậy thực sự cao (>= 0.30)
         # VÀ tên sản phẩm không phải là sản phẩm gia dụng/vật lý rõ ràng
         if max_cat_sim >= 0.30 and not (has_kitchen_title or has_footwear_title or has_top_title or has_bottom_title or has_bag_title):
             is_mismatch = True
+            mismatch_type = "IMAGE_MISMATCH"
             reason = f"Ảnh hiển thị sơ đồ/văn bản hệ thống, không phải ảnh chụp sản phẩm thực tế (\"{name}\")."
 
     # A. KIỂM TRA CHÉO HÌNH ẢNH VS TIÊU ĐỀ SẢN PHẨM (Tier 1: Visual-to-Text Consistency)
     if not is_mismatch and name:
         if name_emb is None:
-            name_emb = model.encode([name])[0]
+            name_emb = get_cached_title_embedding(name)
         title_sim = float(util.cos_sim(img_emb, name_emb)[0].item())
 
         # Danh sách các nhóm Domain chi tiết
@@ -1057,26 +1131,32 @@ def audit_single_image_logic(pil_img, name, category, name_emb=None):
 
         if not is_compatible:
             # Khi hình ảnh và ngành hàng KHÔNG TƯƠNG THÍCH trong COMPATIBLE_CATEGORIES:
-            # Nếu AI thị giác đạt độ tự tin nhận diện >= 22.0% (mức tin cậy rõ rệt của mô hình CLIP):
-            # Tuyệt đối KHÔNG cho phép bỏ qua chỉ vì tên sản phẩm khớp ngành hàng được chọn (chống thủ đoạn gian lận ảnh khác - tên khác)!
+            # Phần A đã kiểm tra Ảnh vs Tên hợp lệ rồi, đây là lỗi Sai Ngành Hàng (WRONG_CATEGORY)
             if visual_confidence >= 22.0:
                 is_mismatch = True
-                reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), hoàn toàn không tương thích với ngành hàng '{category_clean}' bạn chọn."
+                mismatch_type = "WRONG_CATEGORY"
+                reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), chưa khớp với ngành hàng '{category_clean}' bạn chọn."
             elif not title_matches_current_cat and visual_confidence >= 19.0:
                 is_mismatch = True
+                mismatch_type = "WRONG_CATEGORY"
                 reason = f"Ảnh hiển thị {cat_info['label']} (ngành: {pred_cat}), không tương thích với ngành hàng '{category_clean}' bạn chọn."
+
+    if is_mismatch and not mismatch_type:
+        mismatch_type = "IMAGE_MISMATCH"
 
     # Ngưỡng tương đồng Cosine cấu hình động
     cosine_threshold = float(os.environ.get("CLIP_SIMILARITY_THRESHOLD", "0.18"))
     if not is_mismatch and title_sim > 0 and title_sim < cosine_threshold and not is_compatible:
         if not reason:
             is_mismatch = True
+            mismatch_type = "IMAGE_MISMATCH"
             reason = f"Độ tương quan giữa ảnh ({cat_info['label']}) và tiêu đề chỉ đạt {round(title_sim, 2)}, thấp hơn ngưỡng an toàn {cosine_threshold}."
 
     final_suggested_cat = cat_info.get("zero_category", "Thời Trang Nam")
 
     return {
         "isMismatch": is_mismatch,
+        "mismatchType": mismatch_type,
         "isProhibited": is_prohibited,
         "prohibitedLabel": prohibited_label,
         "detectedVisual": prohibited_label if is_prohibited else cat_info["label"],
@@ -1121,15 +1201,16 @@ class ClipHandler(BaseHTTPRequestHandler):
 
         if self.path == "/embed":
             try:
-                pil_img = parse_pil_image(payload)
-                if pil_img is None:
+                pil_img, cache_key = parse_pil_image(payload)
+                if pil_img is None and cache_key is None:
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
                     self.wfile.write(json.dumps({"error": "Vui lòng cung cấp imageBase64 hoặc imageUrl"}).encode("utf-8"))
                     return
 
-                embedding = model.encode(pil_img).tolist()
+                img_emb, _, _ = get_cached_image_features(cache_key, pil_img)
+                embedding = img_emb.tolist()
                 rounded = [round(x, 6) for x in embedding]
 
                 self.send_response(200)
@@ -1154,7 +1235,7 @@ class ClipHandler(BaseHTTPRequestHandler):
             try:
                 name = (payload.get("name") or payload.get("title") or "").strip()
                 category = (payload.get("category") or "").strip()
-                name_emb = model.encode([name])[0] if name else None
+                name_emb = get_cached_title_embedding(name) if name else None
 
                 # Kiểm tra nếu client gửi mảng nhiều ảnh (Multi-Image Audit)
                 raw_images = payload.get("images")
@@ -1165,11 +1246,11 @@ class ClipHandler(BaseHTTPRequestHandler):
                     min_sim = 1.0
 
                     for idx, img_item in enumerate(raw_images[:9]): # Quét tối đa 9 ảnh
-                        pil_img = parse_single_image_item(img_item)
-                        if pil_img is None:
+                        pil_img, item_cache_key = parse_single_image_item(img_item)
+                        if pil_img is None and item_cache_key is None:
                             continue
 
-                        audit_res = audit_single_image_logic(pil_img, name, category, name_emb)
+                        audit_res = audit_single_image_logic(pil_img, name, category, name_emb, item_cache_key)
                         audit_res["imageIndex"] = idx
                         image_results.append(audit_res)
 
@@ -1209,6 +1290,7 @@ class ClipHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(json.dumps({
                         "isMismatch": any_mismatch,
+                        "mismatchType": worst_item.get("mismatchType", "") if any_mismatch and worst_item else "",
                         "isProhibited": any_prohibited,
                         "prohibitedLabel": worst_item.get("prohibitedLabel", "") if any_prohibited and worst_item else "",
                         "worstImageIndex": worst_idx,
@@ -1226,8 +1308,8 @@ class ClipHandler(BaseHTTPRequestHandler):
                     return
 
                 # Nếu chỉ gửi 1 ảnh (Single image - Backward compatibility)
-                pil_img = parse_pil_image(payload)
-                if pil_img is None:
+                pil_img, single_cache_key = parse_pil_image(payload)
+                if pil_img is None and single_cache_key is None:
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
@@ -1237,7 +1319,7 @@ class ClipHandler(BaseHTTPRequestHandler):
                     }).encode("utf-8"))
                     return
 
-                res = audit_single_image_logic(pil_img, name, category, name_emb)
+                res = audit_single_image_logic(pil_img, name, category, name_emb, single_cache_key)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -1262,9 +1344,15 @@ class ClipHandler(BaseHTTPRequestHandler):
         pass
 
 
+class BoundedClipHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 128
+    allow_reuse_address = True
+
+
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), ClipHandler)
-    print(f"[*] ZeroMall Local CLIP Multi-Image Audit Agent (Multi-Threaded) is listening on 0.0.0.0:{PORT}")
+    server = BoundedClipHTTPServer(("0.0.0.0", PORT), ClipHandler)
+    print(f"[*] ZeroMall Local CLIP Audit Agent is listening on 0.0.0.0:{PORT}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

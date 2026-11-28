@@ -52,8 +52,15 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
   const [activeTab, setActiveTab] = useState<'basic' | 'sales' | 'shipping' | 'other'>('basic')
   const [categoryAudit, setCategoryAudit] = useState<AuditCategoryResult | null>(null)
   const isProhibitedItem = Boolean(categoryAudit?.isProhibited || categoryAudit?.issueType === 'PROHIBITED_ITEM')
-  const isImageMismatch = Boolean(categoryAudit && (!categoryAudit.isMatched && (categoryAudit.issueType === 'IMAGE_MISMATCH' || (categoryAudit as any).isMismatch)))
-  const isBlockedSubmit = isProhibitedItem || isImageMismatch
+  const isWrongCategory = Boolean(categoryAudit && !categoryAudit.isMatched && categoryAudit.issueType === 'WRONG_CATEGORY')
+  const isImageMismatch = Boolean(
+    categoryAudit &&
+      !categoryAudit.isMatched &&
+      categoryAudit.issueType !== 'WRONG_CATEGORY' &&
+      categoryAudit.issueType !== 'PROHIBITED_ITEM' &&
+      (categoryAudit.issueType === 'IMAGE_MISMATCH' || (categoryAudit as any).isMismatch)
+  )
+  const isBlockedSubmit = isProhibitedItem || isImageMismatch || isWrongCategory
 
   // Parse Shop Shipping Settings
   const shopShippingConfig = React.useMemo(() => {
@@ -748,7 +755,17 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
       return
     }
 
-    if (currentAudit && (!currentAudit.isMatched || currentAudit.issueType === 'IMAGE_MISMATCH' || (currentAudit as any).isMismatch)) {
+    if (currentAudit && !currentAudit.isMatched) {
+      if (currentAudit.issueType === 'WRONG_CATEGORY') {
+        const wrongCatReason =
+          currentAudit.imageFeedback ||
+          currentAudit.recommendation ||
+          `Sản phẩm thuộc ngành "${currentAudit.suggestedCategory}", chưa khớp với ngành "${category}" bạn đang chọn.`
+        alert(`⚠️ SAI NGÀNH HÀNG:\n\n${wrongCatReason}\n\nVui lòng chọn đúng ngành hàng "${currentAudit.suggestedCategory}" trước khi lưu!`)
+        setActiveTab('basic')
+        setErrors(prev => ({ ...prev, category: wrongCatReason }))
+        return
+      }
       if (currentAudit.issueType === 'IMAGE_MISMATCH' || (currentAudit as any).isMismatch) {
         const mismatchReason = currentAudit.imageFeedback || currentAudit.recommendation || `Hình ảnh nhận diện là "${currentAudit.detectedVisual || 'sản phẩm khác'}", không khớp với tên sản phẩm bạn nhập.`
         alert(`🚫 TỪ CHỐI ĐĂNG TẢI - HÌNH ẢNH KHÔNG TRÙNG KHỚP:\n\n${mismatchReason}\n\nVui lòng tải đúng ảnh thực tế của sản phẩm hoặc sửa lại tiêu đề/ngành hàng trước khi đăng bán!`)
@@ -1145,11 +1162,32 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
             </div>
           </div>
         )}
-        {!isProhibitedItem && isImageMismatch && (
+        {!isProhibitedItem && isWrongCategory && (
+          <div className="mx-6 mb-2 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 text-amber-900">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-xl shrink-0">🏷️</span>
+              <div className="text-xs">
+                <span className="font-bold">CHƯA ĐÚNG NGÀNH HÀNG:</span>{' '}
+                {categoryAudit?.imageFeedback ||
+                  `Ảnh & tên "${productName}" thuộc ngành "${categoryAudit?.suggestedCategory}". Vui lòng đổi sang đúng ngành hàng để đăng bán!`}
+              </div>
+            </div>
+            {categoryAudit?.suggestedCategory && categoryAudit.suggestedCategory !== category && (
+              <button
+                type="button"
+                onClick={() => setCategory(categoryAudit.suggestedCategory)}
+                className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-xs"
+              >
+                ⚡ Đổi sang: {categoryAudit.suggestedCategory}
+              </button>
+            )}
+          </div>
+        )}
+        {!isProhibitedItem && !isWrongCategory && isImageMismatch && (
           <div className="mx-6 mb-2 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 text-amber-800">
             <span className="text-xl">⚠️</span>
             <div className="text-xs">
-              <span className="font-bold">ẢNH KHÔNG TRÙNG KHỚP:</span> AI nhận diện ảnh là "{categoryAudit?.detectedVisual || 'sản phẩm khác'}", không khớp với tiêu đề "{productName}". Vui lòng tải đúng ảnh thực tế hoặc sửa lại tên sản phẩm để tiếp tục đăng bán!
+              <span className="font-bold">ẢNH KHÔNG TRÙNG KHỚP:</span> AI nhận diện ảnh là &quot;{categoryAudit?.detectedVisual || 'sản phẩm khác'}&quot;, không khớp với tiêu đề &quot;{productName}&quot;. Vui lòng tải đúng ảnh thực tế hoặc sửa lại tên sản phẩm để tiếp tục đăng bán!
             </div>
           </div>
         )}
@@ -1180,13 +1218,29 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({ onSuccess, onCan
               className={`text-xs font-bold px-6 py-2.5 rounded-xl shadow-md transition ${
                 isProhibitedItem
                   ? 'bg-red-500 cursor-not-allowed text-white opacity-85'
-                  : isImageMismatch
+                  : isWrongCategory || isImageMismatch
                   ? 'bg-amber-600 cursor-not-allowed text-white opacity-85'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
               }`}
-              title={isProhibitedItem ? 'Sản phẩm vi phạm mặt hàng cấm' : isImageMismatch ? 'Ảnh không khớp tên sản phẩm' : ''}
+              title={
+                isProhibitedItem
+                  ? 'Sản phẩm vi phạm mặt hàng cấm'
+                  : isWrongCategory
+                  ? `Sai ngành hàng (Đề xuất: ${categoryAudit?.suggestedCategory})`
+                  : isImageMismatch
+                  ? 'Ảnh không khớp tên sản phẩm'
+                  : ''
+              }
             >
-              {isProhibitedItem ? '🚫 Bị Chặn: Ảnh Chứa Hàng Cấm' : isImageMismatch ? '⚠️ Bị Chặn: Ảnh Không Khớp Tên' : (initialData ? 'Cập nhật sản phẩm' : 'Lưu & Hiển thị')}
+              {isProhibitedItem
+                ? '🚫 Bị Chặn: Ảnh Chứa Hàng Cấm'
+                : isWrongCategory
+                ? `⚠️ Đổi Ngành: ${categoryAudit?.suggestedCategory || 'Phù hợp'}`
+                : isImageMismatch
+                ? '⚠️ Bị Chặn: Ảnh Không Khớp Tên'
+                : initialData
+                ? 'Cập nhật sản phẩm'
+                : 'Lưu & Hiển thị'}
             </button>
           </div>
         </div>
