@@ -14,6 +14,7 @@ import type {
 } from './types'
 import {
   detectItemSlot,
+  detectProductGender,
   getBodyPhysiqueInfo,
   formatDisplayPrice,
   isOuterwearProduct,
@@ -64,17 +65,30 @@ export const useTryOnLogic = ({
     female: { height: 160, weight: 50 },
   } as const
 
-  const [gender, setGender] = useState<'male' | 'female'>(() => {
-    return (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
-  })
-  const [height, setHeight] = useState<number>(() => {
-    const savedGender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
-    return Number(localStorage.getItem('zeromall_tryon_user_height')) || DEFAULT_BODY_STATS[savedGender].height
-  })
-  const [weight, setWeight] = useState<number>(() => {
-    const savedGender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
-    return Number(localStorage.getItem('zeromall_tryon_user_weight')) || DEFAULT_BODY_STATS[savedGender].weight
-  })
+  const resolveInitialBody = () => {
+    const savedPhoto = localStorage.getItem('zeromall_tryon_user_photo') || ''
+    const savedRawGender = (localStorage.getItem('zeromall_tryon_user_gender') as 'male' | 'female') || 'male'
+    let resolvedGender: 'male' | 'female' = savedRawGender
+    if (savedPhoto.includes('photo-1506794778202')) resolvedGender = 'male'
+    else if (savedPhoto.includes('photo-1534528741775')) resolvedGender = 'female'
+
+    let savedH = Number(localStorage.getItem('zeromall_tryon_user_height')) || DEFAULT_BODY_STATS[resolvedGender].height
+    let savedW = Number(localStorage.getItem('zeromall_tryon_user_weight')) || DEFAULT_BODY_STATS[resolvedGender].weight
+
+    if (resolvedGender === 'female' && savedH === DEFAULT_BODY_STATS.male.height && savedW === DEFAULT_BODY_STATS.male.weight) {
+      savedH = DEFAULT_BODY_STATS.female.height
+      savedW = DEFAULT_BODY_STATS.female.weight
+    } else if (resolvedGender === 'male' && savedH === DEFAULT_BODY_STATS.female.height && savedW === DEFAULT_BODY_STATS.female.weight) {
+      savedH = DEFAULT_BODY_STATS.male.height
+      savedW = DEFAULT_BODY_STATS.male.weight
+    }
+    return { resolvedGender, savedH, savedW }
+  }
+
+  const initialBody = resolveInitialBody()
+  const [gender, setGender] = useState<'male' | 'female'>(initialBody.resolvedGender)
+  const [height, setHeight] = useState<number>(initialBody.savedH)
+  const [weight, setWeight] = useState<number>(initialBody.savedW)
 
   // 2. Quản lý Chế độ thử đồ AI Siêu Thực
   const [gemBalance, setGemBalance] = useState<number | null>(7060)
@@ -369,11 +383,24 @@ export const useTryOnLogic = ({
   // Khi mở modal hoặc khi product/initialBundle thay đổi
   useEffect(() => {
     if (isOpen) {
+      // Đồng bộ chuẩn giới tính theo ảnh mẫu đang chọn hoặc theo sản phẩm nếu chưa có ảnh
+      const activePhoto = localStorage.getItem('zeromall_tryon_user_photo') || userPhoto
+      if (activePhoto.includes('photo-1506794778202') && gender !== 'male') {
+        handleChangeGender('male', false)
+      } else if (activePhoto.includes('photo-1534528741775') && gender !== 'female') {
+        handleChangeGender('female', false)
+      } else if (!activePhoto && product) {
+        const pGender = detectProductGender(product)
+        if ((pGender === 'male' || pGender === 'female') && pGender !== gender) {
+          handleChangeGender(pGender, false)
+        }
+      }
+
       if (initialBundle && Array.isArray(initialBundle.items) && initialBundle.items.length > 0) {
         const bundleOutfit = mapBundleToOutfitSlots(initialBundle, product)
         setSelectedOutfit(bundleOutfit)
         setSelectedOutfitBundleId(initialBundle.id)
-        const primary = bundleOutfit.top || bundleOutfit.outer_top || bundleOutfit.bottom || bundleOutfit.shoes || bundleOutfit.accessory || product
+        const primary = bundleOutfit.outer_top || bundleOutfit.top || bundleOutfit.bottom || bundleOutfit.shoes || bundleOutfit.accessory || product
         if (primary) {
           setSelectedPant(primary)
         }
@@ -384,15 +411,10 @@ export const useTryOnLogic = ({
         setSourceTab('catalog')
       } else if (product) {
         const { outfit, activeSlot } = buildOutfitFromSingleProduct(product)
-        setSelectedOutfit(prev => {
-          if (activeSlot === 'accessory') return applyAccessoryToOutfit(prev, product, false)
-          return { ...prev, [activeSlot]: product }
-        })
-        if (!selectedOutfit.top && !selectedOutfit.outer_top && !selectedOutfit.bottom) {
-          setSelectedOutfit(outfit)
-        }
+        setSelectedOutfit(outfit)
         setActiveOutfitSlot(activeSlot)
         setSelectedPant(product)
+        setOutfitAnchorProduct(product)
         setSourceTab('catalog')
       }
     }
@@ -691,10 +713,7 @@ export const useTryOnLogic = ({
       setSelectedOutfit(outfit)
       setActiveOutfitSlot(activeSlot)
       setSelectedPant(customProduct)
-      triggerToast(`📸 Đã tải món đồ "${customProduct.name}" vào Bảng Phối Đồ!`)
-      if (userPhoto) {
-        handleRunTryOn(customProduct, undefined, undefined, undefined, undefined, outfit)
-      }
+      triggerToast(`📸 Đã tải món đồ "${customProduct.name}" vào Bảng Phối Đồ! Bấm "Ướm Thử Lên Người" để thử.`)
     }
     reader.readAsDataURL(file)
   }
@@ -1113,14 +1132,8 @@ export const useTryOnLogic = ({
       setSelectedPant(primary)
     }
 
-    if (!userPhoto) {
-      triggerToast(`✓ Đã nạp ${flattenOutfitItems(newOutfit).length} món vào Bảng Phối Đồ! Hãy tải ảnh của bạn để AI ướm thử lên người.`)
-      fileInputRef.current?.click()
-      return
-    }
-
     setActiveTab('photo')
-    handleRunTryOn(undefined, undefined, undefined, undefined, undefined, newOutfit)
+    triggerToast(`✓ Đã đưa ${flattenOutfitItems(newOutfit).length} món của [${bundle.title}] vào Bảng Phối Đồ! Bấm "Ướm Thử Lên Người" để AI mặc thử.`)
   }
 
   const handleAddScoredOutfitToCart = (bundle: ScoredOutfitBundle) => {

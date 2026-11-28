@@ -37,7 +37,6 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
   onSelectBundlePreview,
   onExecuteTryOn,
   onAddToCart,
-  isLoadingAi = false,
 }) => {
   const [selectedVibe, setSelectedVibe] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState<number>(0)
@@ -312,10 +311,9 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
                           <button
                             type="button"
                             onClick={() => onExecuteTryOn(bundle)}
-                            disabled={isLoadingAi}
-                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95 disabled:opacity-50"
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#ee4d2d] hover:bg-[#d93b1d] text-white transition flex items-center gap-1.5 shadow-md cursor-pointer active:scale-95"
                           >
-                            <span>✨</span> {isLoadingAi ? 'Đang Mặc Đồ...' : '2. BẤM ĐỂ THỬ ĐỒ (0 GEM)'}
+                            <span>✨</span> 2. Đưa Vào Bảng Thử Đồ ➔
                           </button>
                         ) : (
                           <button
@@ -406,7 +404,7 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
         {/* MODAL FOOTER */}
         <div className="px-6 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 shrink-0">
           <p className="text-xs text-slate-500">
-            💡 Gợi ý: Chọn set ưng ý rồi bấm <strong className="text-[#ee4d2d]">&quot;BẤM ĐỂ THỬ ĐỒ&quot;</strong> để AI ướm thử miễn phí lên người bạn!
+            💡 Gợi ý: Chọn set ưng ý rồi bấm <strong className="text-[#ee4d2d]">&quot;Đưa Vào Bảng Thử Đồ&quot;</strong>, sau đó bấm <strong className="text-slate-700">&quot;Ướm Thử Lên Người&quot;</strong> để AI mặc thử!
           </p>
           <button
             type="button"
