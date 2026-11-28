@@ -2180,28 +2180,68 @@ class AiStylistEngine:
 
     @staticmethod
     def filter_gender(items: list, gender: str) -> list:
+        import re
         res = []
-        female_only_kw = ["đầm", "váy", "chân váy", "cao gót", "búp bê", "croptop", "bikini", "túi xách nữ"]
+        female_only_kw = [
+            "đầm", "váy", "chân váy", "cao gót", "gót nhọn", "búp bê", "croptop",
+            "bikini", "túi xách nữ", "cổ bèo", "tay phồng", "bèo nhún", "babydoll",
+            "hai dây", "yếm nữ", "sơ mi nữ", "áo nữ", "giày nữ", "công chúa"
+        ]
+        male_only_kw = [
+            "sơ mi nam", "quần tây nam", "quần đùi nam", "vest nam", "suit nam",
+            "boxer", "kaki nam", "áo nam", "giày nam", "giày tây nam"
+        ]
+        male_cats = ("thời trang nam", "giày dép nam")
+        female_cats = ("thời trang nữ", "giày dép nữ", "phụ kiện nữ", "túi ví nữ")
+
         for it in items:
             name_lower = (it.get("name", "")).lower()
             cat_lower = (it.get("category", "")).lower()
             text = f"{name_lower} {cat_lower}"
-            is_unisex = "nam nữ" in text or "unisex" in text
+            is_unisex = "nam nữ" in text or "nam & nữ" in text or "nam/nữ" in text or "unisex" in text
+            has_male_word = bool(re.search(r"(?:^|[^a-zà-ỹ])nam(?:[^a-zà-ỹ]|$)", name_lower)) or any(c in cat_lower for c in male_cats)
+            has_female_word = bool(re.search(r"(?:^|[^a-zà-ỹ])nữ(?:[^a-zà-ỹ]|$)", name_lower)) or any(c in cat_lower for c in female_cats)
+
             if gender == "male":
-                if not is_unisex and "nữ" in text and "nam" not in text:
-                    continue
                 if any(kw in name_lower for kw in female_only_kw):
                     continue
+                if not is_unisex and has_female_word and not has_male_word:
+                    continue
             elif gender == "female":
-                if not is_unisex and "nam" in text and "nữ" not in text:
+                if any(kw in name_lower for kw in male_only_kw):
+                    continue
+                if not is_unisex and has_male_word and not has_female_word:
                     continue
             res.append(it)
         return res
 
     @staticmethod
+    def is_heels(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["cao gót", "gót nhọn", "guốc"])
+
+    @staticmethod
+    def is_cap_or_sport_acc(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["lưỡi trai", "snapback", "beanie", "nón kết", "mũ kết", "mũ thể thao", "đồng hồ điện tử", "dây cao su thể thao"])
+
+    @staticmethod
+    def is_feminine_frill_top(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["cổ bèo", "tay phồng", "bèo nhún", "babydoll", "ren ", "công chúa", "hai dây"])
+
+    @staticmethod
+    def is_streetwear_piece(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in ["bomber", "hoodie", "cargo", "jogger", "baggy", "ống suông", "jean", "rách", "unisex", "retro", "streetwear", "biker"])
+
+    @staticmethod
     def is_full_dress(p: dict) -> bool:
         name = (p.get("name", "")).lower()
-        return any(k in name for k in ["đầm", "váy liền", "maxi", "dạ hội", "dự tiệc"]) and "chân váy" not in name
+        return (
+            any(k in name for k in ["đầm", "váy liền", "váy xòe", "váy hoa", "váy chữ a", "váy midi", "váy maxi", "váy body", "váy công chúa", "maxi", "dạ hội", "dự tiệc", "jumpsuit"])
+            and "chân váy" not in name
+        )
 
     @staticmethod
     def is_shorts_or_beachwear(p: dict) -> bool:
@@ -2360,7 +2400,19 @@ class AiStylistEngine:
             elif top_form == "formal" and "sneaker" in shoe_name:
                 style_score += 2  # Smart casual Sneaker gọn gàng vẫn hợp, nhưng thấp điểm hơn Giày Tây/Loafer
             elif top_form != "formal" and "cao gót" in shoe_name and not AiStylistEngine.is_full_dress(top_item):
-                style_score -= 10
+                style_score -= 24
+
+        # Phạt nặng các tổ hợp lệch phong cách rõ rệt (vd: Giày cao gót + Quần baggy/Mũ lưỡi trai, hoặc Áo cổ bèo công sở + Quần Streetwear/Mũ lưỡi trai)
+        acc_items = [it for it in items if AiStylistEngine.classify_item(it) == "accessory"]
+        has_street_garment = any(AiStylistEngine.is_streetwear_piece(it) for it in [x for x in (top_item, bottom_item) if x])
+        has_cap_acc = any(AiStylistEngine.is_cap_or_sport_acc(a) for a in acc_items)
+
+        if shoe_item and AiStylistEngine.is_heels(shoe_item):
+            if has_street_garment or has_cap_acc:
+                style_score -= 32
+        if top_item and AiStylistEngine.is_feminine_frill_top(top_item):
+            if (bottom_item and AiStylistEngine.is_streetwear_piece(bottom_item)) or has_cap_acc:
+                style_score -= 28
 
         # 3. Khớp số đo thể trạng (Max 20)
         bmi = float(user_measurements.get("bmi", 22.0) or 22.0)
@@ -2471,8 +2523,20 @@ class AiStylistEngine:
                 compat_tops = clean_tops
         elif target_role == "bottom":
             clean_tops = [t for t in tops if not AiStylistEngine.is_full_dress(t)]
+            if AiStylistEngine.is_streetwear_piece(target_product):
+                non_frill = [t for t in clean_tops if not AiStylistEngine.is_feminine_frill_top(t)]
+                if non_frill:
+                    clean_tops = non_frill
+                non_heels = [s for s in shoes if not AiStylistEngine.is_heels(s) and not AiStylistEngine.is_slipper_or_flipflop(s)]
+                if non_heels:
+                    compat_shoes = non_heels
             if clean_tops:
                 compat_tops = clean_tops
+
+        if target_role == "top" and AiStylistEngine.is_streetwear_piece(target_product):
+            non_heels = [s for s in compat_shoes if not AiStylistEngine.is_heels(s) and not AiStylistEngine.is_slipper_or_flipflop(s)]
+            if non_heels:
+                compat_shoes = non_heels
 
         # PRNG cố định theo (target_id, gender, shape_class) để Top 5 ổn định mỗi lần mở cùng sản phẩm
         seed_str = f"{target_id}:{gender}:{user_measurements.get('shape_class', 'standard')}"
@@ -2605,7 +2669,7 @@ class AiStylistEngine:
             "Top 7 Vintage", "Top 8 Phố Thị", "Top 9 Thanh Xuân", "Top 10 Tiêu Biểu"
         ]
         vibe_advice = {
-            "Streetwear Cá Tính": "Phối hợp hài hòa giữa phom dáng phóng khoáng và điểm nhấn sneaker giúp kéo dài tỷ lệ chân, tôn trọn vóc dáng.",
+            "Streetwear Cá Tính": "Phối hợp hài hòa giữa phom dáng phóng khoáng và điểm nhấn trẻ trung giúp kéo dài tỷ lệ chân, tôn trọn vóc dáng.",
             "Smart Casual Lịch Lãm": "Diện mạo chỉn chu, hiện đại phù hợp môi trường công sở hoặc hẹn hò, mang lại vẻ ngoài lịch thiệp và cuốn hút.",
             "Sporty Năng Động": "Chất liệu co giãn thoáng khí tối đa, giữ phom năng động thoải mái suốt cả ngày vận động.",
             "Minimalist Tối Giản": "Tối giản màu sắc tinh tế theo xu hướng Minimalist Hàn Quốc, dễ mặc và không bao giờ lỗi mốt.",
@@ -2637,6 +2701,12 @@ class AiStylistEngine:
                 })
 
             badge_text = badges[idx] if idx < len(badges) else f"Set #{idx + 1}"
+            shoe_names_in_cand = " ".join((it.get("name", "")).lower() for it in items if AiStylistEngine.classify_item(it) == "shoes")
+            base_note = vibe_advice.get(cand["vibe"], "Phối hợp màu sắc và kiểu dáng hài hòa tôn dáng cơ thể.")
+            if cand["vibe"] == "Streetwear Cá Tính" and "sneaker" in shoe_names_in_cand:
+                base_note = "Phối hợp hài hòa giữa phom dáng phóng khoáng và điểm nhấn sneaker giúp kéo dài tỷ lệ chân, tôn trọn vóc dáng."
+            elif cand["vibe"] == "Streetwear Cá Tính" and ("cao gót" in shoe_names_in_cand or "guốc" in shoe_names_in_cand):
+                base_note = "Cân đối phom dáng hiện đại cùng giày cao gót tôn chiều cao và điểm nhấn thanh lịch."
 
             results.append({
                 "id": f"outfit-bundle-{idx + 1}",
@@ -2646,7 +2716,7 @@ class AiStylistEngine:
                 "title": f"Look #{idx + 1}: {cand['vibe']} ({cand['score']}/100 đ)",
                 "tag": cand["vibe"],
                 "vibe": f"Phong cách {cand['vibe']} cân đối chuẩn vóc dáng",
-                "stylist_note": vibe_advice.get(cand["vibe"], "Phối hợp màu sắc và kiểu dáng hài hòa tôn dáng cơ thể."),
+                "stylist_note": base_note,
                 "items": formatted_items,
                 "total_price": total_raw_price,
                 "combo_price": combo_price,

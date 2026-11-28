@@ -193,7 +193,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = (props) => {
       <OutfitSelectionModal
         isOpen={logic.isOutfitModalOpen}
         onClose={() => logic.setIsOutfitModalOpen(false)}
-        anchorItem={logic.selectedPant || product || logic.outfitItems[0] || null}
+        anchorItem={logic.outfitAnchorProduct || product || logic.selectedPant || logic.outfitItems[0] || null}
         height={logic.height}
         weight={logic.weight}
         gender={logic.gender}

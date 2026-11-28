@@ -229,6 +229,7 @@ export const useTryOnLogic = ({
   // 5. Danh sách 100 Set Phối Đồ AI Đẹp Nhất
   const [topScoredOutfits, setTopScoredOutfits] = useState<ScoredOutfitBundle[]>([])
   const [isLoadingTopOutfits, setIsLoadingTopOutfits] = useState<boolean>(false)
+  const [outfitAnchorProduct, setOutfitAnchorProduct] = useState<Product | null>(() => product || null)
   const [selectedOutfitBundleId, setSelectedOutfitBundleId] = useState<string | null>(() => initialBundle?.id || null)
   const [isOutfitModalOpen, setIsOutfitModalOpen] = useState<boolean>(false)
   const [isSlotPickerOpen, setIsSlotPickerOpen] = useState<boolean>(false)
@@ -513,6 +514,7 @@ export const useTryOnLogic = ({
             })
             setActiveOutfitSlot(activeSlot)
             setSelectedPant(product)
+            setOutfitAnchorProduct(product)
             setSourceTab('catalog')
           }
         } else {
@@ -524,6 +526,7 @@ export const useTryOnLogic = ({
             setSelectedOutfit(outfit)
             setActiveOutfitSlot(activeSlot)
             setSelectedPant(first)
+            setOutfitAnchorProduct(first)
             setSourceTab('cart')
           } else if (effectivePants.length > 0) {
             const first = effectivePants.find((p) => isProductMatchingGender(p, gender)) || effectivePants[0]
@@ -531,6 +534,7 @@ export const useTryOnLogic = ({
             setSelectedOutfit(outfit)
             setActiveOutfitSlot(activeSlot)
             setSelectedPant(first)
+            setOutfitAnchorProduct(first)
             setSourceTab('catalog')
           }
         }
@@ -567,6 +571,7 @@ export const useTryOnLogic = ({
       if (clearCurrentOutfit) {
         setSelectedOutfit({ top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] })
         setSelectedPant(null)
+        setOutfitAnchorProduct(null)
         setActiveOutfitSlot('top')
         setSelectedOutfitBundleId(null)
         setSelectedColorVariants({})
@@ -1061,7 +1066,7 @@ export const useTryOnLogic = ({
     const activeItems = flattenOutfitItems(selectedOutfit)
     const genderMatchedPropProduct = product && isProductMatchingGender(product, gender) ? product : null
     const genderMatchedFallback = availablePants.find((p) => isProductMatchingGender(p, gender)) || null
-    const effectiveProd = targetProduct || selectedPant || activeItems[0] || genderMatchedPropProduct || genderMatchedFallback
+    const effectiveProd = targetProduct || outfitAnchorProduct || genderMatchedPropProduct || selectedPant || activeItems[0] || genderMatchedFallback
     if (!effectiveProd) return
 
     setIsLoadingTopOutfits(true)
@@ -1093,6 +1098,7 @@ export const useTryOnLogic = ({
 
   const handleAnchorItemTo100Sets = (item: Product) => {
     setSelectedPant(item)
+    setOutfitAnchorProduct(item)
     const slot = detectItemSlot(item) || 'top'
     setSelectedOutfit(prev => ({ ...prev, [slot]: item }))
     setActiveOutfitSlot(slot)
@@ -1124,7 +1130,10 @@ export const useTryOnLogic = ({
 
     setSelectedOutfit(newOutfit)
     setSelectedOutfitBundleId(bundle.id)
-    const primary = newOutfit.bottom || newOutfit.top || newOutfit.outer_top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    // Giữ nguyên sản phẩm neo (outfitAnchorProduct) để không nhảy danh sách 100 set sang món khác khi bấm Xem Trước
+    const currentAnchorId = outfitAnchorProduct?.id || product?.id
+    const anchorInBundle = currentAnchorId ? bundle.items.find((it) => it.product?.id === currentAnchorId)?.product : null
+    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.top || newOutfit.outer_top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
@@ -1156,7 +1165,9 @@ export const useTryOnLogic = ({
 
     setSelectedOutfit(newOutfit)
     setSelectedOutfitBundleId(bundle.id)
-    const primary = newOutfit.bottom || newOutfit.top || newOutfit.outer_top || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    const currentAnchorId = outfitAnchorProduct?.id || product?.id
+    const anchorInBundle = currentAnchorId ? bundle.items.find((it) => it.product?.id === currentAnchorId)?.product : null
+    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.top || newOutfit.outer_top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
@@ -1213,9 +1224,9 @@ export const useTryOnLogic = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetchTopScoredOutfits(selectedPant || product || undefined)
+      fetchTopScoredOutfits(outfitAnchorProduct || product || undefined)
     }
-  }, [isOpen, selectedPant?.id, height, weight, gender])
+  }, [isOpen, outfitAnchorProduct?.id, height, weight, gender])
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg)
@@ -1352,6 +1363,7 @@ export const useTryOnLogic = ({
     toastMsg,
     topScoredOutfits,
     isLoadingTopOutfits,
+    outfitAnchorProduct,
     selectedOutfitBundleId,
     isOutfitModalOpen,
     setIsOutfitModalOpen,
