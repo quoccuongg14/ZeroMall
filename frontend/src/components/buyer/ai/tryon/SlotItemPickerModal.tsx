@@ -103,9 +103,20 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
     const hasJogger = equippedText.includes('jogger') || equippedText.includes('nỉ')
     const hasFormal = equippedText.includes('sơ mi') || equippedText.includes('tây') || equippedText.includes('blazer')
 
+    const hasOuterTopEquipped = Boolean(selectedOutfit?.outer_top)
+    const isInnerTeeItem = (it: Product) => {
+      const n = (it?.name || '').toLowerCase()
+      return (
+        !isOuterwearProduct(it) &&
+        ['thun', 't-shirt', 'tee', 'phông', 'polo', 'croptop', 'crop top', 'ba lỗ', 'sát nách', 'cotton'].some(k => n.includes(k)) &&
+        !n.includes('dây thun')
+      )
+    }
+
     return matchingProducts.map(item => {
       const nameLower = (item?.name || '').toLowerCase()
       const inCart = Boolean(item?.id && cartProductIds.has(item.id))
+      const isTee = isInnerTeeItem(item)
 
       // Chấm điểm AI dựa trên hành vi và sự tương hợp
       let score = 86
@@ -114,6 +125,17 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
       if (inCart) {
         score += 8
         reason = '🛒 Có sẵn trong giỏ hàng của bạn'
+      }
+
+      if (slot === 'top' && hasOuterTopEquipped) {
+        if (isTee) {
+          score += 12
+          reason = reason || '👕 AI Đề xuất: Áo thun mặc trong cực hợp với áo khoác ngoài'
+        } else if (!isOuterwearProduct(item)) {
+          score += 2
+        } else {
+          score -= 10
+        }
       }
 
       if ((hasSneaker || hasJogger) && (nameLower.includes('thun') || nameLower.includes('hoodie') || nameLower.includes('bomber') || nameLower.includes('jean') || nameLower.includes('jogger'))) {
@@ -152,11 +174,16 @@ export const SlotItemPickerModal: React.FC<SlotItemPickerModalProps> = ({
         aiScore: finalScore,
         aiReason: reason,
         isOuter: isOuterwearProduct(item),
+        isTee,
       }
     }).sort((a, b) => {
       if (slot === 'outer_top') {
         if (a.isOuter && !b.isOuter) return -1
         if (!a.isOuter && b.isOuter) return 1
+      }
+      if (slot === 'top' && hasOuterTopEquipped) {
+        if (a.isTee && !b.isTee) return -1
+        if (!a.isTee && b.isTee) return 1
       }
       // Ưu tiên số 1: Hàng trong giỏ hàng luôn lên đầu
       if (a.inCart && !b.inCart) return -1

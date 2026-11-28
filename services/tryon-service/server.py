@@ -2162,8 +2162,16 @@ class AiStylistEngine:
         ) or (not is_garment_name and any(k in name for k in ["túi", "ví", "mũ", "kính"])):
             return "accessory"
 
-        # 3. Quần / Chân váy
-        if any(k in name for k in ["quần", "jean", "jeans", "jogger", "short", "quần tây", "quần âu", "kaki", "chân váy"]):
+        # 3. Quần / Chân váy (ưu tiên nhận diện danh từ chính đầu tên để tránh "Áo Sơ Mi ... Dễ Phối Chân Váy Quần Tây")
+        starts_as_top = any(
+            name.lstrip().startswith(prefix)
+            for prefix in ("áo ", "sơ mi", "blazer", "cardigan", "jacket", "bomber", "hoodie", "sweater", "polo", "croptop")
+        )
+        is_top_garment = any(t in name for t in ["áo ", "khoác", "jacket", "sơ mi", "blazer", "cardigan", "hoodie"])
+        if not starts_as_top and (
+            any(k in name for k in ["quần", "jogger", "short", "quần tây", "quần âu", "chân váy"])
+            or (not is_top_garment and any(k in name for k in ["jean", "jeans", "kaki"]))
+        ):
             return "bottom"
 
         # 4. Áo / Đầm
@@ -2234,6 +2242,26 @@ class AiStylistEngine:
     def is_streetwear_piece(p: dict) -> bool:
         name = (p.get("name", "")).lower()
         return any(k in name for k in ["bomber", "hoodie", "cargo", "jogger", "baggy", "ống suông", "jean", "rách", "unisex", "retro", "streetwear", "biker"])
+
+    @staticmethod
+    def is_outerwear_item(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        return any(k in name for k in [
+            "khoác", "khoac", "jacket", "bomber", "blazer", "cardigan",
+            "măng tô", "mang to", "áo gió", "ao gio", "gile", "vest", "trench", "hoodie zip", "khoá kéo", "khóa kéo"
+        ])
+
+    @staticmethod
+    def is_inner_tee(p: dict) -> bool:
+        name = (p.get("name", "")).lower()
+        if AiStylistEngine.is_outerwear_item(p) or AiStylistEngine.is_full_dress(p):
+            return False
+        if any(bad in name for bad in ["sơ mi", "so mi", "hoodie", "sweater", "dây thun", "quần thun"]):
+            return False
+        return any(k in name for k in [
+            "áo thun", "ao thun", "thun", "t-shirt", "tee", "áo phông", "ao phong",
+            "croptop", "crop top", "ba lỗ", "sát nách", "tank top", "polo"
+        ])
 
     @staticmethod
     def is_full_dress(p: dict) -> bool:
@@ -2414,6 +2442,20 @@ class AiStylistEngine:
             if (bottom_item and AiStylistEngine.is_streetwear_piece(bottom_item)) or has_cap_acc:
                 style_score -= 28
 
+        # Nếu set phối Áo Khoác ngoài (Layer 2) + Áo mặc trong (Layer 1): ưu tiên Áo Thun bên trong
+        if len(tops_in_set) >= 2:
+            outer_candidates = [t for t in tops_in_set if AiStylistEngine.is_outerwear_item(t)]
+            inner_candidates = [t for t in tops_in_set if not AiStylistEngine.is_outerwear_item(t)]
+            if outer_candidates and inner_candidates:
+                inner_t = inner_candidates[0]
+                inner_n = (inner_t.get("name", "")).lower()
+                if any(k in inner_n for k in ["áo thun", "ao thun", "t-shirt", "áo phông"]):
+                    style_score += 10
+                elif AiStylistEngine.is_inner_tee(inner_t):
+                    style_score += 7
+                elif AiStylistEngine.is_feminine_frill_top(inner_t):
+                    style_score -= 12
+
         # 3. Khớp số đo thể trạng (Max 20)
         bmi = float(user_measurements.get("bmi", 22.0) or 22.0)
         body_fit = 17
@@ -2493,6 +2535,7 @@ class AiStylistEngine:
         target_id = str(target_product.get("id") or target_product.get("name") or "default")
         target_formality = AiStylistEngine.classify_formality(target_product)
         target_is_dress = AiStylistEngine.is_full_dress(target_product)
+        target_is_outerwear = (target_role == "top") and AiStylistEngine.is_outerwear_item(target_product) and not target_is_dress
 
         # Sắp xếp cố định theo ID trước khi lấy mẫu để kết quả không bị lệ thuộc thứ tự API
         def _sorted_role(pool: list, role_name: str) -> list:
@@ -2538,6 +2581,21 @@ class AiStylistEngine:
             if non_heels:
                 compat_shoes = non_heels
 
+        # Khi phối Áo Khoác ngoài (Layer 2): chuẩn bị danh sách Áo mặc trong ưu tiên Áo Thun
+        compat_inner_tees = []
+        compat_inner_others = []
+        if target_is_outerwear:
+            clean_inners = [
+                t for t in tops
+                if not AiStylistEngine.is_outerwear_item(t)
+                and not AiStylistEngine.is_full_dress(t)
+                and not AiStylistEngine.is_feminine_frill_top(t)
+            ]
+            compat_inner_tees = [t for t in clean_inners if AiStylistEngine.is_inner_tee(t)]
+            compat_inner_others = [t for t in clean_inners if not AiStylistEngine.is_inner_tee(t)]
+            if not compat_inner_tees and not compat_inner_others:
+                compat_inner_others = [t for t in tops if not AiStylistEngine.is_outerwear_item(t) and not AiStylistEngine.is_full_dress(t)]
+
         # PRNG cố định theo (target_id, gender, shape_class) để Top 5 ổn định mỗi lần mở cùng sản phẩm
         seed_str = f"{target_id}:{gender}:{user_measurements.get('shape_class', 'standard')}"
         seed_int = int(hashlib.md5(seed_str.encode("utf-8")).hexdigest()[:16], 16)
@@ -2568,6 +2626,16 @@ class AiStylistEngine:
                     other_accs = [a for a in accs if a1 and _norm_img(a) != _norm_img(a1)] if a1 else accs
                     a2 = rng.choice(other_accs) if other_accs else None
                     outfit_items = [it for it in [target_product, s, a1, a2] if it]
+                elif target_is_outerwear and (compat_inner_tees or compat_inner_others):
+                    # Áo khoác ngoài: ưu tiên gợi ý thêm Áo Thun mặc bên trong (Layer 1)
+                    if compat_inner_tees and (not compat_inner_others or rng.random() < 0.85):
+                        inner_t = rng.choice(compat_inner_tees)
+                    else:
+                        inner_t = rng.choice(compat_inner_others) if compat_inner_others else None
+                    b = rng.choice(compat_bottoms) if compat_bottoms else None
+                    s = rng.choice(compat_shoes) if compat_shoes else None
+                    a = rng.choice(accs) if accs else None
+                    outfit_items = [it for it in [target_product, inner_t, b, s, a] if it]
                 else:
                     b = rng.choice(compat_bottoms) if compat_bottoms else None
                     s = rng.choice(compat_shoes) if compat_shoes else None
@@ -2686,17 +2754,28 @@ class AiStylistEngine:
             savings = total_raw_price - combo_price
 
             formatted_items = []
+            has_multi_tops = sum(1 for it in items if AiStylistEngine.classify_item(it) == "top") >= 2
             for it in items:
                 role_type = AiStylistEngine.classify_item(it)
-                role_label = (
-                    "Món đồ chính (Đang xem)" if it.get("id") == target_product.get("id") else
-                    "Áo phối kèm" if role_type == "top" else
-                    "Quần/Váy phối kèm" if role_type == "bottom" else
-                    "Giày đi kèm" if role_type == "shoes" else "Phụ kiện điểm nhấn"
-                )
+                is_target = it.get("id") == target_product.get("id")
+                item_slot = role_type
+                if role_type == "top" and AiStylistEngine.is_outerwear_item(it) and has_multi_tops:
+                    item_slot = "outer_top"
+                if is_target:
+                    role_label = "Áo khoác chính (Đang xem)" if item_slot == "outer_top" else "Món đồ chính (Đang xem)"
+                elif role_type == "top" and has_multi_tops and item_slot == "top":
+                    role_label = "Áo thun mặc trong" if AiStylistEngine.is_inner_tee(it) else "Áo mặc trong (Layer 1)"
+                elif role_type == "top":
+                    role_label = "Áo khoác ngoài" if item_slot == "outer_top" else "Áo phối kèm"
+                elif role_type == "bottom":
+                    role_label = "Quần/Váy phối kèm"
+                elif role_type == "shoes":
+                    role_label = "Giày đi kèm"
+                else:
+                    role_label = "Phụ kiện điểm nhấn"
                 formatted_items.append({
                     "role": role_label,
-                    "slot": role_type,
+                    "slot": item_slot,
                     "product": it
                 })
 

@@ -151,41 +151,44 @@ export const useTryOnLogic = ({
     }
   }
 
+  // Helper chuyển đổi ScoredOutfitBundle -> OutfitSlots (đảm bảo Áo Khoác ngoài và Áo Thun trong không bao giờ ghi đè nhau)
+  const mapBundleToOutfitSlots = (bundle: ScoredOutfitBundle, fallbackProduct?: Product | null): OutfitSlots => {
+    let slots: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
+    bundle.items.forEach((it) => {
+      if (!it.product) return
+      const rawSlot = it.slot as string
+      const detectedSlot = rawSlot === 'outer_top' ? 'outer_top' : (it.slot || detectItemSlot(it.product))
+      if (detectedSlot === 'accessory') {
+        slots = applyAccessoryToOutfit(slots, it.product, false)
+      } else if (detectedSlot === 'outer_top' || (detectedSlot === 'top' && isOuterwearProduct(it.product))) {
+        slots.outer_top = it.product
+      } else if (detectedSlot === 'top') {
+        slots.top = it.product
+      } else if (detectedSlot === 'bottom' || detectedSlot === 'shoes') {
+        slots[detectedSlot] = it.product
+      }
+    })
+    if (fallbackProduct) {
+      const pSlot = detectItemSlot(fallbackProduct) || 'top'
+      if (pSlot === 'accessory') {
+        slots = applyAccessoryToOutfit(slots, fallbackProduct, false)
+      } else if (pSlot === 'top' && isOuterwearProduct(fallbackProduct)) {
+        if (!slots.outer_top) slots.outer_top = fallbackProduct
+      } else if (pSlot === 'top') {
+        if (!slots.top) slots.top = fallbackProduct
+      } else if ((pSlot === 'bottom' || pSlot === 'shoes') && !slots[pSlot]) {
+        slots[pSlot] = fallbackProduct
+      }
+    }
+    return slots
+  }
+
   // 3. Món đồ được chọn để ướm thử & Nguồn cấp tủ đồ
   const [selectedOutfit, setSelectedOutfit] = useState<OutfitSlots>(() => {
-    const init: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
     if (initialBundle && Array.isArray(initialBundle.items) && initialBundle.items.length > 0) {
-      initialBundle.items.forEach((it) => {
-        if (!it.product) return
-        const slot = it.slot || detectItemSlot(it.product)
-        if (slot === 'accessory') {
-          const updated = applyAccessoryToOutfit(init, it.product, false)
-          init.accessories = updated.accessories
-          init.accessory = updated.accessory
-        } else if (slot === 'top') {
-          if (isOuterwearProduct(it.product) && init.top && !isOuterwearProduct(init.top)) {
-            init.outer_top = it.product
-          } else {
-            init.top = it.product
-          }
-        } else if (slot === 'bottom' || slot === 'shoes') {
-          init[slot] = it.product
-        }
-      })
-      if (product) {
-        const pSlot = detectItemSlot(product) || 'top'
-        if (pSlot === 'accessory') {
-          const updated = applyAccessoryToOutfit(init, product, false)
-          init.accessories = updated.accessories
-          init.accessory = updated.accessory
-        } else if (pSlot === 'top' && !init.top) {
-          init.top = product
-        } else if ((pSlot === 'bottom' || pSlot === 'shoes') && !init[pSlot]) {
-          init[pSlot] = product
-        }
-      }
-      return init
+      return mapBundleToOutfitSlots(initialBundle, product)
     }
+    const init: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
     if (product) {
       const slot = detectItemSlot(product) || 'top'
       if (slot === 'accessory') {
@@ -367,32 +370,7 @@ export const useTryOnLogic = ({
   useEffect(() => {
     if (isOpen) {
       if (initialBundle && Array.isArray(initialBundle.items) && initialBundle.items.length > 0) {
-        let bundleOutfit: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
-        initialBundle.items.forEach((it) => {
-          if (!it.product) return
-          const slot = it.slot || detectItemSlot(it.product)
-          if (slot === 'accessory') {
-            bundleOutfit = applyAccessoryToOutfit(bundleOutfit, it.product, false)
-          } else if (slot === 'top') {
-            if (isOuterwearProduct(it.product) && bundleOutfit.top && !isOuterwearProduct(bundleOutfit.top)) {
-              bundleOutfit.outer_top = it.product
-            } else {
-              bundleOutfit.top = it.product
-            }
-          } else if (slot === 'bottom' || slot === 'shoes') {
-            bundleOutfit[slot] = it.product
-          }
-        })
-        if (product) {
-          const pSlot = detectItemSlot(product) || 'top'
-          if (pSlot === 'accessory') {
-            bundleOutfit = applyAccessoryToOutfit(bundleOutfit, product, false)
-          } else if (pSlot === 'top' && !bundleOutfit.top) {
-            bundleOutfit.top = product
-          } else if ((pSlot === 'bottom' || pSlot === 'shoes') && !bundleOutfit[pSlot]) {
-            bundleOutfit[pSlot] = product
-          }
-        }
+        const bundleOutfit = mapBundleToOutfitSlots(initialBundle, product)
         setSelectedOutfit(bundleOutfit)
         setSelectedOutfitBundleId(initialBundle.id)
         const primary = bundleOutfit.top || bundleOutfit.outer_top || bundleOutfit.bottom || bundleOutfit.shoes || bundleOutfit.accessory || product
@@ -1108,32 +1086,13 @@ export const useTryOnLogic = ({
   }
 
   const handleSelectBundlePreview = (bundle: ScoredOutfitBundle) => {
-    setSelectedOutfitBundleId(bundle.id)
-    const newOutfit: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
-    bundle.items.forEach((it) => {
-      if (!it.product) return
-      const slot = it.slot || detectItemSlot(it.product)
-      if (slot === 'accessory') {
-        const updated = applyAccessoryToOutfit(newOutfit, it.product, false)
-        newOutfit.accessories = updated.accessories
-        newOutfit.accessory = updated.accessory
-      } else if (slot === 'top') {
-        if (isOuterwearProduct(it.product) && newOutfit.top && !isOuterwearProduct(newOutfit.top)) {
-          newOutfit.outer_top = it.product
-        } else {
-          newOutfit.top = it.product
-        }
-      } else if (slot === 'bottom' || slot === 'shoes') {
-        newOutfit[slot] = it.product
-      }
-    })
-
+    const newOutfit = mapBundleToOutfitSlots(bundle)
     setSelectedOutfit(newOutfit)
     setSelectedOutfitBundleId(bundle.id)
     // Giữ nguyên sản phẩm neo (outfitAnchorProduct) để không nhảy danh sách 100 set sang món khác khi bấm Xem Trước
     const currentAnchorId = outfitAnchorProduct?.id || product?.id
     const anchorInBundle = currentAnchorId ? bundle.items.find((it) => it.product?.id === currentAnchorId)?.product : null
-    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.top || newOutfit.outer_top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.outer_top || newOutfit.top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }
@@ -1144,30 +1103,12 @@ export const useTryOnLogic = ({
   const handleExecuteTryOnBundle = (bundle: ScoredOutfitBundle) => {
     setIsOutfitModalOpen(false)
 
-    const newOutfit: OutfitSlots = { top: null, outer_top: null, bottom: null, shoes: null, accessory: null, accessories: [] }
-    bundle.items.forEach((it) => {
-      if (!it.product) return
-      const slot = it.slot || detectItemSlot(it.product)
-      if (slot === 'accessory') {
-        const updated = applyAccessoryToOutfit(newOutfit, it.product, false)
-        newOutfit.accessories = updated.accessories
-        newOutfit.accessory = updated.accessory
-      } else if (slot === 'top') {
-        if (isOuterwearProduct(it.product) && newOutfit.top && !isOuterwearProduct(newOutfit.top)) {
-          newOutfit.outer_top = it.product
-        } else {
-          newOutfit.top = it.product
-        }
-      } else if (slot === 'bottom' || slot === 'shoes') {
-        newOutfit[slot] = it.product
-      }
-    })
-
+    const newOutfit = mapBundleToOutfitSlots(bundle)
     setSelectedOutfit(newOutfit)
     setSelectedOutfitBundleId(bundle.id)
     const currentAnchorId = outfitAnchorProduct?.id || product?.id
     const anchorInBundle = currentAnchorId ? bundle.items.find((it) => it.product?.id === currentAnchorId)?.product : null
-    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.top || newOutfit.outer_top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
+    const primary = anchorInBundle || outfitAnchorProduct || newOutfit.outer_top || newOutfit.top || newOutfit.bottom || newOutfit.shoes || newOutfit.accessory || bundle.items[0]?.product
     if (primary) {
       setSelectedPant(primary)
     }

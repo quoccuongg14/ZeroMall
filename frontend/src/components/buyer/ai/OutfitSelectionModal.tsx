@@ -229,8 +229,14 @@ export const OutfitSelectionModal: React.FC<OutfitSelectionModalProps> = ({
                       &quot;{bundle.stylist_note}&quot;
                     </p>
 
-                    {/* 4 Items in Set: Hiển thị dạng thẻ đứng với ảnh to rõ ràng, tên & giá nằm ngay dưới */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5 mb-3.5">
+                    {/* Items in Set: Hiển thị dạng thẻ đứng với ảnh to rõ ràng, hỗ trợ 4 hoặc 5 món */}
+                    <div
+                      className={`grid gap-3 sm:gap-3.5 mb-3.5 ${
+                        bundle.items.length >= 5
+                          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                          : 'grid-cols-2 sm:grid-cols-4'
+                      }`}
+                    >
                       {bundle.items.map((it, idx) => (
                         <div
                           key={idx}
